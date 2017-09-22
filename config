@@ -1,0 +1,7 @@
+# This is configuration file for Weber framework.
+# Every option has a default value.
+
+#proxy.host = localhost
+proxy.port = 8555
+
+# TODO insert all from source/weber.py
