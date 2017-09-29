@@ -6,7 +6,7 @@ from source import weber
 from source import log
 from source import lib
 
-import codecs, threading
+import codecs, threading, xmltodict
 from collections import OrderedDict
 
 
@@ -18,6 +18,7 @@ class Request():
         self.original = data
         lines = data.splitlines()
         self.method, self.path, self.version = tuple(lines[0].split(b' '))
+        self.parameters = {}
         """self.method, wanted, self.version = tuple(lines[0].split(b' '))
         # parse uri
         parts = wanted.split(b'/')
@@ -57,19 +58,40 @@ class Request():
         if len(lines[-1]) > 0:
             self.data = lines[-1]
 
+        # GET method
+        if self.method in [b'GET']:
+            self.realpath, _, tmpparams = self.path.partition(b'?')
+            for param in tmpparams.split(b'&'):
+                if param == b'':
+                    continue
+                try:
+                    k, v = tuple(param.split(b'='))
+                    self.parameters[k] = v
+                except:
+                    log.debug_parsing('Cannot parse GET arguments properly:\'%s\'' % (param))
+                    continue
+        
+        #TODO POST
+
+        # TODO HEAD
+
         self.integrity = True
 
-
-    def __str__(self):
+    def lines(self, headers=True, data=True):
         parts = []
         try:
             #parts.append('Connection to %s:%d' % (self.host.decode(), self.port))
-            parts.append('%s %s %s' % (self.method.decode(), self.path.decode(), self.version.decode()))
-            parts += ['%s: %s' % (k.decode(), v.decode()) for k, v in self.headers.items()]
-            parts.append(self.data.decode())
+            if headers:
+                parts.append('%s %s %s' % (self.method.decode(), self.path.decode(), self.version.decode()))
+                parts += ['%s: %s' % (k.decode(), v.decode()) for k, v in self.headers.items()]
+            if data:
+                parts.append(self.data.decode())
         except Exception as e:
             log.warn('Response encoding problem occured: '+str(e))
-        return '\n'.join(parts)
+        return parts
+
+    def __str__(self):
+        return '\n'.join(self.lines())
 
     def bytes(self):
         result = b'%s %s %s\r\n' % (self.method, self.path, self.version)
@@ -104,8 +126,18 @@ class Response():
             k, _, v = line.partition(b':')
             self.headers[k] = v.strip()
         
+        # TODO splitlines for grep? if text/*
+        # TODO Transfer-Encoding: chunked # even when the header is missing
+            
         self.data = b''.join([line+b'\n' for line in lines[line_index+1:]])
-        
+
+        # try to parse xml
+        self.dict = {}
+        if self.headers.get(b'Content-Type').startswith(b'text/html'):
+            try:
+                self.dict = xmltodict.parse(self.data)
+            except Exception as e:
+                print(e)
         #if self.headers.get(b'Content-Encoding') == b'gzip':
         #    self.data = lib.gunzip(self.data)
         
@@ -114,20 +146,26 @@ class Response():
             self.headers[b'Content-Length'] = b'%d' % (len(self.data))
 
 
-    def __str__(self):
+    def lines(self, headers=True, data=True):
+        parts = []
         #log.debug_parsing(''.join(['\\x%02x' % x for x in self.data[:10]]))
         #log.debug_parsing(''.join([('   %c' % x) if x != 0x0a else '  \\n' for x in self.data[:10] ]))
         #log.debug_parsing(''.join(['\\x%02x' % x for x in self.data[-10:]]))
         #log.debug_parsing(''.join([('   %c' % x) if x != 0x0a else '  \\n' for x in self.data[-10:] ]))
         try:
-            parts = []
-            parts.append('%s %s %s' % (self.version.decode(), self.statuscode, self.status.decode()))
-            parts += ['%s: %s' % (k.decode(), v.decode()) for k, v in self.headers.items()]
-            if b'Content-Type' in self.headers and self.headers[b'Content-Type'].startswith(b'text/'):
-                parts.append('\n%s' % (self.data.decode()))
+            if headers:
+                parts.append('%s %s %s' % (self.version.decode(), self.statuscode, self.status.decode()))
+                parts += ['%s: %s' % (k.decode(), v.decode()) for k, v in self.headers.items()]
+            if data:
+                # TODO what exactly?
+                if b'Content-Type' in self.headers and self.headers[b'Content-Type'].startswith((b'text/', b'application/')):
+                    parts.append('\n%s' % (self.data.decode()))
         except Exception as e:
             log.warn('Response encoding problem occured: '+str(e))
-        return '\n'.join(parts)
+        return parts
+
+    def __str__(self):
+        return '\n'.join(self.lines())
 
     def bytes(self):
         #data = lib.gzip(self.data) if self.headers.get(b'Content-Encoding') == b'gzip'  else self.data
@@ -137,28 +175,87 @@ class Response():
         result += b'\r\n\r\n' + self.data + b'\r\n\r\n'
         return result
 
-
-
+    def get_tags_recursive(tagname, d):
+       # generate desired tags
+        if tagname in d.keys():
+            yield d[tagname]
+        for v in d.values():
+            if isinstance(v, dict):
+                for x in Response.get_tags_recursive(tagname, d=v):
+                    yield x
+    
+    def find_tags(self, tagname, form='dict'):
+        if len(self.dict.items())<=0:
+            print('dict empty!')
+        return list(Response.get_tags_recursive(tagname, self.dict))
+"""
+Database of Request/Response pairs.
+"""
 class RRDB():
     def __init__(self):
         self.rrid = 0 # last rrid
-        self.rrs = {} # rrid:RR()
+        self.rrs = OrderedDict() # rrid:RR()
     
     def get_new_rrid(self): # generated in Proxy(), so it is thread-safe
         self.rrid += 1
         return self.rrid
 
-    def add_request(rrid, request):
+    def add_request(self, rrid, request):
         self.rrs[rrid] = RR(request)
 
-    def add_response(rrid, response):
+    def add_response(self, rrid, response):
         self.rrs[rrid].add_response(response)
 
-    def __str__(self):
-        return '' # TODO nice output
+    def get_desired_rrs(self, args):
+        if len(self.rrs.keys()) == 0:
+            return {}
+        indices = []
+        minimum = 1
+        maximum = max(self.rrs.keys())
+        if len(args) == 1:
+            for desired in args[0].split(','):
+                start = minimum
+                end = maximum
+                
+                if ':' in desired:
+                    _start, _, _end = desired.partition(':')                    
+                else:
+                    _start = _end = desired
+                if _start.isdigit():
+                    start = max([start, int(_start)])
+                if _end.isdigit():
+                    end = min([end, int(_end)])
+                if start > end:
+                    tmp = start
+                    start = end
+                    end = tmp
+                indices += list(range(start, end+1))
+        else:
+            indices = range(minimum, maximum+1)
+
+        return {i: self.rrs[i] for i in sorted(indices) if i in self.rrs.keys()}
+
+    
+    def overview(self, args, header=True):
+        result = []
+        reqlen = max([20]+[1+len(v.request_string(short=True, colored=True)) for v in self.get_desired_rrs(args).values()])
+        
+        if header:
+            hreqlen = reqlen-len(log.COLOR_GREEN)-len(log.COLOR_NONE)
+            log.tprint('    EID  RRID  %-*s  Response' % (hreqlen, 'Request'))
+            log.tprint('    ===  ====  %-*s  ====================' % (hreqlen, '='*hreqlen))
+       
+        for rrid, rr in self.get_desired_rrs(args).items():
+            result.append('    %-3s  %-4d  %-*s  %-20s' % ('', rrid, reqlen, rr.request_string(short=True, colored=True), rr.response_string(short=True, colored=True))) # TODO EID
+        return result
+
+            
 
 weber.rrdb = RRDB()
 
+"""
+Request/Response pair
+"""
 class RR():
     def __init__(self, request):
         self.request = request
@@ -167,8 +264,59 @@ class RR():
     def add_response(self, response):
         self.response = response
 
+    def request_string(self, short=False, colored=False):
+        if True: #try:
+            if short:
+                # TODO also from Accept:
+                color = log.COLOR_NONE
+                if self.request.realpath == b'/' or self.request.realpath.endswith((b'.htm', b'.html', b'.php', b'.xhtml', b'.aspx')):
+                    color = log.COLOR_GREY
+                elif self.request.realpath.endswith((b'.jpg', b'.svg', b'.png', b'.gif', b'.ico', b'.mp3', b'.ogg', b'.mp4', b'.wav')):
+                    color = log.COLOR_PURPLE
+                elif self.request.realpath.endswith((b'.js', b'.vbs', b'.swf')):
+                    color = log.COLOR_BLUE
+                elif self.request.realpath.endswith((b'.css')):
+                    color = log.COLOR_DARK_PURPLE
+                elif self.request.realpath.endswith((b'.pdf', b'.doc', b'.docx', b'.xls', b'.xlsx', b'.ppt', b'.pptx', b'.pps', b'.ppsx', b'.txt')):
+                    color = log.COLOR_GREEN
+                elif self.request.realpath.endswith((b'.zip', b'.7z', b'.rar', b'.gz', b'.bz2', b'.jar', b'.bin', b'.iso')):
+                    color = log.COLOR_BROWN
+                if not colored:
+                    color = log.COLOR_NONE
+                return '%s%s %s%s' % (color, self.request.method.decode(), self.request.path.decode(), log.COLOR_NONE)
+        # TODO long
+        if False: #except:
+            return log.COLOR_GREY+'...'+log.COLOR_NONE
 
+    def response_string(self, short=False, colored=False):
+        try:
+            if short:
+                if self.response.statuscode < 200:
+                    color = log.COLOR_NONE
+                elif self.response.statuscode == 200:
+                    color = log.COLOR_DARK_GREEN
+                elif self.response.statuscode < 300:
+                    color = log.COLOR_GREEN
+                elif self.response.statuscode < 400:
+                    color = log.COLOR_BROWN
+                elif self.response.statuscode < 500:
+                    color = log.COLOR_DARK_RED
+                elif self.response.statuscode < 600:
+                    color = log.COLOR_DARK_PURPLE
+                else:
+                    color = log.COLOR_NONE
+                if not colored:
+                    color = log.COLOR_NONE
+                
+                return '%s%d %s%s' % (color, self.response.statuscode, self.response.status.decode(), log.COLOR_NONE)
+            # TODO long
+        except:
+            return log.COLOR_GREY+'...'+log.COLOR_NONE
+        
 
+"""
+Local-Remote URI mapping
+"""
 class Mapping():
     def __init__(self):
         self.l_r = OrderedDict() # local->remote
@@ -203,7 +351,6 @@ class Mapping():
         return result
 
     def get_local(self, key):
-        print('getting local for', key)
         result = self.r_l.get(self.map.get(key))
         return result
         
@@ -222,7 +369,7 @@ class Mapping():
         key = URI(key)
         matches = [x for x in self.r_l.keys() if x.domain == key.domain and x.port == key.port]
         if len(matches)>0:
-            if self.r_l[matches[0]].port not in [80,443]:
+            if self.r_l[matches[0]].port not in [80, 443]:
                 return ('%s:%d' % (self.r_l[matches[0]].domain, self.r_l[matches[0]].port)).encode()
             else:
                 return self.r_l[matches[0]].domain.encode()
@@ -231,6 +378,9 @@ class Mapping():
 
 weber.mapping = Mapping()
 
+"""
+Single URI
+"""
 class URI():
     def __init__(self, uri):
         self.scheme, self.user, self.password, self.domain, self.port, self.path = URI.parse(uri)
