@@ -6,8 +6,12 @@ Print and logging stuff is here.
 from source.weber import config
 import threading
 
-COLOR_NONE        = '\033[0m'
-COLOR_BOLD        = "\033[1m"
+
+"""
+Colors
+"""
+COLOR_NONE        = '\033[00m'
+COLOR_BOLD        = "\033[01m"
 
 COLOR_BLACK       = '\033[30m'
 COLOR_DARK_RED    = '\033[31m'
@@ -31,9 +35,11 @@ prompt = COLOR_PURPLE+COLOR_BOLD+' )> '+COLOR_NONE
 
 loglock = threading.Lock()
 
+"""
+Thread-safe print
+"""
 def tprint(string='', color=COLOR_NONE, newline=True, stdout=True):
     lines = []
-    #lines.append(color+string+COLOR_NONE+('\n' if newline else ''))
     lines.append(color+string+COLOR_NONE)
     if stdout:
         with loglock:
@@ -50,6 +56,9 @@ def newline(stdout=True):
                 print(line)
     return lines
 
+"""
+OK, INFO, WARN, ERR, QUESTION
+"""
 def show_marked(c, color='', string='', newline=True, stdout=True):
     lines = []
     #lines.append('%s%s%s%s%s%s' % (color, COLOR_BOLD, c, COLOR_NONE, str(string),('\n' if newline else '')))
@@ -73,7 +82,7 @@ def err(string='', newline=True, stdout=True):
     return show_marked('[-] ', COLOR_RED, string, newline, stdout)
  
 def question(string='', newline=True, stdout=True):
-    return show_marked('[-] ', COLOR_RED, string, newline, stdout)
+    return show_marked('[?] ', COLOR_CYAN, string, newline, stdout)
 
 
 """
