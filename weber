@@ -6,43 +6,33 @@ from source import lib
 from source import commands
 from source import log
 from source.lib import exit_program
-import sys
-import readline
-import re
+import sys, readline, re, random
 
+# get first target
 try:
     init_target = sys.argv[1]
 except:
     log.err('Usage: %s example.com' % (sys.argv[0]))
     exit_program(-1, None)
 
+# load config
 commands.reload_config()
 
+# motd
+log.newline()
+log.info(weber.motd[random.randint(0, len(weber.motd)-1)])
+
+# start proxy
 weber.proxy = Proxy(init_target)
 weber.proxy.start()
 
-############################
-# TEST
-test_uris = [
-    'seznam.cz',
-    'https://google.com',
-    'ws-dev.vsb.cz/admin',
-    'https://jabber.vsb.cz:9091',
-    'https://jabber.vsb.cz:9091/',
-    '89.29.123.45:443/wp-admin',
-    'https://www.seznam.cz/',
-    'https://user:pass@server.cz:22/path/file.txt',
-    '',
-]
-#for test_uri in test_uris:
-#    print(test_uri, ':', ProxyLib.parse_uri(test_uri, form=str))
-
-# END TEST
-############################
-
 while(True):
     # get command
-    cmd = input(log.prompt).strip()
+    try:
+        cmd = input(log.prompt).strip()
+    except EOFError: # Ctrl+D -> quit
+        log.newline()
+        cmd = 'q'
     if len(cmd) == 0:
         continue
     # quit?
@@ -50,7 +40,7 @@ while(True):
         log.warn('Do you really want to quit? ', newline=False)
         if lib.positive(input()):
             lib.exit_program(None, None)
+    # do command
     else:
-        # do command
         commands.run_command(cmd)
 
