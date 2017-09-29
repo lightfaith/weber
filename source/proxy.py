@@ -8,9 +8,7 @@ from source.structures import Request, Response
 
 #from http.server import BaseHTTPRequestHandler, HTTPServer
 #import ssl
-import requests
-import socket
-import time
+import requests, socket, time, ssl
 from threading import Thread
 #from collections import OrderedDict
 from select import select
@@ -92,14 +90,15 @@ class Proxy(Thread):
 
 
 class ConnectionThread(Thread):
-    def __init__(self, conn, uri, rrid, ssl=False):
+    def __init__(self, conn, uri, rrid):
         Thread.__init__(self)
         self.conn = conn
         self.host = uri.domain
         self.port = uri.port
         self.rrid = rrid
-        self.ssl = ssl
+        self.ssl = (uri.scheme == 'https')
         self.terminate = False
+        
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def stop(self):
@@ -124,10 +123,13 @@ class ConnectionThread(Thread):
             log.debug_parsing('Request is broken, ignoring...')
             return
         
+
         # TODO change links
         request.headers[b'Host'] = weber.mapping.get_remote_hostport(request.headers[b'Host'])
         log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
+        
         # TODO tamper request
+        weber.rrdb.add_request(self.rrid, request)
 
 
         # forward request to server        
@@ -143,12 +145,20 @@ class ConnectionThread(Thread):
         log.debug_parsing('\n'+str(response)+'\n'+'='*30)
         
         # TODO tamper response
+        weber.rrdb.add_response(self.rrid, response)
+
         # TODO change links
 
         log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
+
         
         # send response to browser
         self.send_response(response)
+
+        # print if desired
+        if weber.config['realtime.show']:
+            log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
+
         #input()
 
 
@@ -169,6 +179,8 @@ class ConnectionThread(Thread):
 
     def forward(self, host, port, data):
         self.client_socket.connect((host, port))
+        if self.ssl:
+            self.client_socket = ssl.wrap_socket(self.client_socket)
         self.client_socket.send(data)
         try:
             response = Response(ProxyLib.recvall(self.client_socket))
