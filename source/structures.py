@@ -6,9 +6,9 @@ from source import weber
 from source import log
 from source import lib
 
-import codecs, threading, xmltodict
+import codecs, threading, re
 from collections import OrderedDict
-
+from bs4 import BeautifulSoup as soup
 
 class Request():
     def __init__(self, data):
@@ -64,13 +64,9 @@ class Request():
             for param in tmpparams.split(b'&'):
                 if param == b'':
                     continue
-                try:
-                    k, v = tuple(param.split(b'='))
-                    self.parameters[k] = v
-                except:
-                    log.debug_parsing('Cannot parse GET arguments properly:\'%s\'' % (param))
-                    continue
-        
+                k, _, v = tuple(param.partition(b'='))
+                v = None if v == b'' else v
+                self.parameters[k] = v
         #TODO POST
 
         # TODO HEAD
@@ -85,7 +81,7 @@ class Request():
                 parts.append('%s %s %s' % (self.method.decode(), self.path.decode(), self.version.decode()))
                 parts += ['%s: %s' % (k.decode(), v.decode()) for k, v in self.headers.items()]
             if data:
-                parts.append(self.data.decode())
+                parts += self.data.decode().split('\n')
         except Exception as e:
             log.warn('Response encoding problem occured: '+str(e))
         return parts
@@ -112,13 +108,13 @@ class Request():
 class Response():
     def __init__(self, data):
         self.original = data
-        lines = data.splitlines()
+        lines = data.split(b'\r\n')
         self.version = lines[0].partition(b' ')[0]
         self.statuscode = int(lines[0].split(b' ')[1])
         self.status = b' '.join(lines[0].split(b' ')[2:])
         self.headers = OrderedDict()
 
-        # TODO HTTP response splitting support
+        # load first set of headers (hopefully only one)
         for line_index in range(1, len(lines)):
             line = lines[line_index]
             if len(line) == 0:
@@ -128,19 +124,51 @@ class Response():
         
         # TODO splitlines for grep? if text/*
         # TODO Transfer-Encoding: chunked # even when the header is missing
-            
-        self.data = b''.join([line+b'\n' for line in lines[line_index+1:]])
+        line_index += 1
 
+        # chunked Transfer-Encoding? TODO no busy-waiting
+        # TODO XMLtoDict Exception:mismatched tag: line 194, column 3   for gry0057-d9.vsb.cz
+        try:
+            self.data = b''
+            while True: # read all chunks
+                chunksize = int(lines[line_index], 16)
+                if chunksize == 0: # end of stream
+                    break
+                tmpchunk = b''
+                while True: # read all bytes for chunk
+                    line_index += 1
+                    tmpchunk += lines[line_index]
+                    if len(tmpchunk) == chunksize: # chunk is complete
+                        break
+                    if len(tmpchunk) > chunksize: # problem...
+                        print('Loaded chunk is bigger than advertised: %d > %d' % (tmpchunk, chunksize))
+                        break
+                self.data += tmpchunk
+        except Exception as e:
+            # treat as normal data
+            self.data = b'\r\n'.join(lines[line_index:])
+            # TODO test for matching Content-Type (HTTP Response-Splitting etc.)
+            
+        #self.data = b''.join([line+b'\n' for line in lines[line_index+1:]])
+        """
         # try to parse xml
         self.dict = {}
-        if self.headers.get(b'Content-Type').startswith(b'text/html'):
-            try:
-                self.dict = xmltodict.parse(self.data)
-            except Exception as e:
-                print(e)
+        if b'Content-Type' in self.headers:
+            if self.headers[b'Content-Type'].startswith(b'text/html'):
+                try:
+                    # doctype causes trouble...
+                    xmldata = b'\n'.join(self.data.split(b'\n')[1:]) if self.data.startswith(b'<!DOCTYPE') else self.data
+                    self.dict = xmltodict.parse(xmldata)
+                    # TODO bugged html is not parsed correctly!
+                except Exception as e:
+                    log.err('XMLtoDict Exception:'+str(e))
+                    print(xmldata)
         #if self.headers.get(b'Content-Encoding') == b'gzip':
         #    self.data = lib.gunzip(self.data)
-        
+        """
+        self.soup = soup(self.data.replace(b'<!--', b'<comment>').replace(b'-->', b'</comment>'), "lxml") # TODO this is madness
+        #print(self.soup.prettify())
+ 
         if b'Content-Length' not in self.headers.keys() and len(self.data)>0:
             log.debug_parsing('Computing Content-Length...')
             self.headers[b'Content-Length'] = b'%d' % (len(self.data))
@@ -159,7 +187,8 @@ class Response():
             if data:
                 # TODO what exactly?
                 if b'Content-Type' in self.headers and self.headers[b'Content-Type'].startswith((b'text/', b'application/')):
-                    parts.append('\n%s' % (self.data.decode()))
+                    #parts.append('\n%s' % (self.data.decode()))
+                    parts += self.data.decode().split('\n')
         except Exception as e:
             log.warn('Response encoding problem occured: '+str(e))
         return parts
@@ -174,7 +203,7 @@ class Response():
         result += b'\r\n'.join([b'%s: %s' % (k, v) for k, v in self.headers.items()])
         result += b'\r\n\r\n' + self.data + b'\r\n\r\n'
         return result
-
+    """
     def get_tags_recursive(tagname, d):
        # generate desired tags
         if tagname in d.keys():
@@ -183,11 +212,31 @@ class Response():
             if isinstance(v, dict):
                 for x in Response.get_tags_recursive(tagname, d=v):
                     yield x
-    
-    def find_tags(self, tagname, form='dict'):
-        if len(self.dict.items())<=0:
+    """ 
+    def find_tags(self, tagname, attr_key=None, attr_value=None, form='soup'):
+        """
+            Supported forms:
+                soup - beautifulsoup object
+                xml - xml as string
+                value - desired value as string
+        """
+        if attr_key is not None:
+            if attr_value is not None: # attribute value condition?
+                #result = soup.find_all(tagname, {attr_key: attr_value})
+                result = list(filter(None, [(x[attr_key] if form=='value' else x) for x in self.soup.find_all(tagname, {attr_key: attr_value})]))
+            else: # attribute name condition?
+                result = list(filter(None, [(x[attr_key] if form=='value' else x) for x in self.soup.find_all(tagname) if x.has_attr(attr_key)]))
+                #result = [x for x in self.soup.find_all(tagname) if attr_key in x]
+        else: # no conditions
+            result = list(filter(None, [(x.string if form=='value' else x) for x in self.soup.find_all(tagname)]))
+        if form == 'soup':
+            return list(result)
+        elif form in ['xml', 'value']:
+            return [str(x) for x in result]
+        """if len(self.dict.items())<=0:
             print('dict empty!')
         return list(Response.get_tags_recursive(tagname, self.dict))
+        """
 """
 Database of Request/Response pairs.
 """
@@ -206,14 +255,14 @@ class RRDB():
     def add_response(self, rrid, response):
         self.rrs[rrid].add_response(response)
 
-    def get_desired_rrs(self, args):
+    def get_desired_rrs(self, arg):
         if len(self.rrs.keys()) == 0:
             return {}
         indices = []
         minimum = 1
         maximum = max(self.rrs.keys())
-        if len(args) == 1:
-            for desired in args[0].split(','):
+        if arg is not None:
+            for desired in arg.split(','):
                 start = minimum
                 end = maximum
                 
@@ -238,15 +287,16 @@ class RRDB():
     
     def overview(self, args, header=True):
         result = []
-        reqlen = max([20]+[1+len(v.request_string(short=True, colored=True)) for v in self.get_desired_rrs(args).values()])
+        arg = None if len(args)<1 else args[0]
+        reqlen = max([20]+[1+len(v.request_string(short=True, colored=True)) for v in self.get_desired_rrs(arg).values()])
         
         if header:
             hreqlen = reqlen-len(log.COLOR_GREEN)-len(log.COLOR_NONE)
             log.tprint('    EID  RRID  %-*s  Response' % (hreqlen, 'Request'))
             log.tprint('    ===  ====  %-*s  ====================' % (hreqlen, '='*hreqlen))
        
-        for rrid, rr in self.get_desired_rrs(args).items():
-            result.append('    %-3s  %-4d  %-*s  %-20s' % ('', rrid, reqlen, rr.request_string(short=True, colored=True), rr.response_string(short=True, colored=True))) # TODO EID
+        for rrid, rr in self.get_desired_rrs(arg).items():
+            result.append('    %-3s  %-4d  %-*s  %-20s' % ('' if rr.eid is None else rr.eid, rrid, reqlen, rr.request_string(short=True, colored=True), rr.response_string(short=True, colored=True)))
         return result
 
             
@@ -260,6 +310,7 @@ class RR():
     def __init__(self, request):
         self.request = request
         self.response = None
+        self.eid = None
 
     def add_response(self, response):
         self.response = response
