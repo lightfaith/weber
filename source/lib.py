@@ -25,7 +25,7 @@ def quitstring(x):
     if type(x) != str:
         return False
     x = x.lower()
-    if x in ['quit', 'exit', 'q', 'e', 'end', ':wq']:
+    if x in ['quit', 'exit', 'q', 'end', ':wq']:
         return True
     return False
 
