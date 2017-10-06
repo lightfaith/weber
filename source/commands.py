@@ -33,9 +33,6 @@ def reload_config():
             weber.config[k] = v
             log.info('  %s = %s' % (k, v))
             log.debug_config('  parsed: %s = %s (%s)' % (k, v, str(type(v))))
-    #log.ok('Go!')
-
-
 
 """
 Universal class for commands.
@@ -131,6 +128,34 @@ def run_command(fullcommand):
 
     log.tprint('\n'.join(grepped))
 
+
+"""
+Important command functions
+"""
+
+def foreach_rrs(function, *args, **kwargs):
+    """
+    This method iterates through desired RRs and runs desired function on them.
+    """
+    result = []
+    for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[0]).items():
+    #for rrid, rr in weber.rrdb.get_desired_rrs(args).items():
+        tmpresult = []
+        tmpresult.append('{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
+        tmpresult += function(rrid, rr, args[1:], **kwargs)
+        if len(tmpresult)>1:
+            result.append(tmpresult)
+    return result
+
+def find_tags(rrid, rr, *args, **kwargs): 
+    tags = kwargs['tags']
+    valueonly=kwargs['valueonly']
+    tmpresult = []
+    for tagname, attr_key, attr_value in tags:
+        for t in rr.response.find_tags(tagname, attr_key=attr_key, attr_value=attr_value, form=('value' if valueonly else 'xml')):
+            tmpresult.append(t)
+    return tmpresult
+    
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
 
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
@@ -160,7 +185,12 @@ add_command(Command('testa', 'prints test equation', '', lambda *args: ['1+1=2']
 """
 EVENT COMMANDS
 """
-add_command(Command('e', 'event functions', '', lambda *_: []))
+# e
+def e_function(*args): # TODO
+    print(weber.events)
+    return []
+add_command(Command('e [<eid>[:<eid>]]', 'print events (alias for \'pe\')', '', e_function))
+
 # ea
 def ea_function(*args):
     try:
@@ -170,17 +200,14 @@ def ea_function(*args):
         return
     if eid not in weber.events:
         weber.events[eid] = set()
-    for rrid, rr in weber.rrdb.get_desired_rrs(args).items():
+    for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[0]).items():
+    #for rrid, rr in weber.rrdb.get_desired_rrs(args).items():
         rr.eid = eid
         weber.events[eid].add(rrid)
+    # TODO
     return []
 add_command(Command('ea [<rrid>[:<rrid>]] eid', 'adds requests/responses into event', '', test_function))
 
-# ep
-def ep_function(*args): # TODO
-    print(weber.events)
-    return []
-add_command(Command('ep [<eid>[:<eid>]]', 'print events (alias for \'pe\')', '', ep_function))
 
 
 """
@@ -189,137 +216,67 @@ PRINT COMMANDS
 add_command(Command('p', 'print', '', lambda *_: []))
 
 
-def foreach_rrs(*args):
-    result = []
-    for rrid, rr in weber.rrdb.get_desired_rrs(args).items():
-        tmpresult = []
-        tmpresult.append('{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
-
-        try:
-            cookies = rr.request.headers[b'Cookie'].split(b';')
-            cookies = dict([tuple(c.split(b'=')) for c in cookies])
-            maxlen = max([0]+[len(k.decode().strip()) for k in cookies.keys()])
-        except:
-            continue
-        tmpresult += ['%*s: %s' % (maxlen, k.decode(), v.decode()) for k,v in cookies.items()]
-        if len(tmpresult)>1:
-            result.append(tmpresult)
-    return result        
-    
 
 # pc
-def pc_function(*args):
-    result = []
-    for rrid, rr in weber.rrdb.get_desired_rrs(args).items():
-        tmpresult = []
-        tmpresult.append('{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
-        try:
-            cookies = rr.request.headers[b'Cookie'].split(b';')
-            cookies = dict([tuple(c.split(b'=')) for c in cookies])
-            maxlen = max([0]+[len(k.decode().strip()) for k in cookies.keys()])
-        except:
-            continue
-        tmpresult += ['%*s: %s' % (maxlen, k.decode(), v.decode()) for k,v in cookies.items()]
-        if len(tmpresult)>1:
-            result.append(tmpresult)
-    return result        
-add_command(Command('pc [<rrid>[:<rrid>]]', 'print cookies', '', lambda: []))
+def pc_function(rrid, rr, *args):
+    try:
+        cookies = rr.request.headers[b'Cookie'].split(b';')
+        cookies = dict([tuple(c.split(b'=')) for c in cookies])
+        maxlen = max([0]+[len(k.decode().strip()) for k in cookies.keys()])
+        return ['%*s: %s' % (maxlen, k.decode(), v.decode()) for k,v in cookies.items()]
+    except:
+        return []
+add_command(Command('pc [<rrid>[:<rrid>]]', 'print cookies', '', lambda *args: foreach_rrs(pc_function, *args)))
+# pcs
+def pcs_function(rrid, rr, *args):
+    try:
+        cookie = rr.response.headers[b'Set-Cookie']
+        # TODO parse cookie parameters
+        return []
+    except:
+        return []
 add_command(Command('pcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences', '', lambda: []))
-add_command(Command('pe [<eid>[:<eid>]]', 'print events', '', ep_function))
+add_command(Command('pe [<eid>[:<eid>]]', 'print events', '', e_function))
 
-# pf
-def find_tags_function(tags, valueonly, *args): 
-    result = []
-    for rrid, rr in weber.rrdb.get_desired_rrs(args).items():
-        tmpresult = []
-        tmpresult.append('{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
-        for tagname, attr_key, attr_value in tags:
-            for t in rr.response.find_tags(tagname, attr_key=attr_key, attr_value=attr_value, form=('value' if valueonly else 'xml')):
-                tmpresult.append(t)
-        if len(tmpresult)>1:
-            result.append(tmpresult)
-    return result    
-    #result = []
-    #for rrid, rr in weber.rrdb.get_desired_rrs(args).items():
-    #    tmpresult = []
-        
-    #    tmpresult.append('{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
-    #    for f in rr.response.find_tags(tagname, form=('value' if valueonly else 'xml')):
-    #        tmpresult.append(f)
-    #        tmpresult.append('')
-    #    if len(tmpresult)>1:
-    #        result += tmpresult
-    #return result
+add_command(Command('pf [<rrid>[:<rrid>]]', 'print forms', '', lambda *args: foreach_rrs(find_tags, *args, tags=[('form', None, None)], valueonly=False)))
 
-def pf_function(*args):
-    return find_tags_function([('form', None, None)], valueonly=False, *args)
-add_command(Command('pf [<rrid>[:<rrid>]]', 'print forms', '', pf_function))
-
-# pl
-def pl_function(*args):
-    return find_tags_function(Command.constants['link_tags'], valueonly=True, *args)
-add_command(Command('pl [<rrid>[:<rrid>]]', 'print links', '', pl_function))
-# plc
-def plc_function(*args):
-    return find_tags_function(Command.constants['link_tags'], valueonly=False, *args)
-add_command(Command('plc [<rrid>[:<rrid>]]', 'print links with context', '', plc_function))
+add_command(Command('pl [<rrid>[:<rrid>]]', 'print links', '', lambda *args: foreach_rrs(find_tags, *args, tags=Command.constants['link_tags'], valueonly=True)))
+add_command(Command('plc [<rrid>[:<rrid>]]', 'print links with context', '', lambda *args: foreach_rrs(find_tags, *args, tags=Command.constants['link_tags'], valueonly=False)))
 add_command(Command('pm', 'print URI mapping', '', lambda *args: ['%s <--> %s' % (k, v) for k, v in weber.mapping.l_r.items()]))
 
-# pn
-def pn_function(*args):
-    return find_tags_function([('comment', None, None)], valueonly=True, *args)
-    #return find_tags_function('comment', valueonly=True, *args)
-    #return find_tags_function(lambda x: print('\n.', x, type(x.string), x.string), *args)
-add_command(Command('pn [<rrid>[:<rrid>]]', 'print comments', '', pn_function))
+add_command(Command('pn [<rrid>[:<rrid>]]', 'print comments', '', lambda *args: foreach_rrs(find_tags, *args, tags=[('comment', None, None)], valueonly=True)))
 
 # pp
-def pp_function(*args):
-    result = []
-    for rrid, rr in weber.rrdb.get_desired_rrs(args).items():
-        tmpresult = []
-        tmpresult.append('{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
-        maxlen = max([0]+[len(k) for k in rr.request.parameters.keys()])
-        tmpresult += ['%*s: %s' % (maxlen, k.decode(), v.decode()) for k, v in rr.request.parameters.items()]
-        if len(tmpresult)>1:
-            result.append(tmpresult)
-    return result        
-add_command(Command('pp [<rrid>[:<rrid>]]', 'print parameters', '', pp_function))
+def pp_function(rrid, rr, *args):
+    maxlen = max([0]+[len(k) for k in rr.request.parameters.keys()])
+    return ['%*s: %s' % (maxlen, k.decode(), v.decode()) for k, v in rr.request.parameters.items()]
+add_command(Command('pp [<rrid>[:<rrid>]]', 'print parameters', '', lambda *args: foreach_rrs(pp_function, *args)))
 
-# pr
-def pr_function(*args):
-    #start, end = RRDB.get_interval(args, 1, len(weber.rrdb.rrs.items()))
-    return weber.rrdb.overview(args)
-add_command(Command('pr [<rrid>[:<rrid>]]', 'print request-response pairs', '', pr_function))
+add_command(Command('pr [<rrid>[:<rrid>]]', 'print request-response pairs', '', lambda *args: weber.rrdb.overview(args)))
 
 # prX
-def prx_function(*args, mask=0xf): # print detailed headers/data/both of desired requests/responses/both
-    showrequest = bool(mask & 0x8)
-    showresponse = bool(mask & 0x4)
-    showheaders = bool(mask & 0x2)
-    showdata = bool(mask & 0x1)
+def prx_function(rrid, rr, *args, **kwargs): # print detailed headers/data/both of desired requests/responses/both
     result = []
-
-    for rrid, rr in weber.rrdb.get_desired_rrs(args).items():
-        tmpresult = ['{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE)]
-        # deal with requests
-        if showrequest:
-            tmpresult += rr.request.lines(headers=showheaders, data=showdata)
-        # deal with responses
-        if showresponse:
-            tmpresult += rr.response.lines(headers=showheaders, data=showdata)
-        # add gathered to the final result
-        if len([x for x in tmpresult if len(x.strip())>0])>1:
-            result.append(tmpresult)
+    showrequest = bool(kwargs['mask'] & 0x8)
+    showresponse = bool(kwargs['mask'] & 0x4)
+    showheaders = bool(kwargs['mask'] & 0x2)
+    showdata = bool(kwargs['mask'] & 0x1)
+    # deal with requests
+    if showrequest:
+        result += rr.request.lines(headers=showheaders, data=showdata)
+    # deal with responses
+    if showresponse:
+        result += rr.response.lines(headers=showheaders, data=showdata)
     return result
-add_command(Command('pra [<rrid>[:<rrid>]]', 'print requests and responses verbose', '', lambda *args: prx_function(*args, mask=0xf)))
-add_command(Command('prh [<rrid>[:<rrid>]]', 'print request and response headers', '', lambda *args: prx_function(*args, mask=0xe)))
-add_command(Command('prd [<rrid>[:<rrid>]]', 'print request and response data', '', lambda *args: prx_function(*args, mask=0xd)))
-add_command(Command('prq [<rrid>[:<rrid>]]', 'print requests verbose', '', lambda *args: prx_function(*args, mask=0xb)))
-add_command(Command('prqh [<rrid>[:<rrid>]]', 'print request headers', '', lambda *args: prx_function(*args, mask=0xa)))
-add_command(Command('prqd [<rrid>[:<rrid>]]', 'print request data', '', lambda *args: prx_function(*args, mask=0x9)))
-add_command(Command('prs [<rrid>[:<rrid>]]', 'print responses verbose', '', lambda *args: prx_function(*args, mask=0x7)))
-add_command(Command('prsh [<rrid>[:<rrid>]]', 'print response headers', '', lambda *args: prx_function(*args, mask=0x6)))
-add_command(Command('prsd [<rrid>[:<rrid>]]', 'print response data', '', lambda *args: prx_function(*args, mask=0x5)))
+add_command(Command('pra [<rrid>[:<rrid>]]', 'print requests and responses verbose', '', lambda *args: foreach_rrs(prx_function, *args, mask=0xf)))
+add_command(Command('prh [<rrid>[:<rrid>]]', 'print request and response headers', '', lambda *args: foreach_rrs(prx_function, *args, mask=0xe)))
+add_command(Command('prd [<rrid>[:<rrid>]]', 'print request and response data', '', lambda *args: foreach_rrs(prx_function, *args, mask=0xd)))
+add_command(Command('prq [<rrid>[:<rrid>]]', 'print requests verbose', '', lambda *args: foreach_rrs(prx_function, *args, mask=0xb)))
+add_command(Command('prqh [<rrid>[:<rrid>]]', 'print request headers', '', lambda *args: foreach_rrs(prx_function, *args, mask=0xa)))
+add_command(Command('prqd [<rrid>[:<rrid>]]', 'print request data', '', lambda *args: foreach_rrs(prx_function, *args, mask=0x9)))
+add_command(Command('prs [<rrid>[:<rrid>]]', 'print responses verbose', '', lambda *args: foreach_rrs(prx_function, *args, mask=0x7)))
+add_command(Command('prsh [<rrid>[:<rrid>]]', 'print response headers', '', lambda *args: foreach_rrs(prx_function, *args, mask=0x6)))
+add_command(Command('prsd [<rrid>[:<rrid>]]', 'print response data', '', lambda *args: foreach_rrs(prx_function, *args, mask=0x5)))
 
 """
 Quit
