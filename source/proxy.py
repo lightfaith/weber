@@ -151,7 +151,6 @@ class ConnectionThread(Thread):
 
         log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
 
-        
         # send response to browser
         self.send_response(response)
 

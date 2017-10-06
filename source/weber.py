@@ -44,6 +44,10 @@ Request-response database (initialized in structures.py)
 rrdb = None
 
 """
+Events (filled on request in commands.py)
+"""
+events = {}
+"""
 Local-remote URI mapping (initialized in structures.py)
 """
 mappings = None 
