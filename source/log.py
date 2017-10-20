@@ -3,8 +3,9 @@
 Print and logging stuff is here.
 """
 
-from source.weber import config
 import threading
+from source.lib import positive
+from source.weber import config
 
 
 """
@@ -38,13 +39,13 @@ loglock = threading.Lock()
 """
 Thread-safe print
 """
-def tprint(string='', color=COLOR_NONE, newline=True, stdout=True):
+def tprint(string='', color=COLOR_NONE, new_line=True, stdout=True):
     lines = []
     lines.append(color+string+COLOR_NONE)
     if stdout:
         with loglock:
             for line in lines:
-                print(line, end=('\n' if newline else ''))
+                print(line, end=('\n' if new_line else ''))
     return lines
 
 def newline(stdout=True):
@@ -59,53 +60,57 @@ def newline(stdout=True):
 """
 OK, INFO, WARN, ERR, QUESTION
 """
-def show_marked(c, color='', string='', newline=True, stdout=True):
+def show_marked(c, color='', string='', new_line=True, stdout=True):
     lines = []
     #lines.append('%s%s%s%s%s%s' % (color, COLOR_BOLD, c, COLOR_NONE, str(string),('\n' if newline else '')))
     lines.append('%s%s%s%s%s' % (color, COLOR_BOLD, c, COLOR_NONE, str(string)))
     if stdout:
         with loglock:
             for line in lines:
-                print(line, end=('\n' if newline else ''))
+                print(line, end=('\n' if new_line else ''))
     return lines
 
-def ok(string='', newline=True, stdout=True):
-    return show_marked('[+] ', COLOR_GREEN, string, newline, stdout)
+def ok(string='', new_line=True, stdout=True):
+    return show_marked('[+] ', COLOR_GREEN, string, new_line, stdout)
     
-def info(string='', newline=True, stdout=True):
-    return show_marked('[.] ', COLOR_BLUE, string, newline, stdout)
+def info(string='', new_line=True, stdout=True):
+    return show_marked('[.] ', COLOR_BLUE, string, new_line, stdout)
     
-def warn(string='', newline=True, stdout=True):
-    return show_marked('[!] ', COLOR_YELLOW, string, newline, stdout)
+def warn(string='', new_line=True, stdout=True):
+    return show_marked('[!] ', COLOR_YELLOW, string, new_line, stdout)
     
-def err(string='', newline=True, stdout=True):
-    return show_marked('[-] ', COLOR_RED, string, newline, stdout)
+def err(string='', new_line=True, stdout=True):
+    return show_marked('[-] ', COLOR_RED, string, new_line, stdout)
  
-def question(string='', newline=True, stdout=True):
-    return show_marked('[?] ', COLOR_CYAN, string, newline, stdout)
+def question(string='', new_line=True, stdout=True):
+    return show_marked('[?] ', COLOR_CYAN, string, new_line, stdout)
 
 
 """
 Debug functions
 """
 def debug_command(string=''):
-    if config['debug.command']:
+    if positive(config['debug.command']):
         show_marked('cmd.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_config(string=''):
-    if config['debug.config']:
+    if positive(config['debug.config']):
         show_marked('cnf.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_mapping(string=''):
-    if config['debug.mapping']:
+    if positive(config['debug.mapping']):
         show_marked('map.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_parsing(string=''):
-    if config['debug.parsing']:
+    if positive(config['debug.parsing']):
         show_marked('prs.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_socket(string=''):
-    if config['debug.socket']:
+    if positive(config['debug.socket']):
         show_marked('sck.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+
+def debug_chunks(string=''):
+    if positive(config['debug.chunks']):
+        show_marked('cnk.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 
