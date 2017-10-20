@@ -153,7 +153,7 @@ def foreach_rrs(function, *args, **kwargs):
         tmpresult.append('')
         if len(tmpresult)>1:
             result.append(tmpresult)
-        print(result)
+        #print(result)
     return result
 
 def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs

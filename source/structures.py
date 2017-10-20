@@ -69,7 +69,7 @@ class Request():
 
     def parse_method(self):
         # GET method
-        if self.method in [b'GET']:
+        if self.method in [b'GET', b'HEAD']:
             self.realpath, _, tmpparams = self.path.partition(b'?')
             for param in tmpparams.split(b'&'):
                 if param == b'':
@@ -77,10 +77,16 @@ class Request():
                 k, _, v = tuple(param.partition(b'='))
                 v = None if v == b'' else v
                 self.parameters[k] = v
-        #TODO POST
-
-        #TODO HEAD
-
+        # POST method
+        if self.method in [b'POST']:
+            self.realpath, _, _ = self.path.partition(b'?')
+            for param in self.data.split(b'&'):
+                if param == b'':
+                    continue
+                k, _, v = param.partition(b'=')
+                v = None if v == b'' else v
+                self.parameters[k] = v
+        # TODO more methods
 
 
     def lines(self, headers=True, data=True):
