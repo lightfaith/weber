@@ -2,28 +2,33 @@
 """
 Proxy methods are defined here.
 """
-from source import weber
-from source import log
-from source.structures import Request, Response
-
 #from http.server import BaseHTTPRequestHandler, HTTPServer
 #import ssl
-import requests, socket, time, ssl
+import socket, time, ssl, subprocess
 from threading import Thread
 #from collections import OrderedDict
 from select import select
+import requests
+
+from source import weber
+from source import log
+from source.structures import Request, Response
+from source.lib import *
+
 
 
 class ProxyLib():
+    @staticmethod
     def recvall(conn):
         timeout = None # for the first recv
         chunks = []
         while True:
             conn.settimeout(timeout)
-            timeout = 0.5
+            timeout = 0.4
             try:
-                log.debug_socket('Getting 1024 bytes...')
-                buf = conn.recv(1024)
+                recv_size = 4096
+                log.debug_socket('Getting %d bytes...' % (recv_size))
+                buf = conn.recv(recv_size)
                 if not buf:
                     break
                 chunks.append(buf)
@@ -53,23 +58,32 @@ class Proxy(Thread):
     
     def run(self):
         self.server_socket.listen(1)
-        self.server_socket.settimeout(2)
+        self.server_socket.settimeout(2) # TODO no busy-waiting
 
         while True:
             # accept connection, thread it
             if not self.terminate:
                 try:
-                    conn, _ = self.server_socket.accept()
+                    conn, client = self.server_socket.accept()
 
-                    log.debug_socket('Connection accepted...')
+                    log.debug_socket('Connection accepted from \'%s:%d\':' % client)
+                    # what process is contacting us?
+                    netstat = subprocess.Popen('netstat -tpn'.split(), stdout=subprocess.PIPE)
+                    o, _ = netstat.communicate()
+                    for line in [line for line in o.splitlines() if list(filter(None, line.decode().split(' ')))[3] == '%s:%d' % (client)]:
+                        log.debug_socket(line.decode())
+
+                    # create new connection in new thread
                     t = ConnectionThread(conn, weber.mapping.init_target, weber.rrdb.get_new_rrid())
                     t.start()
-                    if weber.config.get('proxy.threaded'):
+                    if positive(weber.config.get('proxy.threaded')):
                         self.threads.append(t)
                     else:
                         t.join()
                 except socket.timeout:
                     pass
+                except Exception as e:
+                    log.err('Proxy error: '+str(e))
             
             # terminate? end everything
             if self.terminate:
@@ -96,7 +110,10 @@ class ConnectionThread(Thread):
         self.host = uri.domain
         self.port = uri.port
         self.rrid = rrid
+        self.path = '' # parsed from request, for `pt` command
         self.ssl = (uri.scheme == 'https')
+        
+        self.keepalive = True
         self.terminate = False
         
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -105,60 +122,76 @@ class ConnectionThread(Thread):
         self.terminate = True
 
     def run(self):
-        # receive request from browser
-        request = self.receive_request()
-        log.debug_mapping(weber.mapping.l_r.items())
-        """
-        # SSLPasser if CONNECT
-        if request.method == b'CONNECT':
-            log.debug_socket('Will SSLPass to %s:%d' % (request.host, request.port))
-            self.client_socket.connect((request.host, request.port))
-            self.conn.send(b'%s 200 OK\r\n\r\n' % (request.version)) # hit it :)
-            SSLPasser(self.conn, self.client_socket).start()
-            return
-        """
-        log.debug_parsing('\n'+'-'*15+'\n'+str(request)+'\n'+'='*20)
-        
-        if request is None:
-            log.debug_parsing('Request is broken, ignoring...')
-            return
-        
+        while self.keepalive:
+            # receive request from browser
+            request = self.receive_request()
+            
+            if request is None: # socket closed? socket problem?
+                #log.debug_parsing('Request is broken, ignoring...')
+                #return
+                break
+            
+            log.debug_parsing('\n'+'-'*15+'\n'+str(request)+'\n'+'='*20)
+            self.path = request.path
+            log.debug_mapping(weber.mapping.l_r.items())
+            """
+            # SSLPasser if CONNECT
+            if request.method == b'CONNECT':
+                log.debug_socket('Will SSLPass to %s:%d' % (request.host, request.port))
+                self.client_socket.connect((request.host, request.port))
+                self.conn.send(b'%s 200 OK\r\n\r\n' % (request.version)) # hit it :)
+                SSLPasser(self.conn, self.client_socket).start()
+                return
+            """
+            
+            self.keepalive = (request.headers.get(b'Connection') == b'Keep-Alive')
 
-        # TODO change links
-        request.headers[b'Host'] = weber.mapping.get_remote_hostport(request.headers[b'Host'])
-        log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
-        
-        # TODO tamper request
-        weber.rrdb.add_request(self.rrid, request)
+            # TODO change outgoing links (probably complete)
+            if request.path.startswith(b'/WEBER-MAPPING/'):
+                request.path = weber.mapping.get_remote(weber.mapping.get_local_uri_from_hostport_path(request.headers[b'Host'], request.path).__bytes__()).path.encode()
+                request.parse_method()
+            request.headers[b'Host'] = weber.mapping.get_remote_hostport(request.headers[b'Host'])
+            log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
+            
+            # TODO tamper request
+            weber.rrdb.add_request(self.rrid, request)
 
 
-        # forward request to server        
-        log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
-        """
-        if self.domain != request.headers.get('Host'):
+            # forward request to server        
             log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
-            response = self.forward(request.host, request.port, request.bytes())
-        log.debug_socket('Response received.')
-        """
-        # TODO PLAIN/SSL
-        response = self.forward(self.host, self.port, request.bytes()) # TODO consistent with changed link (check)
-        log.debug_parsing('\n'+str(response)+'\n'+'='*30)
-        
-        # TODO tamper response
-        weber.rrdb.add_response(self.rrid, response)
+            """
+            if self.domain != request.headers.get('Host'):
+                log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
+                response = self.forward(request.host, request.port, request.bytes())
+            log.debug_socket('Response received.')
+            """
+            # TODO PLAIN/SSL
+            response = self.forward(self.host, self.port, request.bytes()) # TODO consistent with changed link (check)
+            log.debug_parsing('\n'+str(response)+'\n'+'='*30)
+            
+            # TODO tamper response
+            weber.rrdb.add_response(self.rrid, response)
 
-        # TODO change links
+            # TODO change incoming links - probably complete
+            for tagname, attr_key, attr_value in Response.link_tags:
+                olds = response.find_tags(tagname, attr_key=attr_key, attr_value=attr_value, form='soup')
+                for old in olds:
+                    old_value = old[attr_key]
+                    scheme, _, _ = old_value.partition('://')
+                    if scheme in ('http', 'https'):
+                        new, _ = weber.mapping.generate(old_value, scheme)
+                        old[attr_key] = new.get_value()
+                        #print('new', old)
 
-        log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
+            log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
 
-        # send response to browser
-        self.send_response(response)
+            # send response to browser
+            self.send_response(response)
 
-        # print if desired
-        if weber.config['realtime.show']:
-            log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
-
-        #input()
+            # print if desired
+            if positive(weber.config['overview.realtime']):
+                log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
+            time.sleep(10)
 
 
     def receive_request(self):
@@ -169,8 +202,11 @@ class ConnectionThread(Thread):
                 self.conn.close()
                 return None
             return request
+        except IOError:
+            log.debug_socket('Request socket is not accessible anymore - terminating thread.')
+            return None
         except Exception as e:
-            log.err(e)
+            log.err('Proxy receive error: '+str(e))
             return None
 
         log.debug_socket('Request received.') 
