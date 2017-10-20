@@ -2,18 +2,22 @@
 """
 Various structures are defined here.
 """
-from source import weber
-from source import log
-from source import lib
-
-import codecs, threading, re
+import threading, traceback
 from collections import OrderedDict
 from bs4 import BeautifulSoup as soup
 
+from source import weber
+from source import log
+from source.lib import *
+
+
 class Request():
+    """
+    HTTP Request class
+    """
     def __init__(self, data):
         self.integrity = False
-        if len(data) == 0:
+        if not data:
             return
         self.original = data
         lines = data.splitlines()
@@ -42,11 +46,10 @@ class Request():
         self.path = b''.join([b'/'+part for part in parts[3:]])
         """
         
-        
         self.headers = OrderedDict()
         self.data = b''
         for line in lines[1:-1]:
-            if len(line) == 0:
+            if not line:
                 continue
             k, _, v = line.partition(b':')
             # TODO duplicit keys? warn
@@ -54,10 +57,17 @@ class Request():
             
         # disable encoding
         self.headers.pop(b'Accept-Encoding', None)
+        # disable Range
+        self.headers.pop(b'Range', None)
+        self.headers.pop(b'If_Range', None)
 
         if len(lines[-1]) > 0:
             self.data = lines[-1]
 
+        self.parse_method()
+        self.integrity = True
+
+    def parse_method(self):
         # GET method
         if self.method in [b'GET']:
             self.realpath, _, tmpparams = self.path.partition(b'?')
@@ -69,9 +79,9 @@ class Request():
                 self.parameters[k] = v
         #TODO POST
 
-        # TODO HEAD
+        #TODO HEAD
 
-        self.integrity = True
+
 
     def lines(self, headers=True, data=True):
         parts = []
@@ -79,7 +89,9 @@ class Request():
             #parts.append('Connection to %s:%d' % (self.host.decode(), self.port))
             if headers:
                 parts.append('%s %s %s' % (self.method.decode(), self.path.decode(), self.version.decode()))
-                parts += ['%s: %s' % (k.decode(), v.decode()) for k, v in self.headers.items()]
+                parts += ['%s: %s' % (k.decode(), '' if v is None else v.decode()) for k, v in self.headers.items()]
+                if data:
+                    parts.append('')
             if data:
                 parts += self.data.decode().split('\n')
         except Exception as e:
@@ -91,7 +103,7 @@ class Request():
 
     def bytes(self):
         result = b'%s %s %s\r\n' % (self.method, self.path, self.version)
-        result += b'\r\n'.join([b'%s: %s' % (k, v) for k, v in self.headers.items()])
+        result += b'\r\n'.join([b'%s: %s' % (k, b'' if v is None else v) for k, v in self.headers.items()])
         result += b'\r\n\r\n'
         if len(self.data)>0:
             result += self.data
@@ -106,6 +118,8 @@ class Request():
 
 
 class Response():
+    link_tags = [('a', 'href', None), ('form', 'action', None), ('frame', 'src', None), ('img', 'src', None), (  'script', 'src', None)] # TODO more?
+
     def __init__(self, data):
         self.original = data
         lines = data.split(b'\r\n')
@@ -113,8 +127,10 @@ class Response():
         self.statuscode = int(lines[0].split(b' ')[1])
         self.status = b' '.join(lines[0].split(b' ')[2:])
         self.headers = OrderedDict()
+        self.soup = None
 
         # load first set of headers (hopefully only one)
+        line_index = 1
         for line_index in range(1, len(lines)):
             line = lines[line_index]
             if len(line) == 0:
@@ -123,32 +139,50 @@ class Response():
             self.headers[k] = v.strip()
         
         # TODO splitlines for grep? if text/*
-        # TODO Transfer-Encoding: chunked # even when the header is missing
         line_index += 1
 
         # chunked Transfer-Encoding? TODO no busy-waiting
-        # TODO XMLtoDict Exception:mismatched tag: line 194, column 3   for gry0057-d9.vsb.cz
+        data_line_index = line_index # backup the value
         try:
             self.data = b''
             while True: # read all chunks
+                log.debug_chunks('trying to unchunk next chunk...')
+                log.debug_chunks('next line: %s' % (str(lines[line_index])))
                 chunksize = int(lines[line_index], 16)
+                log.debug_chunks('chunksize (parsed): 0x%x' % (chunksize))
                 if chunksize == 0: # end of stream
+                    log.debug_chunks('unchunking finished.')
                     break
                 tmpchunk = b''
                 while True: # read all bytes for chunk
                     line_index += 1
                     tmpchunk += lines[line_index]
                     if len(tmpchunk) == chunksize: # chunk is complete
+                        log.debug_chunks('end of chunk near %s' % str(lines[line_index][-30:]))
+                        line_index += 1
                         break
                     if len(tmpchunk) > chunksize: # problem...
-                        print('Loaded chunk is bigger than advertised: %d > %d' % (tmpchunk, chunksize))
+                        log.warn('Loaded chunk is bigger than advertised: %d > %d' % (len(tmpchunk), chunksize))
                         break
+                    # chunk spans multiple lines...
+                    tmpchunk += b'\r\n'
                 self.data += tmpchunk
         except Exception as e:
+            line_index = data_line_index # restore the value
+            log.debug_chunks('unchunking failed:')
+            log.debug_chunks(e)
+            #traceback.print_exc()
+            log.debug_chunks('treating as non-chunked...')
             # treat as normal data
             self.data = b'\r\n'.join(lines[line_index:])
             # TODO test for matching Content-Type (HTTP Response-Splitting etc.)
-            
+        
+        # strip Transfer-Encoding...
+        self.headers.pop(b'Transfer-Encoding', None)
+        
+        # no wild upgrading (HTTP/2)
+        self.headers.pop(b'Upgrade', None)
+
         #self.data = b''.join([line+b'\n' for line in lines[line_index+1:]])
         """
         # try to parse xml
@@ -166,13 +200,15 @@ class Response():
         #if self.headers.get(b'Content-Encoding') == b'gzip':
         #    self.data = lib.gunzip(self.data)
         """
-        self.soup = soup(self.data.replace(b'<!--', b'<comment>').replace(b'-->', b'</comment>'), "lxml") # TODO this is madness
+        if b'Content-Type' not in self.headers or self.headers[b'Content-Type'].startswith(b'text/html'):
+            self.soup = soup(self.data.replace(b'<!--', b'<comment>').replace(b'-->', b'</comment>'), "lxml") # TODO this is madness
         #print(self.soup.prettify())
  
-        if b'Content-Length' not in self.headers.keys() and len(self.data)>0:
-            log.debug_parsing('Computing Content-Length...')
-            self.headers[b'Content-Length'] = b'%d' % (len(self.data))
-
+    def compute_content_length(self):
+        #if b'Content-Length' not in self.headers.keys() and len(self.data)>0:
+        log.debug_parsing('Computing Content-Length...')
+        data = self.data if self.soup is None else str(self.soup).encode('utf8')
+        self.headers[b'Content-Length'] = b'%d' % (len(data))
 
     def lines(self, headers=True, data=True):
         parts = []
@@ -182,8 +218,11 @@ class Response():
         #log.debug_parsing(''.join([('   %c' % x) if x != 0x0a else '  \\n' for x in self.data[-10:] ]))
         try:
             if headers:
+                self.compute_content_length()
                 parts.append('%s %s %s' % (self.version.decode(), self.statuscode, self.status.decode()))
-                parts += ['%s: %s' % (k.decode(), v.decode()) for k, v in self.headers.items()]
+                parts += ['%s: %s' % (k.decode(), '' if v is None else v.decode()) for k, v in self.headers.items()]
+                if data:
+                    parts.append('')
             if data:
                 # TODO what exactly?
                 if b'Content-Type' in self.headers and self.headers[b'Content-Type'].startswith((b'text/', b'application/')):
@@ -197,11 +236,17 @@ class Response():
         return '\n'.join(self.lines())
 
     def bytes(self):
+        self.compute_content_length()
         #data = lib.gzip(self.data) if self.headers.get(b'Content-Encoding') == b'gzip'  else self.data
         result = b''
         result += b'%s %d %s\r\n' % (self.version, self.statuscode, self.status)
-        result += b'\r\n'.join([b'%s: %s' % (k, v) for k, v in self.headers.items()])
-        result += b'\r\n\r\n' + self.data + b'\r\n\r\n'
+        result += b'\r\n'.join([b'%s: %s' % (k, b'' if v is None else v) for k, v in self.headers.items()])
+        
+        if self.soup is None:
+            data = self.data
+        else:
+            data = str(self.soup).encode('utf8')
+        result += b'\r\n\r\n' + data + b'\r\n\r\n'
         return result
     """
     def get_tags_recursive(tagname, d):
@@ -220,6 +265,9 @@ class Response():
                 xml - xml as string
                 value - desired value as string
         """
+        if self.soup is None:
+            return []
+
         if attr_key is not None:
             if attr_value is not None: # attribute value condition?
                 #result = soup.find_all(tagname, {attr_key: attr_value})
@@ -266,8 +314,8 @@ class RRDB():
                 start = minimum
                 end = maximum
                 
-                if ':' in desired:
-                    _start, _, _end = desired.partition(':')                    
+                if '-' in desired:
+                    _start, _, _end = desired.partition('-')
                 else:
                     _start = _end = desired
                 if _start.isdigit():
@@ -288,15 +336,17 @@ class RRDB():
     def overview(self, args, header=True):
         result = []
         arg = None if len(args)<1 else args[0]
+        eidlen = max([3]+[len(str(e)) for e,_ in weber.events.values()])
         reqlen = max([20]+[1+len(v.request_string(short=True, colored=True)) for v in self.get_desired_rrs(arg).values()])
         
+        # TODO size, time if desired
         if header:
             hreqlen = reqlen-len(log.COLOR_GREEN)-len(log.COLOR_NONE)
-            log.tprint('    EID  RRID  %-*s  Response' % (hreqlen, 'Request'))
-            log.tprint('    ===  ====  %-*s  ====================' % (hreqlen, '='*hreqlen))
+            log.tprint('    %-*s  RRID  %-*s  Response' % (eidlen, 'EID', hreqlen, 'Request'))
+            log.tprint('    %s  ====  %-*s  ====================' % ('='*eidlen, hreqlen, '='*hreqlen))
        
         for rrid, rr in self.get_desired_rrs(arg).items():
-            result.append('    %-3s  %-4d  %-*s  %-20s' % ('' if rr.eid is None else rr.eid, rrid, reqlen, rr.request_string(short=True, colored=True), rr.response_string(short=True, colored=True)))
+            result.append('    %-*s  %-4d  %-*s  %-20s' % (eidlen, '' if rr.eid is None else rr.eid, rrid, reqlen, rr.request_string(short=True, colored=True), rr.response_string(short=True, colored=True)))
         return result
 
             
@@ -375,6 +425,7 @@ class Mapping():
         self.map = {}            # bytes->URI
         self.counter = 0
         self.lock = threading.Lock()
+        self.init_target = None
     
     def add_init(self, remote): # add first known local
         self.init_target = URI(remote)
@@ -388,13 +439,14 @@ class Mapping():
         self.map[r.__bytes__()] = r
         self.l_r[l] = r
         self.r_l[r] = l
+        return (l, r)
 
-    def generate(self, remote): # generate new local
+    def generate(self, remote, scheme): # generate new local
         with self.lock:
             self.counter += 1
-            local = '%s/%d' % (weber.config['proxy.host'], self.counter) # TODO http scheme?
-        self.l_r[local] = remote
-        self.r_l[remote] = local
+            port = weber.config['proxy.port' if scheme == 'http' else 'proxy.sslport']
+            local = '%s://%s:%d/WEBER-MAPPING/%d' % (scheme, weber.config['proxy.host'], port, self.counter) 
+        return self.add(local, remote)
         
         
     def get_remote(self, key):
@@ -402,6 +454,7 @@ class Mapping():
         return result
 
     def get_local(self, key):
+        print(self.r_l)
         result = self.r_l.get(self.map.get(key))
         return result
         
@@ -426,6 +479,18 @@ class Mapping():
                 return self.r_l[matches[0]].domain.encode()
         else:
             return None
+    
+    def get_local_uri_from_hostport_path(self, hostport, path):
+        host, _, port = hostport.decode().partition(':')
+        port = int(port)
+        path = path.decode()
+        scheme = 'https' if port == weber.config['proxy.sslport'] else 'http'
+        #print(scheme, type(scheme), host, type(host), port, type(port), path, type(path))
+        for uri, _ in self.l_r.items():
+            #print('comparing to: ', uri.scheme, type(uri.scheme), uri.domain, type(uri.domain), uri.port, type(uri.port), uri.path, type(uri.path) )
+            if uri.scheme == scheme and uri.domain == host and uri.port == port and uri.path == path:
+                return uri
+        return None
 
 weber.mapping = Mapping()
 
@@ -436,11 +501,14 @@ class URI():
     def __init__(self, uri):
         self.scheme, self.user, self.password, self.domain, self.port, self.path = URI.parse(uri)
 
-    def __str__(self):
+    def get_value(self):
         if len(self.user)>0 and len(self.password)>0:
-            return 'URI(%s://%s:%s@%s:%d%s)' % (self.scheme, self.user, self.password, self.domain, self.port, self.path)
+            return '%s://%s:%s@%s:%d%s' % (self.scheme, self.user, self.password, self.domain, self.port, self.path)
         else:
-            return 'URI(%s://%s:%d%s)' % (self.scheme, self.domain, self.port, self.path)
+            return '%s://%s:%d%s' % (self.scheme, self.domain, self.port, self.path)
+        
+    def __str__(self):
+            return 'URI(%s)' % (self.get_value()) 
 	
     def __bytes__(self):
         return self.__str__().encode()
@@ -448,6 +516,7 @@ class URI():
     def __repr__(self):
         return self.__str__()
 
+    @staticmethod
     def parse(uri):
         # splits https://example.com:4443/x/y.html into scheme, user, pass, domain, port and path
         if type(uri) == bytes:
@@ -481,3 +550,13 @@ class URI():
 
         return (scheme, user, password, domain, int(port), '/'+path)
 
+"""
+Event
+"""
+class Event():
+    def __init__(self, eid):
+        self.eid = eid
+        self.rrids = set()
+        self.type = ''
+
+    
