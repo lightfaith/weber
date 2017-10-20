@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
+"""
+Weber
+"""
 
+import sys, readline, re, random
 from source import weber
 from source.proxy import *
 from source import lib
 from source import commands
 from source import log
 from source.lib import exit_program
-import sys, readline, re, random
 
 # get first target
 try:
@@ -26,7 +29,7 @@ log.info(weber.motd[random.randint(0, len(weber.motd)-1)])
 weber.proxy = Proxy(init_target)
 weber.proxy.start()
 
-while(True):
+while True:
     # get command
     try:
         cmd = input(log.prompt).strip()
@@ -37,7 +40,7 @@ while(True):
         continue
     # quit?
     if lib.quitstring(cmd):
-        log.warn('Do you really want to quit? ', newline=False)
+        log.warn('Do you really want to quit? ', new_line=False)
         if lib.positive(input()):
             lib.exit_program(None, None)
     # do command
