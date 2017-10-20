@@ -7,26 +7,28 @@ from collections import OrderedDict
 """
 Default configuration options
 """
-config = {
-        # debug settings
-        'debug.command': False,  # stuff relevant to user commands
-        'debug.config':  False,   # stuff relevant to configuration
-        'debug.mapping': False,   # stuff relevant to local-remote URL mapping
-        'debug.parsing': True,   # stuff relevant to request/response parsing
-        'debug.socket':  False,   # stuff relevant to socket communication
+config = OrderedDict()
+# debug settings
+config['debug.command'] = False   # stuff relevant to user commands
+config['debug.config'] =  False   # stuff relevant to configuration
+config['debug.chunks'] =  False   # stuff relevant to Transfer-Encoding: chunked parsing
+config['debug.mapping'] = True   # stuff relevant to local-remote URL mapping
+config['debug.parsing'] = False   # stuff relevant to request/response parsing
+config['debug.socket'] =  False   # stuff relevant to socket communication
 
-	# proxy-relevant settings
-	'proxy.host': 'localhost',
-	'proxy.port': 8555,
-	'proxy.sslport': 8556,
-        'proxy.threaded': True,
-        
-        # realtime
-        'realtime.show': True,  # show request/response communication on the fly
+# overview settings
+config['overview.realtime'] = True  # show request/response communication on the fly
+config['overview.size'] = True  # show response size in overview
+config['overview.time'] = True  # show delay in overview
 
-        # tamper
-        'tamper.default': False, # should all requests be tampered by default?
-}
+# proxy-relevant settings
+config['proxy.host'] = 'localhost'
+config['proxy.port'] = 8555
+config['proxy.sslport'] = 8556
+config['proxy.threaded'] = True
+
+# tamper
+config['tamper.default'] = False # should all requests be tampered by default?
 
 """
 Dictionary of all available commands (filled in source/commands.py)
@@ -75,7 +77,7 @@ motd = [
     'HTTP/1.1 404 Not Found',
 
     'Weber tip of the day: Use \'q\' to quit the program.',
-    'Weber tip of the day: Use \'pr\' to print all received requests.',
+    'Weber tip of the day: Use \'pr\' to print overview of all received requests.',
 ]
 
 
