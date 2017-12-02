@@ -12,7 +12,7 @@ config = OrderedDict()
 config['debug.command'] = False   # stuff relevant to user commands
 config['debug.config'] =  False   # stuff relevant to configuration
 config['debug.chunks'] =  False   # stuff relevant to Transfer-Encoding: chunked parsing
-config['debug.mapping'] = True   # stuff relevant to local-remote URL mapping
+config['debug.mapping'] = False   # stuff relevant to local-remote URL mapping
 config['debug.parsing'] = False   # stuff relevant to request/response parsing
 config['debug.socket'] =  False   # stuff relevant to socket communication
 

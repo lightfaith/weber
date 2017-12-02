@@ -361,13 +361,14 @@ add_command(Command('pc [<rrid>[:<rrid>]]', 'print cookies', pc_description, lam
 def pcs_function(_, rr, *__):
     try:
         cookie = rr.response.headers[b'Set-Cookie']
+        print(cookie)
         # TODO parse cookie parameters
         return []
     except:
         return []
 pcs_description = """Set-Cookie headers can be searched with `pcs` command.
 """
-add_command(Command('pcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences', pcs_description, lambda: [])) #TODO
+add_command(Command('pcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences', pcs_description, lambda *args: foreach_rrs(pcs_function, *args))) #TODO
 add_command(Command('pe [<eid>[:<eid>]]', 'print events', e_description, e_function))
 
 # pf

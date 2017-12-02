@@ -252,6 +252,9 @@ class Response():
             data = self.data
         else:
             data = str(self.soup).encode('utf8')
+
+        # fix temporary changes  
+        data = data.replace(b'<comment>', b'<!--').replace(b'</comment>', b'-->') # TODO this is madness
         result += b'\r\n\r\n' + data + b'\r\n\r\n'
         return result
     """
@@ -435,7 +438,7 @@ class Mapping():
     
     def add_init(self, remote): # add first known local
         self.init_target = URI(remote)
-        local = '%s:%d' % (weber.config['proxy.host'], weber.config['proxy.port' if self.init_target.scheme == 'https' else 'proxy.port']) # scheme not included in host... TODO for all cases?
+        local = '%s:%d' % (weber.config['proxy.host'], weber.config['proxy.port' if self.init_target.scheme == 'http' else 'proxy.sslport']) # scheme not included in host... TODO for all cases?
         self.add(local, remote)
 
     def add(self, local, remote): # add known local
@@ -449,6 +452,9 @@ class Mapping():
 
     def generate(self, remote, scheme): # generate new local
         with self.lock:
+            if remote.encode() in self.map.keys():
+                r = self.map[remote.encode()]
+                return(self.r_l[r], r)
             self.counter += 1
             port = weber.config['proxy.port' if scheme == 'http' else 'proxy.sslport']
             local = '%s://%s:%d/WEBER-MAPPING/%d' % (scheme, weber.config['proxy.host'], port, self.counter) 
@@ -457,6 +463,7 @@ class Mapping():
         
     def get_remote(self, key):
         result = self.l_r.get(self.map.get(key))
+        print(key, result)
         return result
 
     def get_local(self, key):
@@ -514,7 +521,7 @@ class URI():
             return '%s://%s:%d%s' % (self.scheme, self.domain, self.port, self.path)
         
     def __str__(self):
-            return 'URI(%s)' % (self.get_value()) 
+        return 'URI(%s)' % (self.get_value()) 
 	
     def __bytes__(self):
         return self.__str__().encode()

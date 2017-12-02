@@ -9,6 +9,7 @@ from threading import Thread
 #from collections import OrderedDict
 from select import select
 import requests
+import os
 
 from source import weber
 from source import log
@@ -44,27 +45,45 @@ class Proxy(Thread):
         self.init_target = init_target
         self.threads = []
         self.terminate = False
+        self.stopper = os.pipe()
         
+        # set up server socket
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind((weber.config['proxy.host'], weber.config['proxy.port']))
-        #self.server_socket = ssl.wrap_socket(server.socket, certfile='server.pem', server_side=True)
 
+        # set up server socket for SSL
+        self.ssl_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.ssl_server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.ssl_server_socket.bind((weber.config['proxy.host'], weber.config['proxy.sslport']))
+        self.ssl_server_socket = ssl.wrap_socket(self.ssl_server_socket, certfile='cert.pem', keyfile='key.pem', server_side=True, do_handshake_on_connect=True)
+        
         weber.mapping.add_init(self.init_target)
         
 
     def stop(self):
         self.terminate = True
+        os.write(self.stopper[1], b'1')
     
     def run(self):
         self.server_socket.listen(1)
-        self.server_socket.settimeout(2) # TODO no busy-waiting
+        #self.server_socket.settimeout(2) # TODO no busy-waiting
+        self.ssl_server_socket.listen(1)
+        #self.ssl_server_socket.settimeout(2) # TODO no busy-waiting
 
         while True:
+            r, _, _ = select([self.server_socket, self.ssl_server_socket, self.stopper[0]], [], [])
             # accept connection, thread it
             if not self.terminate:
+                server_socket = None
+                if self.server_socket in r:
+                    server_socket = self.server_socket
+                elif self.ssl_server_socket in r:
+                    server_socket = self.ssl_server_socket
+                if server_socket is None: # should not happen
+                    continue
                 try:
-                    conn, client = self.server_socket.accept()
+                    conn, client = server_socket.accept()
 
                     log.debug_socket('Connection accepted from \'%s:%d\':' % client)
                     # what process is contacting us?
@@ -100,6 +119,7 @@ class Proxy(Thread):
             # terminate and nothing runs anymore? 
             if self.terminate and len(self.threads) == 0:
                 self.server_socket.shutdown(socket.SHUT_RDWR)
+                self.ssl_server_socket.shutdown(socket.SHUT_RDWR)
                 break
 
 
@@ -133,7 +153,6 @@ class ConnectionThread(Thread):
             
             log.debug_parsing('\n'+'-'*15+'\n'+str(request)+'\n'+'='*20)
             self.path = request.path
-            log.debug_mapping(weber.mapping.l_r.items())
             """
             # SSLPasser if CONNECT
             if request.method == b'CONNECT':
@@ -150,6 +169,7 @@ class ConnectionThread(Thread):
             if request.path.startswith(b'/WEBER-MAPPING/'):
                 request.path = weber.mapping.get_remote(weber.mapping.get_local_uri_from_hostport_path(request.headers[b'Host'], request.path).__bytes__()).path.encode()
                 request.parse_method()
+                log.debug_mapping(weber.mapping.l_r.items()) # TODO enhance debug of mapping
             request.headers[b'Host'] = weber.mapping.get_remote_hostport(request.headers[b'Host'])
             log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
             
