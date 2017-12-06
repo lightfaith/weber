@@ -12,19 +12,21 @@ config = OrderedDict()
 config['debug.command'] = False   # stuff relevant to user commands
 config['debug.config'] =  False   # stuff relevant to configuration
 config['debug.chunks'] =  False   # stuff relevant to Transfer-Encoding: chunked parsing
-config['debug.mapping'] = False   # stuff relevant to local-remote URL mapping
-config['debug.parsing'] = False   # stuff relevant to request/response parsing
+config['debug.mapping'] = True   # stuff relevant to local-remote URL mapping
+config['debug.parsing'] = True  # stuff relevant to request/response parsing
 config['debug.socket'] =  False   # stuff relevant to socket communication
 
 # overview settings
 config['overview.realtime'] = True  # show request/response communication on the fly
-config['overview.size'] = True  # show response size in overview
-config['overview.time'] = True  # show delay in overview
+config['overview.size'] = True  # show response size in overview # TODO
+config['overview.time'] = True  # show delay in overview # TODO
 
 # proxy-relevant settings
 config['proxy.host'] = 'localhost'
 config['proxy.port'] = 8555
 config['proxy.sslport'] = 8556
+config['proxy.sslcert'] = 'cert.pem'
+config['proxy.sslkey'] = 'key.pem'
 config['proxy.threaded'] = True
 
 # tamper

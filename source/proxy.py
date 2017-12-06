@@ -4,16 +4,15 @@ Proxy methods are defined here.
 """
 #from http.server import BaseHTTPRequestHandler, HTTPServer
 #import ssl
-import socket, time, ssl, subprocess
+import os, socket, time, ssl, subprocess, traceback
 from threading import Thread
 #from collections import OrderedDict
 from select import select
 import requests
-import os
 
 from source import weber
 from source import log
-from source.structures import Request, Response
+from source.structures import Request, Response, URI
 from source.lib import *
 
 
@@ -27,7 +26,7 @@ class ProxyLib():
             conn.settimeout(timeout)
             timeout = 0.4
             try:
-                recv_size = 4096
+                recv_size = 65536
                 log.debug_socket('Getting %d bytes...' % (recv_size))
                 buf = conn.recv(recv_size)
                 if not buf:
@@ -56,7 +55,7 @@ class Proxy(Thread):
         self.ssl_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.ssl_server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.ssl_server_socket.bind((weber.config['proxy.host'], weber.config['proxy.sslport']))
-        self.ssl_server_socket = ssl.wrap_socket(self.ssl_server_socket, certfile='cert.pem', keyfile='key.pem', server_side=True, do_handshake_on_connect=True)
+        self.ssl_server_socket = ssl.wrap_socket(self.ssl_server_socket, certfile=weber.config['proxy.sslcert'], keyfile=weber.config['proxy.sslkey'], server_side=True, do_handshake_on_connect=False)
         
         weber.mapping.add_init(self.init_target)
         
@@ -103,6 +102,9 @@ class Proxy(Thread):
                     pass
                 except Exception as e:
                     log.err('Proxy error: '+str(e))
+                    log.err('See traceback:')
+                    traceback.print_exc()
+
             
             # terminate? end everything
             if self.terminate:
@@ -127,12 +129,13 @@ class ConnectionThread(Thread):
     def __init__(self, conn, uri, rrid):
         Thread.__init__(self)
         self.conn = conn
-        self.host = uri.domain
-        self.port = uri.port
+        self.host = b'?'  # for thread printing
+        self.port = 0      # for thread printing
         self.rrid = rrid
         self.path = '' # parsed from request, for `pt` command
-        self.ssl = (uri.scheme == 'https')
-        
+        #self.ssl = (uri.scheme == 'https')
+        #print('new thread: uri', uri, type(uri))
+
         self.keepalive = True
         self.terminate = False
         
@@ -150,27 +153,26 @@ class ConnectionThread(Thread):
                 #log.debug_parsing('Request is broken, ignoring...')
                 #return
                 break
-            
-            log.debug_parsing('\n'+'-'*15+'\n'+str(request)+'\n'+'='*20)
-            self.path = request.path
-            """
-            # SSLPasser if CONNECT
-            if request.method == b'CONNECT':
-                log.debug_socket('Will SSLPass to %s:%d' % (request.host, request.port))
-                self.client_socket.connect((request.host, request.port))
-                self.conn.send(b'%s 200 OK\r\n\r\n' % (request.version)) # hit it :)
-                SSLPasser(self.conn, self.client_socket).start()
-                return
-            """
-            
+
             self.keepalive = (request.headers.get(b'Connection') == b'Keep-Alive')
+            
+            # get URI() from request
+            self.host, _, port = request.headers[b'Host'].partition(b':')
+            self.port = int(port)
+            self.localuri = URI(URI.build_str(self.host, self.port, request.path))
+            log.debug_mapping('request source: %s ' % (str(self.localuri)))
+            log.debug_parsing('\n'+'-'*15+'\n'+str(request)+'\n'+'='*20)
+            self.path = request.path.decode()
+            
 
             # TODO change outgoing links (probably complete)
-            if request.path.startswith(b'/WEBER-MAPPING/'):
-                request.path = weber.mapping.get_remote(weber.mapping.get_local_uri_from_hostport_path(request.headers[b'Host'], request.path).__bytes__()).path.encode()
-                request.parse_method()
-                log.debug_mapping(weber.mapping.l_r.items()) # TODO enhance debug of mapping
-            request.headers[b'Host'] = weber.mapping.get_remote_hostport(request.headers[b'Host'])
+            remoteuri = weber.mapping.get_remote(self.localuri)
+            if remoteuri is None:
+                log.err('Cannot forward - local URI is not mapped. Terminating thread...')
+                break
+            request.path = remoteuri.path.encode()
+            request.parse_method()
+            request.headers[b'Host'] = remoteuri.domain.encode() if remoteuri.port in [80, 443] else b'%s:%d' % (remoteuri.domain, remoteuri.port)
             log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
             
             # TODO tamper request
@@ -179,39 +181,47 @@ class ConnectionThread(Thread):
 
             # forward request to server        
             log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
-            """
-            if self.domain != request.headers.get('Host'):
-                log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
-                response = self.forward(request.host, request.port, request.bytes())
-            log.debug_socket('Response received.')
-            """
-            # TODO PLAIN/SSL
-            response = self.forward(self.host, self.port, request.bytes()) # TODO consistent with changed link (check)
+            response = self.forward(remoteuri, request.bytes()) # TODO consistent with changed link (check)
+            if response is None:
+                break
+
             log.debug_parsing('\n'+str(response)+'\n'+'='*30)
             
             # TODO tamper response
             weber.rrdb.add_response(self.rrid, response)
+
+            # tamper redirects # TODO test 302, 303
+            if response.statuscode in [301, 302, 303]:
+                newremote = URI(response.headers[b'Location'])
+                newlocal = weber.mapping.get_local(newremote)
+                response.headers[b'Location'] = newlocal.__bytes__()
+                response.statuscode = 302 # TODO just for debugging
 
             # TODO change incoming links - probably complete
             for tagname, attr_key, attr_value in Response.link_tags:
                 olds = response.find_tags(tagname, attr_key=attr_key, attr_value=attr_value, form='soup')
                 for old in olds:
                     old_value = old[attr_key]
-                    scheme, _, _ = old_value.partition('://')
-                    if scheme in ('http', 'https'):
-                        new, _ = weber.mapping.generate(old_value, scheme)
+                    if old_value.partition('://')[0] in ('http', 'https'):
+                        new = weber.mapping.get_local(old_value)
                         old[attr_key] = new.get_value()
                         #print('new', old)
 
             log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
 
             # send response to browser
-            self.send_response(response)
+            try:
+                self.send_response(response)
+            except Exception as e:
+                log.err('Failed to forward response (#%d): %s' % (self.rrid, str(e)))
+                log.err('See traceback:')
+                traceback.print_exc()
 
             # print if desired
             if positive(weber.config['overview.realtime']):
                 log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
             time.sleep(10)
+        self.conn.close()
 
 
     def receive_request(self):
@@ -232,9 +242,14 @@ class ConnectionThread(Thread):
         log.debug_socket('Request received.') 
     
 
-    def forward(self, host, port, data):
-        self.client_socket.connect((host, port))
-        if self.ssl:
+    def forward(self, uri, data):
+        try:
+            self.client_socket.connect((uri.domain, uri.port))
+        except socket.gaierror:
+            log.err('Cannot connect to %s:%d' % (uri.domain, uri.port))
+            return None
+
+        if uri.scheme == 'https':
             self.client_socket = ssl.wrap_socket(self.client_socket)
         self.client_socket.send(data)
         try:
@@ -250,10 +265,10 @@ class ConnectionThread(Thread):
         if response is not None:
             log.debug_socket('Forwarding response (%d B).' % len(response.data))
             self.conn.send(response.bytes())
+
             log.debug_socket('Response sent.')
         else:
             log.debug_parsing('Response is weird.')
-        self.conn.close()
  
 
 """
@@ -288,7 +303,7 @@ class SSLPasser(Thread):
 
     def forward(self, src, dest):
         try:
-            data = src.recv(4096)
+            data = src.recv(65536)
             dest.send(data)
         except:
             self.terminate = True

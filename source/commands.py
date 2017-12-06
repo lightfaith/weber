@@ -304,7 +304,7 @@ add_command(Command('et <eid> <type>', 'define type for an event', et_descriptio
 """
 OPTIONS COMMANDS
 """
-o_function = lambda *_: ['    %20s  %s' % (k, v) for k,v       in weber.config.items()]
+o_function = lambda *_: ['    %-20s  %s' % (k, v) for k,v       in weber.config.items()]
 o_description = """Active Weber configuration can be printed with `po` and `o` command.
 
 Default configuration is located in source/weber.py.
@@ -446,7 +446,7 @@ add_command(Command('pwo', 'print weber configuration', o_description, o_functio
 # pwt
 pwt_description="""Alive ConnectionThread objects are printed with `pt` command. This is mostly for debug purposes.
 """
-add_command(Command('pwt', 'print alive threads', '', lambda *_: ['    %s:%d%s' % (t.host, t.port, t.path.decode()) for t in weber.proxy.threads]))
+add_command(Command('pwt', 'print alive threads', '', lambda *_: ['    %s:%d%s' % (t.host.decode(), t.port, t.path) if t.port != 0 else '    ?' for t in weber.proxy.threads]))
 
 """
 Quit

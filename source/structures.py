@@ -2,7 +2,7 @@
 """
 Various structures are defined here.
 """
-import threading, traceback
+import threading, traceback, re
 from collections import OrderedDict
 from bs4 import BeautifulSoup as soup
 
@@ -87,6 +87,7 @@ class Request():
                 v = None if v == b'' else v
                 self.parameters[k] = v
         # TODO more methods
+
 
 
     def lines(self, headers=True, data=True):
@@ -345,7 +346,7 @@ class RRDB():
     def overview(self, args, header=True):
         result = []
         arg = None if len(args)<1 else args[0]
-        eidlen = max([3]+[len(str(e)) for e,_ in weber.events.values()])
+        eidlen = max([3]+[len(str(e)) for e,_ in weber.events.items()])
         reqlen = max([20]+[1+len(v.request_string(short=True, colored=True)) for v in self.get_desired_rrs(arg).values()])
         
         # TODO size, time if desired
@@ -437,10 +438,21 @@ class Mapping():
         self.init_target = None
     
     def add_init(self, remote): # add first known local
-        self.init_target = URI(remote)
+        """self.init_target = URI(remote)
         local = '%s:%d' % (weber.config['proxy.host'], weber.config['proxy.port' if self.init_target.scheme == 'http' else 'proxy.sslport']) # scheme not included in host... TODO for all cases?
-        self.add(local, remote)
+        """
+        givenuri = URI(remote)
 
+        http_r = URI(remote, 'http')
+        https_r = URI(remote, 'https')
+        http_r.port = 80 if givenuri.scheme != 'http' else givenuri.port
+        https_r.port = 443 if givenuri.scheme != 'https' else givenuri.port
+        http_l = 'http://%s:%d' % (weber.config['proxy.host'], weber.config['proxy.port'])
+        https_l = 'https://%s:%d' % (weber.config['proxy.host'], weber.config['proxy.sslport'])
+        self.add(http_l, http_r.get_value())
+        self.add(https_l, https_r.get_value())
+
+    
     def add(self, local, remote): # add known local
         l = URI(local)
         r = URI(remote)
@@ -450,27 +462,91 @@ class Mapping():
         self.r_l[r] = l
         return (l, r)
 
-    def generate(self, remote, scheme): # generate new local
+    
+    def get_local(self, remote):
+        if type(remote) in (str, bytes):
+            remote = URI(remote)
+        
+        log.debug_mapping('get_local() for %s' % (remote.get_value()))
         with self.lock:
-            if remote.encode() in self.map.keys():
-                r = self.map[remote.encode()]
-                return(self.r_l[r], r)
-            self.counter += 1
-            port = weber.config['proxy.port' if scheme == 'http' else 'proxy.sslport']
-            local = '%s://%s:%d/WEBER-MAPPING/%d' % (scheme, weber.config['proxy.host'], port, self.counter) 
-        return self.add(local, remote)
+            # try to get existing exact match - TODO no need for specific code, is it not?
+            """
+            if remote.__bytes__() in self.map.keys():
+                r = self.map[remote.__bytes__()]
+                log.debug_mapping('getting local: found exact match: '+str(self.r_l[r])+' <--> '+str(r))
+                return self.r_l[r]
+            log.debug_mapping('getting local: searching for matching domain mapping...')
+            """
+            # create new domain mapping if no match, else use existing
+            realpath = remote.path
+            remote.path = '/'
+            if remote.__bytes__() not in self.map.keys():
+                # generate brand new - new domain etc.
+                self.counter += 1
+                port = weber.config['proxy.port' if remote.scheme == 'http' else 'proxy.sslport']
+                localroot = '%s://%s:%d/WEBER-MAPPING/%d/' % (remote.scheme, weber.config['proxy.host'], port, self.counter)
+                localroot, _ = self.add(localroot, remote)
+                log.debug_mapping('get_local():   generated new mapping: '+str(localroot)+' <--> '+str(remote))
+            else:
+                # get existing
+                localroot = self.r_l[self.map[remote.__bytes__()]]
+            # alter the path
+            remote.path = realpath
+            local = localroot.clone()
+            log.debug_mapping('get_local():   using localroot '+localroot.get_value())
+            local.path += realpath[1:] # without the leading slash - already present in local.path
+            log.debug_mapping('get_local():   %s --> %s' % (remote.get_value(), local.get_value()))
+            return local
+                
         
         
-    def get_remote(self, key):
-        result = self.l_r.get(self.map.get(key))
-        print(key, result)
-        return result
+    def get_remote(self, local):
+        remote = None
+        if not isinstance(local, URI):
+            local = URI(local)
 
-    def get_local(self, key):
-        print(self.r_l)
-        result = self.r_l.get(self.map.get(key))
+        log.debug_mapping('get_remote() for %s' % (local.get_value()))
+        if local.path.startswith('/WEBER-MAPPING/'):
+            realpath = '/'+'/'.join(local.path.split('/')[3:])
+            local.path = '/'.join(local.path.split('/')[:3]+[''])
+        else:
+            realpath = local.path
+            local.path = '/'
+        if local.__bytes__() in self.map.keys():
+            remote = self.l_r[self.map[local.__bytes__()]].clone()
+            remote.path += realpath[1:] # without the leading slash - already present in remote.path
+        local.path = realpath
+        log.debug_mapping('get_remote():   %s --> %s' % (str(local), str(remote)))
+        return remote
+
+
+
+        """if isinstance(uri, URI):
+            uri = uri.__bytes__()
+
+        if result is None:
+            # try to get WEBER-MAPPING
+            #pattern = re.compile('/WEBER-MAPPING/[0-9]+')
+            # TODO will be compatible with domain append approach?
+            urisplit = uri.split(b'/')
+            remotebase = self.l_r.get(b'/'.join(urisplit[:5]))
+            if remotebase is None:
+                log.err('Non-existent remote mapping.')
+                return None
+            else:
+                result = b'/'.join([remotebase] + urisplit[5:])
+                print('get_remote result', result)
+
         return result
-        
+        """
+
+    
+    def uri_is_mapped(self, uri):
+        if not isinstance(uri, URI):
+            uri = URI(uri).clone()
+        uri.path = '/'
+        return uri.__bytes__() in self.map.keys()
+    
     def get_remote_hostport(self, key):
         key = URI(key)
         matches = [x for x in self.l_r.keys() if x.domain == key.domain and x.port == key.port]
@@ -511,8 +587,35 @@ weber.mapping = Mapping()
 Single URI
 """
 class URI():
-    def __init__(self, uri):
+    @staticmethod
+    def build_str(domain, port, path, scheme=None, user=None, password=None):
+        if not port:
+            port = weber.config['proxy.port']
+        port = int(port)
+        if scheme is None:
+            if port == weber.config['proxy.port']:
+                scheme = b'http'
+            elif port == weber.config['proxy.sslport']:
+                scheme = b'https'
+        if scheme is None:
+            log.err('Cannot build_str() - unknown port.')
+            return ''
+        if user is None and password is None:
+            return (b'%s://%s:%d%s' % (scheme, domain, port, path)).decode()
+        elif user is not None and password is not None:
+            return (b'%s://%s:%s@%s:%d%s' % (scheme, domain, port, path)).decode()
+        else:
+            log.err('Cannot build_str() - user or pass not defined.')
+            return ''
+            
+
+    def __init__(self, uri, scheme=None):
         self.scheme, self.user, self.password, self.domain, self.port, self.path = URI.parse(uri)
+        if scheme is not None:
+            self.scheme = scheme
+
+    def clone(self):
+        return URI(self.__bytes__())
 
     def get_value(self):
         if len(self.user)>0 and len(self.password)>0:
@@ -524,15 +627,30 @@ class URI():
         return 'URI(%s)' % (self.get_value()) 
 	
     def __bytes__(self):
-        return self.__str__().encode()
+        return self.get_value().encode()
 
     def __repr__(self):
         return self.__str__()
 
     @staticmethod
-    def parse(uri):
-        # splits https://example.com:4443/x/y.html into scheme, user, pass, domain, port and path
+    def port_is_explicit(uri):
+        # returns whether port is specified or not
         if type(uri) == bytes:
+            uri = uri.decode()
+        if '://' in uri:
+            _, _, noscheme = uri.partition('://')
+        if '@' in noscheme:
+            _, _, domainport = noscheme.partition('@')
+        if ':' in domainport:
+            _, _, port = domainport.partition(':')
+        return port.isdigit()
+
+    @staticmethod
+    def parse(uri):
+        # splits https://admin:pasword@example.com:4443/x/y.html into scheme, user, pass, domain, port and path
+        if isinstance(uri, URI):
+            uri = uri.get_value()
+        elif type(uri) == bytes:
             uri = uri.decode()
 
         # get scheme
@@ -552,6 +670,7 @@ class URI():
         else:
             user = ''
             password = ''
+
         # domain, port
         if ':' in domainport:
             domain, _, port = domainport.partition(':')
@@ -560,7 +679,7 @@ class URI():
         else:
             domain = domainport
             port = 443 if scheme == 'https' else 80 # default
-
+        
         return (scheme, user, password, domain, int(port), '/'+path)
 
 """
