@@ -113,4 +113,8 @@ def debug_chunks(string=''):
     if positive(config['debug.chunks']):
         show_marked('cnk.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
+def debug_tampering(string=''):
+    if positive(config['debug.tampering']):
+        show_marked('tpr.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+
 

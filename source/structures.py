@@ -353,7 +353,7 @@ class RRDB():
         if header:
             hreqlen = reqlen-len(log.COLOR_GREEN)-len(log.COLOR_NONE)
             log.tprint('    %-*s  RRID  %-*s  Response' % (eidlen, 'EID', hreqlen, 'Request'))
-            log.tprint('    %s  ====  %-*s  ====================' % ('='*eidlen, hreqlen, '='*hreqlen))
+            log.tprint('    %s  ====  %-*s  =====================' % ('='*eidlen, hreqlen, '='*hreqlen))
        
         for rrid, rr in self.get_desired_rrs(arg).items():
             result.append('    %-*s  %-4d  %-*s  %-20s' % (eidlen, '' if rr.eid is None else rr.eid, rrid, reqlen, rr.request_string(short=True, colored=True), rr.response_string(short=True, colored=True)))

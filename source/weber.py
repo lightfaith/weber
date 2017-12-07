@@ -9,12 +9,16 @@ Default configuration options
 """
 config = OrderedDict()
 # debug settings
-config['debug.command'] = False   # stuff relevant to user commands
-config['debug.config'] =  False   # stuff relevant to configuration
-config['debug.chunks'] =  False   # stuff relevant to Transfer-Encoding: chunked parsing
-config['debug.mapping'] = True   # stuff relevant to local-remote URL mapping
-config['debug.parsing'] = True  # stuff relevant to request/response parsing
-config['debug.socket'] =  False   # stuff relevant to socket communication
+config['debug.command'] =    False   # stuff relevant to user commands
+config['debug.config'] =     False   # stuff relevant to configuration
+config['debug.chunks'] =     False   # stuff relevant to Transfer-Encoding: chunked parsing
+config['debug.mapping'] =    False   # stuff relevant to local-remote URL mapping
+config['debug.parsing'] =    False   # stuff relevant to request/response parsing
+config['debug.socket'] =     False   # stuff relevant to socket communication
+config['debug.tampering'] =  True   # stuff relevant to tampering
+
+# edit settings
+config['edit.command'] = 'vim %s'
 
 # overview settings
 config['overview.realtime'] = True  # show request/response communication on the fly
@@ -30,7 +34,10 @@ config['proxy.sslkey'] = 'key.pem'
 config['proxy.threaded'] = True
 
 # tamper
-config['tamper.default'] = False # should all requests be tampered by default?
+config['tamper.requests'] = False # should all requests be tampered by default?
+config['tamper.responses'] = False # should all responses be tampered by default?
+
+
 
 """
 Dictionary of all available commands (filled in source/commands.py)

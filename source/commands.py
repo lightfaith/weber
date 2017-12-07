@@ -3,11 +3,11 @@
 Commands and config methods are implemented here.
 """
 
-import os, sys, re, traceback
+import os, sys, re, traceback, tempfile, subprocess
 from source import weber
 from source import lib
 from source import log
-from source.structures import RRDB, Response, Event
+from source.structures import RRDB, Request, Response, Event
 from bs4 import Comment
 
 """
@@ -301,10 +301,71 @@ add_command(Command('et <eid> <type>', 'define type for an event', et_descriptio
 
 
 
+
+"""
+MODIFY COMMANDS
+"""
+m_description=''
+add_command(Command('m', 'modify', m_description, lambda *_: []))
+mr_description="""Received requests and responses can be modified using your favourite text editor with `mrq` and `mrs`, respectively. Modifying multiple RRs is not supported (use spoofs instead). 
+Favourite editor command can be configured under edit.command option.
+"""
+add_command(Command('mr', 'modify request/response', mr_description, lambda *_: []))
+mrq_description=''
+mrs_description=''
+def mr_function(*args):
+    try:
+        rrid = int(args[1])
+        if args[0] == 'request': 
+            r = weber.rrdb.rrs[rrid].request
+        elif args[0] == 'response':
+            r = weber.rrdb.rrs[rrid].response
+        else:
+            log.err('Invalid type.')
+            return []
+        if r is None:
+            log.err('Non-existent %s for RRID #%d.' % (args[0], rrid))
+            return []
+    except:
+        log.err('Invalid RRID.')
+        return []
+    # suppress debugs and realtime overview
+    oldconfig = {k:weber.config[k] for k in weber.config.keys() if k.startswith('debug.') or k == 'overview.realtime'}
+    for k, _ in oldconfig.items():
+        weber.config[k] = False
+    # write into temp file, open with desired editor
+    with tempfile.NamedTemporaryFile() as f:
+        f.write(r.bytes())
+        f.flush()
+        subprocess.call((weber.config['edit.command'] % (f.name)).split())
+        f.seek(0)
+        if args[0] == 'request': 
+            r = weber.rrdb.rrs[rrid].request = Request(f.read())
+        elif args[0] == 'response':
+            r = weber.rrdb.rrs[rrid].response = Response(f.read())
+    # restore debug and realtime overview settings
+    for k, v in oldconfig.items():
+        weber.config[k] = v
+    return []
+        
+add_command(Command('mrq <rrid>', 'modify request', mrq_description, lambda *args: mr_function('request', *args)))
+add_command(Command('mrs <rrid>', 'modify response', mrs_description, lambda *args: mr_function('response', *args)))
+
+
+
+
+
+
+
+
+
+
+
+
 """
 OPTIONS COMMANDS
 """
-o_function = lambda *_: ['    %-20s  %s' % (k, v) for k,v       in weber.config.items()]
+o_function = lambda *_: ['    %-20s  %s' % (k, (v if type(v) != str else '\''+v+'\'')) for k,v       in weber.config.items()]
 o_description = """Active Weber configuration can be printed with `po` and `o` command.
 
 Default configuration is located in source/weber.py.
@@ -455,4 +516,42 @@ add_command(Command('q', 'quit', '', lambda *_: [])) # solved in weber
 
 
 #add_command(Command('', '', '',))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""
+TAMPER COMMANDS
+"""
+t_description = ''
+add_command(Command('t', 'tamper', t_description, lambda *_: []))
+tr_description = ''
+add_command(Command('t', 'tamper requests/responses', t_description, lambda *_: []))
+# trqa, trsa, trq, trs, trq <n>, trs <n>, trqf rrid[:rrid], trsf rrid[:rrid]
+
+trqa_description = """Toggles tamper.requests value.
+"""
+def trqa_function(*_):
+    trq = weber.config['tamper.requests']
+    print('Requests will be %s by default.' % ('FORWARDED' if not trq else 'TAMPERED'))
+    weber.config['tamper.requests'] = not(trq)
+add_command(Command('trqa', 'sets default request tamper behavior', trqa_description, trqa_function))
+
+
+
+
+
+
+
+
 
