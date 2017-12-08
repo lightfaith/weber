@@ -2,7 +2,7 @@
 """
 Various structures are defined here.
 """
-import threading, traceback, re
+import threading, traceback, re, os
 from collections import OrderedDict
 from bs4 import BeautifulSoup as soup
 
@@ -15,7 +15,14 @@ class Request():
     """
     HTTP Request class
     """
-    def __init__(self, data):
+    def __init__(self, data, should_tamper, forward_stopper=None):
+        """
+            data = request data (bytes)
+            should_tamper = should the request be tampered? (bool)
+            forward_stopper = os.pipe() for waiting on forward (used in proxy:ConnectionThread)
+                              None for new request
+                              Use original value for modified request (e.g. `mrq`)
+        """
         self.integrity = False
         if not data:
             return
@@ -23,6 +30,9 @@ class Request():
         lines = data.splitlines()
         self.method, self.path, self.version = tuple(lines[0].split(b' '))
         self.parameters = {}
+        self.should_tamper = should_tamper
+        self.forward_stopper = os.pipe() if forward_stopper is None else forward_stopper
+        self.tampering = self.should_tamper
         """self.method, wanted, self.version = tuple(lines[0].split(b' '))
         # parse uri
         parts = wanted.split(b'/')
@@ -66,6 +76,15 @@ class Request():
 
         self.parse_method()
         self.integrity = True
+
+        # allow forwarding?
+        if not self.should_tamper:
+            self.forward()
+
+
+    def forward(self):
+        self.tampering = False
+        os.write(self.forward_stopper[1], b'1')
 
     def parse_method(self):
         # GET method
@@ -127,7 +146,7 @@ class Request():
 class Response():
     link_tags = [('a', 'href', None), ('form', 'action', None), ('frame', 'src', None), ('img', 'src', None), (  'script', 'src', None)] # TODO more?
 
-    def __init__(self, data):
+    def __init__(self, data, should_tamper, forward_stopper=None):
         self.original = data
         lines = data.split(b'\r\n')
         self.version = lines[0].partition(b' ')[0]
@@ -135,6 +154,9 @@ class Response():
         self.status = b' '.join(lines[0].split(b' ')[2:])
         self.headers = OrderedDict()
         self.soup = None
+        self.should_tamper = should_tamper
+        self.forward_stopper = os.pipe() if forward_stopper is None else forward_stopper
+        self.tampering = should_tamper
 
         # load first set of headers (hopefully only one)
         line_index = 1
@@ -210,6 +232,14 @@ class Response():
         if b'Content-Type' not in self.headers or self.headers[b'Content-Type'].startswith(b'text/html'):
             self.soup = soup(self.data.replace(b'<!--', b'<comment>').replace(b'-->', b'</comment>'), "lxml") # TODO this is madness
         #print(self.soup.prettify())
+        
+        # allow forwarding?
+        if not self.should_tamper:
+            self.forward()
+
+    def forward(self):
+        self.tampering = False
+        os.write(self.forward_stopper[1], b'1')
  
     def compute_content_length(self):
         #if b'Content-Length' not in self.headers.keys() and len(self.data)>0:
@@ -348,14 +378,19 @@ class RRDB():
         arg = None if len(args)<1 else args[0]
         eidlen = max([3]+[len(str(e)) for e,_ in weber.events.items()])
         reqlen = max([20]+[1+len(v.request_string(short=True, colored=True)) for v in self.get_desired_rrs(arg).values()])
+        #tampering = any([v.request.tampering for v in self.get_desired_rrs(arg).values()])
+        # TODO tamper information
         
         # TODO size, time if desired
         if header:
-            hreqlen = reqlen-len(log.COLOR_GREEN)-len(log.COLOR_NONE)
+            hreqlen = reqlen-2*(len(log.COLOR_GREEN)+len(log.COLOR_NONE))
+            #hreqlen = reqlen-tamperlen-len(log.COLOR_GREEN)-len(log.COLOR_NONE)
             log.tprint('    %-*s  RRID  %-*s  Response' % (eidlen, 'EID', hreqlen, 'Request'))
             log.tprint('    %s  ====  %-*s  =====================' % ('='*eidlen, hreqlen, '='*hreqlen))
-       
+
         for rrid, rr in self.get_desired_rrs(arg).items():
+            #specific_reqlen = reqlen-(0 if rr.request.tampering else len(log.COLOR_YELLOW+log.COLOR_NONE))
+            #result.append('next reqlen: %d' % specific_reqlen)
             result.append('    %-*s  %-4d  %-*s  %-20s' % (eidlen, '' if rr.eid is None else rr.eid, rrid, reqlen, rr.request_string(short=True, colored=True), rr.response_string(short=True, colored=True)))
         return result
 
@@ -376,9 +411,12 @@ class RR():
         self.response = response
 
     def request_string(self, short=False, colored=False):
-        if True: #try:
-            if short:
+        if True:#try:
+            if short: # TODO long - what was the meaning?
                 # TODO also from Accept:
+                tamperstring = ''
+                if self.request.tampering:
+                    tamperstring = '[T] '
                 color = log.COLOR_NONE
                 if self.request.realpath == b'/' or self.request.realpath.endswith((b'.htm', b'.html', b'.php', b'.xhtml', b'.aspx')):
                     color = log.COLOR_GREY
@@ -394,14 +432,16 @@ class RR():
                     color = log.COLOR_BROWN
                 if not colored:
                     color = log.COLOR_NONE
-                return '%s%s %s%s' % (color, self.request.method.decode(), self.request.path.decode(), log.COLOR_NONE)
-        # TODO long
-        if False: #except:
-            return log.COLOR_GREY+'...'+log.COLOR_NONE
+                return '%s%s%s%s%s %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, self.request.method.decode(), self.request.path.decode(), log.COLOR_NONE)
+        if False:#except:
+            return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
 
     def response_string(self, short=False, colored=False):
         try:
-            if short:
+            if short: # TODO long - what was the meaning?
+                tamperstring = ''
+                if self.response.tampering:
+                    tamperstring = '[T] '
                 if self.response.statuscode < 200:
                     color = log.COLOR_NONE
                 elif self.response.statuscode == 200:
@@ -419,10 +459,9 @@ class RR():
                 if not colored:
                     color = log.COLOR_NONE
                 
-                return '%s%d %s%s' % (color, self.response.statuscode, self.response.status.decode(), log.COLOR_NONE)
-            # TODO long
+                return '%s%s%s%s%d %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, self.response.statuscode, self.response.status.decode(), log.COLOR_NONE)
         except:
-            return log.COLOR_GREY+'...'+log.COLOR_NONE
+            return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
         
 
 """
@@ -435,12 +474,8 @@ class Mapping():
         self.map = {}            # bytes->URI
         self.counter = 0
         self.lock = threading.Lock()
-        self.init_target = None
     
     def add_init(self, remote): # add first known local
-        """self.init_target = URI(remote)
-        local = '%s:%d' % (weber.config['proxy.host'], weber.config['proxy.port' if self.init_target.scheme == 'http' else 'proxy.sslport']) # scheme not included in host... TODO for all cases?
-        """
         givenuri = URI(remote)
 
         http_r = URI(remote, 'http')

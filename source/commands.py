@@ -340,9 +340,9 @@ def mr_function(*args):
         subprocess.call((weber.config['edit.command'] % (f.name)).split())
         f.seek(0)
         if args[0] == 'request': 
-            r = weber.rrdb.rrs[rrid].request = Request(f.read())
+            weber.rrdb.rrs[rrid].request = Request(f.read(), r.should_tamper, r.forward_stopper)
         elif args[0] == 'response':
-            r = weber.rrdb.rrs[rrid].response = Response(f.read())
+            weber.rrdb.rrs[rrid].response = Response(f.read(), r.should_tamper, r.forward_stopper)
     # restore debug and realtime overview settings
     for k, v in oldconfig.items():
         weber.config[k] = v
@@ -536,16 +536,63 @@ TAMPER COMMANDS
 t_description = ''
 add_command(Command('t', 'tamper', t_description, lambda *_: []))
 tr_description = ''
-add_command(Command('t', 'tamper requests/responses', t_description, lambda *_: []))
+add_command(Command('tr', 'tamper requests/responses', tr_description, lambda *_: []))
 # trqa, trsa, trq, trs, trq <n>, trs <n>, trqf rrid[:rrid], trsf rrid[:rrid]
 
+# trf
+def trf_function(_, rr, *__):
+    # responses first so race condition won't occur
+    try:
+        rr.response.forward()
+    except:
+        pass
+    try:
+        rr.request.forward()
+    except:
+        pass
+    return []
+trf_description = """
+"""
+add_command(Command('trf [<rrid>[:<rrid>]]', 'forward tampered requests and responses', trf_description, lambda *args: foreach_rrs(trf_function, *args)))
+
+# trqa
 trqa_description = """Toggles tamper.requests value.
 """
 def trqa_function(*_):
-    trq = weber.config['tamper.requests']
-    print('Requests will be %s by default.' % ('FORWARDED' if not trq else 'TAMPERED'))
-    weber.config['tamper.requests'] = not(trq)
+    trq = not(weber.config['tamper.requests'])
+    weber.config['tamper.requests'] = trq
+    log.info('Requests will be %s by default.' % ('TAMPERED' if trq else 'FORWARDED'))
+    return []
 add_command(Command('trqa', 'sets default request tamper behavior', trqa_description, trqa_function))
+# trsa
+trsa_description = """Toggles tamper.responses value.
+"""
+def trsa_function(*_):
+    trs = not(weber.config['tamper.responses'])
+    weber.config['tamper.responses'] = trs
+    log.info('Responses will be %s by default.' % ('TAMPERED' if trs else 'FORWARDED'))
+    return []
+add_command(Command('trsa', 'sets default response tamper behavior', trsa_description, trsa_function))
+# trqf
+def trqf_function(_, rr, *__):
+    try:
+        rr.request.forward()
+    except:
+        log.err('No request is available.')
+    return []
+trqf_description = """
+"""
+add_command(Command('trqf [<rrid>[:<rrid>]]', 'forward tampered request', trqf_description, lambda *args: foreach_rrs(trqf_function, *args)))
+# trsf
+def trsf_function(_, rr, *__):
+    try:
+        rr.response.forward()
+    except: # no response
+        log.info('No response is available.')
+    return []
+trsf_description = """
+"""
+add_command(Command('trsf [<rrid>[:<rrid>]]', 'forward tampered response', trsf_description, lambda *args: foreach_rrs(trsf_function, *args)))
 
 
 

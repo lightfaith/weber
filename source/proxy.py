@@ -4,7 +4,7 @@ Proxy methods are defined here.
 """
 #from http.server import BaseHTTPRequestHandler, HTTPServer
 #import ssl
-import os, socket, time, ssl, subprocess, traceback
+import os, socket, time, ssl, subprocess, traceback, threading, errno
 from threading import Thread
 #from collections import OrderedDict
 from select import select
@@ -45,6 +45,7 @@ class Proxy(Thread):
         self.threads = []
         self.terminate = False
         self.stopper = os.pipe()
+        self.lock = threading.Lock()
         
         # set up server socket
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -58,17 +59,32 @@ class Proxy(Thread):
         self.ssl_server_socket = ssl.wrap_socket(self.ssl_server_socket, certfile=weber.config['proxy.sslcert'], keyfile=weber.config['proxy.sslkey'], server_side=True, do_handshake_on_connect=False)
         
         weber.mapping.add_init(self.init_target)
+
+        # initialize tamper counters (for `trq <n>` and `trs <n>`)
+        self.tamper_request_counter = 0
+        self.tamper_response_counter = 0
         
 
     def stop(self):
         self.terminate = True
         os.write(self.stopper[1], b'1')
     
+    def should_tamper(self, what):
+        counter = self.tamper_request_counter if what == 'request' else self.tamper_response_counter
+        default = weber.config.get('tamper.%ss' % (what), False)
+        # TODO domain, regex, mimetype matches
+        if default:
+            return True
+        with self.lock:
+            if counter > 0:
+                counter -= 1
+                return True
+        return False
+
+
     def run(self):
         self.server_socket.listen(1)
-        #self.server_socket.settimeout(2) # TODO no busy-waiting
         self.ssl_server_socket.listen(1)
-        #self.ssl_server_socket.settimeout(2) # TODO no busy-waiting
 
         while True:
             r, _, _ = select([self.server_socket, self.ssl_server_socket, self.stopper[0]], [], [])
@@ -92,7 +108,7 @@ class Proxy(Thread):
                         log.debug_socket(line.decode())
 
                     # create new connection in new thread
-                    t = ConnectionThread(conn, weber.mapping.init_target, weber.rrdb.get_new_rrid())
+                    t = ConnectionThread(conn, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'))
                     t.start()
                     if positive(weber.config.get('proxy.threaded')):
                         self.threads.append(t)
@@ -126,7 +142,7 @@ class Proxy(Thread):
 
 
 class ConnectionThread(Thread):
-    def __init__(self, conn, uri, rrid):
+    def __init__(self, conn, rrid, tamper_request, tamper_response):
         Thread.__init__(self)
         self.conn = conn
         self.host = b'?'  # for thread printing
@@ -134,7 +150,11 @@ class ConnectionThread(Thread):
         self.rrid = rrid
         self.path = '' # parsed from request, for `pt` command
         #self.ssl = (uri.scheme == 'https')
+        self.tamper_request = tamper_request
+        self.tamper_response = tamper_response
+        self.stopper = os.pipe() # if Weber is terminated while tampering
         #print('new thread: uri', uri, type(uri))
+        self.localuri = None
 
         self.keepalive = True
         self.terminate = False
@@ -143,6 +163,7 @@ class ConnectionThread(Thread):
 
     def stop(self):
         self.terminate = True
+        os.write(self.stopper[1], b'1')
 
     def run(self):
         while self.keepalive:
@@ -175,9 +196,16 @@ class ConnectionThread(Thread):
             request.headers[b'Host'] = remoteuri.domain.encode() if remoteuri.port in [80, 443] else b'%s:%d' % (remoteuri.domain, remoteuri.port)
             log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
             
-            # TODO tamper request
             weber.rrdb.add_request(self.rrid, request)
-
+            
+            # tamper request
+            if request.tampering and positive(weber.config['overview.realtime']):
+                log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
+            r, _, _ = select([request.forward_stopper[0], self.stopper[0]], [], [])
+            if self.stopper[0] in r:
+                # Weber is terminating
+                break
+            request = weber.rrdb.rrs[self.rrid].request # reload in case it's modified
 
             # forward request to server        
             log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
@@ -187,10 +215,18 @@ class ConnectionThread(Thread):
 
             log.debug_parsing('\n'+str(response)+'\n'+'='*30)
             
-            # TODO tamper response
             weber.rrdb.add_response(self.rrid, response)
+            
+            # tamper response
+            if response.tampering and positive(weber.config['overview.realtime']):
+                log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
+            r, _, _ = select([response.forward_stopper[0], self.stopper[0]], [], [])
+            if self.stopper[0] in r:
+                # Weber is terminating
+                break
+            response = weber.rrdb.rrs[self.rrid].response # reload in case it's modified
 
-            # tamper redirects # TODO test 302, 303
+            # alter redirects # TODO test 302, 303
             if response.statuscode in [301, 302, 303]:
                 newremote = URI(response.headers[b'Location'])
                 newlocal = weber.mapping.get_local(newremote)
@@ -212,6 +248,14 @@ class ConnectionThread(Thread):
             # send response to browser
             try:
                 self.send_response(response)
+            except socket.error as e:
+                if isinstance(e.args, tuple):
+                    if e.args[0] == errno.EPIPE:
+                        log.err('Connection closed for #%d, response not forwarded.' % (self.rrid))
+                    else:
+                        raise e
+                else:
+                    raise e
             except Exception as e:
                 log.err('Failed to forward response (#%d): %s' % (self.rrid, str(e)))
                 log.err('See traceback:')
@@ -226,7 +270,7 @@ class ConnectionThread(Thread):
 
     def receive_request(self):
         try:
-            request = Request(ProxyLib.recvall(self.conn))
+            request = Request(ProxyLib.recvall(self.conn), self.tamper_request)
             if not request.integrity:
                 log.debug_socket('Request is weird - length is zero')
                 self.conn.close()
@@ -234,9 +278,13 @@ class ConnectionThread(Thread):
             return request
         except IOError:
             log.debug_socket('Request socket is not accessible anymore - terminating thread.')
+            #log.err('See traceback:')
+            #traceback.print_exc()
             return None
         except Exception as e:
             log.err('Proxy receive error: '+str(e))
+            log.err('See traceback:')
+            traceback.print_exc()
             return None
 
         log.debug_socket('Request received.') 
@@ -253,11 +301,13 @@ class ConnectionThread(Thread):
             self.client_socket = ssl.wrap_socket(self.client_socket)
         self.client_socket.send(data)
         try:
-            response = Response(ProxyLib.recvall(self.client_socket))
+            response = Response(ProxyLib.recvall(self.client_socket), self.tamper_response)
             self.client_socket.close()
             return response
         except Exception as e:
             log.err(e)
+            log.err('See traceback:')
+            traceback.print_exc()
             return None
 
     
