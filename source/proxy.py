@@ -50,13 +50,13 @@ class Proxy(Thread):
         # set up server socket
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_socket.bind((weber.config['proxy.host'], weber.config['proxy.port']))
+        self.server_socket.bind((weber.config['proxy.host'][0], weber.config['proxy.port'][0]))
 
         # set up server socket for SSL
         self.ssl_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.ssl_server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.ssl_server_socket.bind((weber.config['proxy.host'], weber.config['proxy.sslport']))
-        self.ssl_server_socket = ssl.wrap_socket(self.ssl_server_socket, certfile=weber.config['proxy.sslcert'], keyfile=weber.config['proxy.sslkey'], server_side=True, do_handshake_on_connect=False)
+        self.ssl_server_socket.bind((weber.config['proxy.host'][0], weber.config['proxy.sslport'][0]))
+        self.ssl_server_socket = ssl.wrap_socket(self.ssl_server_socket, certfile=weber.config['proxy.sslcert'][0], keyfile=weber.config['proxy.sslkey'][0], server_side=True, do_handshake_on_connect=False)
         
         weber.mapping.add_init(self.init_target)
 
@@ -71,7 +71,7 @@ class Proxy(Thread):
     
     def should_tamper(self, what):
         counter = self.tamper_request_counter if what == 'request' else self.tamper_response_counter
-        default = weber.config.get('tamper.%ss' % (what), False)
+        default = weber.config.get('tamper.%ss' % (what), False)[0]
         # TODO domain, regex, mimetype matches
         if default:
             return True
@@ -110,7 +110,7 @@ class Proxy(Thread):
                     # create new connection in new thread
                     t = ConnectionThread(conn, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'))
                     t.start()
-                    if positive(weber.config.get('proxy.threaded')):
+                    if positive(weber.config.get('proxy.threaded')[0]):
                         self.threads.append(t)
                     else:
                         t.join()
@@ -186,7 +186,7 @@ class ConnectionThread(Thread):
             self.path = request.path.decode()
             
 
-            # TODO change outgoing links (probably complete)
+            # change outgoing links
             remoteuri = weber.mapping.get_remote(self.localuri)
             if remoteuri is None:
                 log.err('Cannot forward - local URI is not mapped. Terminating thread...')
@@ -199,7 +199,7 @@ class ConnectionThread(Thread):
             weber.rrdb.add_request(self.rrid, request)
             
             # tamper request
-            if request.tampering and positive(weber.config['overview.realtime']):
+            if request.tampering and positive(weber.config['overview.realtime'][0]):
                 log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
             r, _, _ = select([request.forward_stopper[0], self.stopper[0]], [], [])
             if self.stopper[0] in r:
@@ -209,7 +209,8 @@ class ConnectionThread(Thread):
 
             # forward request to server        
             log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
-            response = self.forward(remoteuri, request.bytes()) # TODO consistent with changed link (check)
+            response = self.forward(remoteuri, request.bytes())
+
             if response is None:
                 break
 
@@ -218,13 +219,18 @@ class ConnectionThread(Thread):
             weber.rrdb.add_response(self.rrid, response)
             
             # tamper response
-            if response.tampering and positive(weber.config['overview.realtime']):
+            if response.tampering and positive(weber.config['overview.realtime'][0]):
                 log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
             r, _, _ = select([response.forward_stopper[0], self.stopper[0]], [], [])
             if self.stopper[0] in r:
                 # Weber is terminating
                 break
             response = weber.rrdb.rrs[self.rrid].response # reload in case it's modified
+
+            # spoof if desired (with or without GET arguments)
+            spoof_path = remoteuri.get_value() if positive(weber.config['spoof.arguments'][0]) else remoteuri.get_value().partition('?')[0]
+            if spoof_path in weber.spoofs.keys():
+                response.spoof(weber.spoofs[spoof_path])
 
             # alter redirects # TODO test 302, 303
             if response.statuscode in [301, 302, 303]:
@@ -262,7 +268,7 @@ class ConnectionThread(Thread):
                 traceback.print_exc()
 
             # print if desired
-            if positive(weber.config['overview.realtime']):
+            if positive(weber.config['overview.realtime'][0]):
                 log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
             time.sleep(10)
         self.conn.close()

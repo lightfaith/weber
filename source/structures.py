@@ -109,20 +109,23 @@ class Request():
 
 
 
-    def lines(self, headers=True, data=True):
+    def lines(self, headers=True, data=True, as_string=True):
         parts = []
-        try:
-            #parts.append('Connection to %s:%d' % (self.host.decode(), self.port))
-            if headers:
-                parts.append('%s %s %s' % (self.method.decode(), self.path.decode(), self.version.decode()))
-                parts += ['%s: %s' % (k.decode(), '' if v is None else v.decode()) for k, v in self.headers.items()]
-                if data:
-                    parts.append('')
+        
+        if headers:
+            parts.append(b'%s %s %s' % (self.method, self.path, self.version))
+            parts += [b'%s: %s' % (k, '' if v is None else v) for k, v in self.headers.items()]
             if data:
-                parts += self.data.decode().split('\n')
+                parts.append(b'')
+        if data:
+            parts += self.data.split(b'\n')
+        try:
+            parts = [x.decode() for x in parts] if as_string else parts
         except Exception as e:
             log.warn('Response encoding problem occured: '+str(e))
+            parts = []
         return parts
+        
 
     def __str__(self):
         return '\n'.join(self.lines())
@@ -247,26 +250,27 @@ class Response():
         data = self.data if self.soup is None else str(self.soup).encode('utf8')
         self.headers[b'Content-Length'] = b'%d' % (len(data))
 
-    def lines(self, headers=True, data=True):
+    def lines(self, headers=True, data=True, as_string=True):
         parts = []
-        #log.debug_parsing(''.join(['\\x%02x' % x for x in self.data[:10]]))
-        #log.debug_parsing(''.join([('   %c' % x) if x != 0x0a else '  \\n' for x in self.data[:10] ]))
-        #log.debug_parsing(''.join(['\\x%02x' % x for x in self.data[-10:]]))
-        #log.debug_parsing(''.join([('   %c' % x) if x != 0x0a else '  \\n' for x in self.data[-10:] ]))
-        try:
-            if headers:
-                self.compute_content_length()
-                parts.append('%s %s %s' % (self.version.decode(), self.statuscode, self.status.decode()))
-                parts += ['%s: %s' % (k.decode(), '' if v is None else v.decode()) for k, v in self.headers.items()]
-                if data:
-                    parts.append('')
+        if headers:
+            self.compute_content_length()
+            parts.append(b'%s %d %s' % (self.version, self.statuscode, self.status))
+            parts += [b'%s: %s' % (k, '' if v is None else v) for k, v in self.headers.items()]
             if data:
-                # TODO what exactly?
-                if b'Content-Type' in self.headers and self.headers[b'Content-Type'].startswith((b'text/', b'application/')):
-                    #parts.append('\n%s' % (self.data.decode()))
-                    parts += self.data.decode().split('\n')
+                parts.append(b'')
+        if data:
+            # Do not include if string is desired and it is binary content
+            # TODO more Content-Types
+            if as_string and (b'Content-Type' not in self.headers or (b'Content-Type' in self.headers and not self.headers[b'Content-Type'].startswith((b'text/', b'application/')))):
+                parts.append(b'--- BINARY DATA ---')
+            else:
+                parts += self.data.split(b'\n')
+            
+        try:
+            parts = [x.decode() for x in parts] if as_string else parts
         except Exception as e:
             log.warn('Response encoding problem occured: '+str(e))
+            parts = []
         return parts
 
     def __str__(self):
@@ -325,6 +329,17 @@ class Response():
             print('dict empty!')
         return list(Response.get_tags_recursive(tagname, self.dict))
         """
+
+    def spoof(self, path):
+        # replace data with file content
+        try:
+            with open(path, 'rb') as f:
+                self.data = f.read()
+            self.statuscode = 200
+            self.status = b'OK'
+            self.compute_content_length()
+        except:
+            log.err('Spoofing failed - cannot open file.')
 """
 Database of Request/Response pairs.
 """
@@ -482,8 +497,8 @@ class Mapping():
         https_r = URI(remote, 'https')
         http_r.port = 80 if givenuri.scheme != 'http' else givenuri.port
         https_r.port = 443 if givenuri.scheme != 'https' else givenuri.port
-        http_l = 'http://%s:%d' % (weber.config['proxy.host'], weber.config['proxy.port'])
-        https_l = 'https://%s:%d' % (weber.config['proxy.host'], weber.config['proxy.sslport'])
+        http_l = 'http://%s:%d' % (weber.config['proxy.host'][0], weber.config['proxy.port'][0])
+        https_l = 'https://%s:%d' % (weber.config['proxy.host'][0], weber.config['proxy.sslport'][0])
         self.add(http_l, http_r.get_value())
         self.add(https_l, https_r.get_value())
 
@@ -518,8 +533,8 @@ class Mapping():
             if remote.__bytes__() not in self.map.keys():
                 # generate brand new - new domain etc.
                 self.counter += 1
-                port = weber.config['proxy.port' if remote.scheme == 'http' else 'proxy.sslport']
-                localroot = '%s://%s:%d/WEBER-MAPPING/%d/' % (remote.scheme, weber.config['proxy.host'], port, self.counter)
+                port = weber.config['proxy.port' if remote.scheme == 'http' else 'proxy.sslport'][0]
+                localroot = '%s://%s:%d/WEBER-MAPPING/%d/' % (remote.scheme, weber.config['proxy.host'][0], port, self.counter)
                 localroot, _ = self.add(localroot, remote)
                 log.debug_mapping('get_local():   generated new mapping: '+str(localroot)+' <--> '+str(remote))
             else:
@@ -608,7 +623,7 @@ class Mapping():
         host, _, port = hostport.decode().partition(':')
         port = int(port)
         path = path.decode()
-        scheme = 'https' if port == weber.config['proxy.sslport'] else 'http'
+        scheme = 'https' if port == weber.config['proxy.sslport'][0] else 'http'
         #print(scheme, type(scheme), host, type(host), port, type(port), path, type(path))
         for uri, _ in self.l_r.items():
             #print('comparing to: ', uri.scheme, type(uri.scheme), uri.domain, type(uri.domain), uri.port, type(uri.port), uri.path, type(uri.path) )
@@ -625,12 +640,12 @@ class URI():
     @staticmethod
     def build_str(domain, port, path, scheme=None, user=None, password=None):
         if not port:
-            port = weber.config['proxy.port']
+            port = weber.config['proxy.port'][0]
         port = int(port)
         if scheme is None:
-            if port == weber.config['proxy.port']:
+            if port == weber.config['proxy.port'][0]:
                 scheme = b'http'
-            elif port == weber.config['proxy.sslport']:
+            elif port == weber.config['proxy.sslport'][0]:
                 scheme = b'https'
         if scheme is None:
             log.err('Cannot build_str() - unknown port.')

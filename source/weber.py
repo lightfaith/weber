@@ -9,33 +9,36 @@ Default configuration options
 """
 config = OrderedDict()
 # debug settings
-config['debug.command'] =    False   # stuff relevant to user commands
-config['debug.config'] =     False   # stuff relevant to configuration
-config['debug.chunks'] =     False   # stuff relevant to Transfer-Encoding: chunked parsing
-config['debug.mapping'] =    False   # stuff relevant to local-remote URL mapping
-config['debug.parsing'] =    False   # stuff relevant to request/response parsing
-config['debug.socket'] =     False   # stuff relevant to socket communication
-config['debug.tampering'] =  True   # stuff relevant to tampering
+config['debug.command'] =    (False, bool)   # stuff relevant to user commands
+config['debug.config'] =     (False, bool)   # stuff relevant to configuration
+config['debug.chunks'] =     (False, bool)   # stuff relevant to Transfer-Encoding: chunked parsing
+config['debug.mapping'] =    (False, bool)   # stuff relevant to local-remote URL mapping
+config['debug.parsing'] =    (False, bool)   # stuff relevant to request/response parsing
+config['debug.socket'] =     (False, bool)   # stuff relevant to socket communication
+config['debug.tampering'] =  (True, bool)   # stuff relevant to tampering
 
 # edit settings
-config['edit.command'] = 'vim %s'
+config['edit.command'] = ('vim %s', str)
 
 # overview settings
-config['overview.realtime'] = True  # show request/response communication on the fly
-config['overview.size'] = True  # show response size in overview # TODO
-config['overview.time'] = True  # show delay in overview # TODO
+config['overview.realtime'] = (True, bool)  # show request/response communication on the fly
+config['overview.size'] = (True, bool)  # show response size in overview # TODO
+config['overview.time'] = (True, bool)  # show delay in overview # TODO
 
 # proxy-relevant settings
-config['proxy.host'] = 'localhost'
-config['proxy.port'] = 8555
-config['proxy.sslport'] = 8556
-config['proxy.sslcert'] = 'cert.pem'
-config['proxy.sslkey'] = 'key.pem'
-config['proxy.threaded'] = True
+config['proxy.host'] = ('localhost', str)
+config['proxy.port'] = (8555, int)
+config['proxy.sslport'] = (8556, int)
+config['proxy.sslcert'] = ('cert.pem', str)
+config['proxy.sslkey'] = ('key.pem', str)
+config['proxy.threaded'] = (True, bool)
+
+# spoof
+config['spoof.arguments'] = (False, bool) # should arguments be taken into consideration for spoofing
 
 # tamper
-config['tamper.requests'] = False # should all requests be tampered by default?
-config['tamper.responses'] = False # should all responses be tampered by default?
+config['tamper.requests'] = (False, bool) # should all requests be tampered by default?
+config['tamper.responses'] = (False, bool) # should all responses be tampered by default?
 
 
 
@@ -62,6 +65,11 @@ events = {}
 Local-remote URI mapping (initialized in structures.py)
 """
 mappings = None 
+
+"""
+Spoof dictionary (URI in str format  ->  path to file)
+"""
+spoofs = {}
 
 
 """

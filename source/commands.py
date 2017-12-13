@@ -7,7 +7,8 @@ import os, sys, re, traceback, tempfile, subprocess
 from source import weber
 from source import lib
 from source import log
-from source.structures import RRDB, Request, Response, Event
+from source.lib import *
+from source.structures import RRDB, Request, Response, Event, URI
 from bs4 import Comment
 
 """
@@ -24,13 +25,18 @@ def reload_config():
             log.debug_config('  line: \'%s\'' % (line))
             k = k.strip()
             v = v.strip()
-            if v.isdigit():
-                v = int(v)
-            if lib.positive(v):
-                v = True
-            if lib.negative(v):
-                v = False
-            weber.config[k] = v
+            #if v.isdigit():
+            #    v = int(v)
+            #if lib.positive(v):
+            #    v = True
+            #if lib.negative(v):
+            #    v = False
+            if k in weber.config.keys():
+                if weber.config[k][1] == bool:
+                    v = positive(v)
+                weber.config[k] = (weber.config[k][1](v), weber.config[k][1])
+            else:
+                weber.config[k] = (v, str)
             log.info('  %s = %s' % (k, v))
             log.debug_config('  parsed: %s = %s (%s)' % (k, v, str(type(v))))
 
@@ -145,11 +151,19 @@ def foreach_rrs(function, *args, **kwargs):
     RRs are expected to be the last item of *args.
     """
     result = []
+    try:
+        desired_rrs = weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1]).items()
+    except Exception as e:
+        log.err('Cannot get desired rrs: %s' %  (str(e)))
+        log.err('See traceback:')
+        traceback.print_exc()
+        desired_rrs = []
     for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1]).items():
     #for rrid, rr in weber.rrdb.get_desired_rrs(args).items():
         tmpresult = []
         tmpresult.append('{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
-        tmpresult += function(rrid, rr, args[1:], **kwargs)
+        tmpresult += function(rrid, rr, *args[:-1], **kwargs)
+        #tmpresult += function(rrid, rr, *args[1:], **kwargs)
         tmpresult.append('')
         if len(tmpresult)>1:
             result.append(tmpresult)
@@ -311,8 +325,10 @@ mr_description="""Received requests and responses can be modified using your fav
 Favourite editor command can be configured under edit.command option.
 """
 add_command(Command('mr', 'modify request/response', mr_description, lambda *_: []))
-mrq_description=''
-mrs_description=''
+mrq_description="""
+"""
+mrs_description="""
+"""
 def mr_function(*args):
     try:
         rrid = int(args[1])
@@ -332,12 +348,12 @@ def mr_function(*args):
     # suppress debugs and realtime overview
     oldconfig = {k:weber.config[k] for k in weber.config.keys() if k.startswith('debug.') or k == 'overview.realtime'}
     for k, _ in oldconfig.items():
-        weber.config[k] = False
+        weber.config[k] = (False, weber.config[k][1])
     # write into temp file, open with desired editor
     with tempfile.NamedTemporaryFile() as f:
         f.write(r.bytes())
         f.flush()
-        subprocess.call((weber.config['edit.command'] % (f.name)).split())
+        subprocess.call((weber.config['edit.command'][0] % (f.name)).split())
         f.seek(0)
         if args[0] == 'request': 
             weber.rrdb.rrs[rrid].request = Request(f.read(), r.should_tamper, r.forward_stopper)
@@ -365,8 +381,8 @@ add_command(Command('mrs <rrid>', 'modify response', mrs_description, lambda *ar
 """
 OPTIONS COMMANDS
 """
-o_function = lambda *_: ['    %-20s  %s' % (k, (v if type(v) != str else '\''+v+'\'')) for k,v       in weber.config.items()]
-o_description = """Active Weber configuration can be printed with `po` and `o` command.
+o_function = lambda *_: ['    %-20s  %s' % (k, (v[0] if v[1] != str else '\''+v[0]+'\'')) for k,v       in weber.config.items()]
+o_description = """Active Weber configuration can be printed with `pwo` and `o` command.
 
 Default configuration is located in source/weber.py.
 User configuration can be specified in weber.conf in Weber root directory.
@@ -382,7 +398,10 @@ def os_function(*args):
     except:
         log.err('Invalid arguments.')
         return []
-    weber.config[key] = value
+    typ = str if key not in weber.config.keys() else weber.config[key][1]
+    if typ == bool:
+        value = positive(value)
+    weber.config[key] = (typ(value), typ)
     return []
 os_description = """Active Weber configuration can be changed using the `os` command. User-specific keys can also be defined.
 """
@@ -504,6 +523,13 @@ add_command(Command('pwm', 'print URI mapping', '', pwm_function))
 # pwo
 add_command(Command('pwo', 'print weber configuration', o_description, o_function))
 
+# pws
+pws_description="""Spoofing feature allows you to specify file which should be used instead the real response. Note that the request is sent to remote server to get valid HTML headers.
+"""
+def pws_function(*args):
+    return ['%s -> %s' % (k, v) for k,v in weber.spoofs.items()]
+add_command(Command('pws', 'print spoof settings', pws_description, pws_function))
+
 # pwt
 pwt_description="""Alive ConnectionThread objects are printed with `pt` command. This is mostly for debug purposes.
 """
@@ -515,16 +541,41 @@ Quit
 add_command(Command('q', 'quit', '', lambda *_: [])) # solved in weber
 
 
-#add_command(Command('', '', '',))
 
+"""
+Spoofing
+"""
+# s
+add_command(Command('s', 'print spoof settings (alias for pws)', pws_description, pws_function))
 
-
-
-
-
-
-
-
+# sa
+sa_description="""
+"""
+def sa_function(*args):
+    try:
+        uri = URI(args[0])
+    except:
+        log.err('Invalid URI.')
+        return []
+    try:
+        with open(args[1], 'rb') as f:
+            pass
+    except:
+        log.err('Cannot read file.')
+        return []
+    weber.spoofs[uri.get_value()] = args[1]
+    return []
+add_command(Command('sa <uri> <file>', 'add new spoof', sa_description, sa_function))
+# sd
+sd_description="""
+"""
+def sd_function(*args):
+    try:
+        del weber.spoofs[args[0]]
+    except:
+        log.err('Invalid spoof URI.')
+    return []
+add_command(Command('sd <uri>', 'delete spoof', sd_description, sd_function))
 
 
 
@@ -533,11 +584,13 @@ add_command(Command('q', 'quit', '', lambda *_: [])) # solved in weber
 """
 TAMPER COMMANDS
 """
-t_description = ''
+t_description = """
+"""
 add_command(Command('t', 'tamper', t_description, lambda *_: []))
-tr_description = ''
+tr_description = """
+"""
 add_command(Command('tr', 'tamper requests/responses', tr_description, lambda *_: []))
-# trqa, trsa, trq, trs, trq <n>, trs <n>, trqf rrid[:rrid], trsf rrid[:rrid]
+# TODO trq, trs, trq <n>, trs <n>
 
 # trf
 def trf_function(_, rr, *__):
@@ -559,8 +612,8 @@ add_command(Command('trf [<rrid>[:<rrid>]]', 'forward tampered requests and resp
 trqa_description = """Toggles tamper.requests value.
 """
 def trqa_function(*_):
-    trq = not(weber.config['tamper.requests'])
-    weber.config['tamper.requests'] = trq
+    trq = not(positive(weber.config['tamper.requests'][0]))
+    weber.config['tamper.requests'] = (trq, weber.config['tamper.requests'][1])
     log.info('Requests will be %s by default.' % ('TAMPERED' if trq else 'FORWARDED'))
     return []
 add_command(Command('trqa', 'sets default request tamper behavior', trqa_description, trqa_function))
@@ -568,8 +621,8 @@ add_command(Command('trqa', 'sets default request tamper behavior', trqa_descrip
 trsa_description = """Toggles tamper.responses value.
 """
 def trsa_function(*_):
-    trs = not(weber.config['tamper.responses'])
-    weber.config['tamper.responses'] = trs
+    trs = not(positive(weber.config['tamper.responses'][0]))
+    weber.config['tamper.responses'] = (trs, weber.config['tamper.responses'][1])
     log.info('Responses will be %s by default.' % ('TAMPERED' if trs else 'FORWARDED'))
     return []
 add_command(Command('trsa', 'sets default response tamper behavior', trsa_description, trsa_function))
@@ -598,7 +651,70 @@ add_command(Command('trsf [<rrid>[:<rrid>]]', 'forward tampered response', trsf_
 
 
 
+"""
+WRITE COMMANDS
+"""
+# w
+w_description = """
+"""
+add_command(Command('w', 'write', w_description, lambda *_: []))
+# wr
+wr_description = """
+"""
+add_command(Command('wr', 'write requests/responses into file', wr_description, lambda *_: []))
 
+# wrX
+def wrx_function(_, rr, *args, **kwargs): # write headers/data/both of desired requests/responses/both into file
+    # this function just appends! 
+    data = []
+    try:
+        path = args[0]
+    except:
+        log.err('Path to file not specified or incorrect RR interval.')
+        return []
+    showrequest = bool(kwargs['mask'] & 0x8)
+    showresponse = bool(kwargs['mask'] & 0x4)
+    showheaders = bool(kwargs['mask'] & 0x2)
+    showdata = bool(kwargs['mask'] & 0x1)
+    # deal with requests
+    if showrequest:
+        data += rr.request.lines(headers=showheaders, data=showdata, as_string=False)
+        if showresponse:
+            data.append(b'')
+    # deal with responses
+    if showresponse:
+        data += rr.response.lines(headers=showheaders, data=showdata, as_string=False)
+    try:
+        with open(path, 'ab') as f:
+            for line in data:
+                f.write(line)
+                f.write(b'\n')
+    except Exception as e:
+        log.err('Cannot write into file \'%s\'.' % (str(path)))
+        print(e)
+    return []
+
+def wrx_eraser(mask, *args):
+    # first erase the file
+    try:
+        with open(args[0], 'wb') as f:
+            pass
+    except:
+        log.err('Cannot open file for writing.')
+        return []
+    # now write each desired rr
+    return foreach_rrs(wrx_function, *args, mask=mask)
+wrX_description="""
+"""
+add_command(Command('wra <file> [<rrid>[:<rrid>]]', 'write requests and responses', wrX_description, lambda *args: wrx_eraser(0xf, *args)))
+add_command(Command('wrh <file> [<rrid>[:<rrid>]]', 'write request and response headers', wrX_description, lambda *args: wrx_eraser(0xe, *args)))
+add_command(Command('wrd <file> [<rrid>[:<rrid>]]', 'write request and response data', wrX_description, lambda *args: wrx_eraser(0xd, *args)))
+add_command(Command('wrq <file> [<rrid>[:<rrid>]]', 'write requests verbose', wrX_description, lambda *args: wrx_eraser(0xb, *args)))
+add_command(Command('wrqh <file> [<rrid>[:<rrid>]]', 'write request headers', wrX_description, lambda *args: wrx_eraser(0xa, *args)))
+add_command(Command('wrqd <file> [<rrid>[:<rrid>]]', 'write request data', wrX_description, lambda *args: wrx_eraser(0x9, *args)))
+add_command(Command('wrs <file> [<rrid>[:<rrid>]]', 'write responses verbose', wrX_description, lambda *args: wrx_eraser(0x7, *args)))
+add_command(Command('wrsh <file> [<rrid>[:<rrid>]]', 'write response headers', wrX_description, lambda *args: wrx_eraser(0x6, *args)))
+add_command(Command('wrsd <file> [<rrid>[:<rrid>]]', 'write response data', wrX_description, lambda *args: wrx_eraser(0x5, *args)))
 
 
 

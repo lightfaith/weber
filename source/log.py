@@ -90,31 +90,31 @@ def question(string='', new_line=True, stdout=True):
 Debug functions
 """
 def debug_command(string=''):
-    if positive(config['debug.command']):
+    if positive(config['debug.command'][0]):
         show_marked('cmd.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_config(string=''):
-    if positive(config['debug.config']):
+    if positive(config['debug.config'][0]):
         show_marked('cnf.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_mapping(string=''):
-    if positive(config['debug.mapping']):
+    if positive(config['debug.mapping'][0]):
         show_marked('map.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_parsing(string=''):
-    if positive(config['debug.parsing']):
+    if positive(config['debug.parsing'][0]):
         show_marked('prs.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_socket(string=''):
-    if positive(config['debug.socket']):
+    if positive(config['debug.socket'][0]):
         show_marked('sck.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_chunks(string=''):
-    if positive(config['debug.chunks']):
+    if positive(config['debug.chunks'][0]):
         show_marked('cnk.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_tampering(string=''):
-    if positive(config['debug.tampering']):
+    if positive(config['debug.tampering'][0]):
         show_marked('tpr.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 
