@@ -70,15 +70,23 @@ class Proxy(Thread):
         os.write(self.stopper[1], b'1')
     
     def should_tamper(self, what):
-        counter = self.tamper_request_counter if what == 'request' else self.tamper_response_counter
         default = weber.config.get('tamper.%ss' % (what), False)[0]
         # TODO domain, regex, mimetype matches
         if default:
             return True
         with self.lock:
-            if counter > 0:
-                counter -= 1
-                return True
+            if what == 'request':
+                if self.tamper_request_counter > 0: 
+                    self.tamper_request_counter -= 1
+                    return True
+                else:
+                    return False
+            else:
+                if self.tamper_response_counter > 0:
+                    self.tamper_response_counter -= 1
+                    return True
+                else:
+                    return False
         return False
 
 

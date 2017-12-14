@@ -618,6 +618,19 @@ trf_description = """
 """
 add_command(Command('trf [<rrid>[:<rrid>]]', 'forward tampered requests and responses', trf_description, lambda *args: foreach_rrs(trf_function, *args)))
 
+# trq
+trq_description="""
+"""
+def trq_function(*args):
+    try:
+        count = int(args[0])
+    except:
+        count = 1
+    weber.proxy.tamper_request_counter = count
+    log.info('Next %d requests will be tampered.' % (count))
+    return []
+add_command(Command('trq [<n>]', 'tamper next [n] request(s)', trq_description, trq_function))
+
 # trqa
 trqa_description = """Toggles tamper.requests value.
 """
@@ -626,7 +639,21 @@ def trqa_function(*_):
     weber.config['tamper.requests'] = (trq, weber.config['tamper.requests'][1])
     log.info('Requests will be %s by default.' % ('TAMPERED' if trq else 'FORWARDED'))
     return []
-add_command(Command('trqa', 'sets default request tamper behavior', trqa_description, trqa_function))
+add_command(Command('trqa', 'toggle default request tamper behavior', trqa_description, trqa_function))
+
+# trs
+trs_description="""
+"""
+def trs_function(*args):
+    try:
+        count = int(args[0])
+    except:
+        count = 1
+    weber.proxy.tamper_response_counter = count
+    log.info('Next %d responses will be tampered.' % (count))
+    return []
+add_command(Command('trs [<n>]', 'tamper next [n] response(s)', trs_description, trs_function))
+
 # trsa
 trsa_description = """Toggles tamper.responses value.
 """
@@ -635,7 +662,8 @@ def trsa_function(*_):
     weber.config['tamper.responses'] = (trs, weber.config['tamper.responses'][1])
     log.info('Responses will be %s by default.' % ('TAMPERED' if trs else 'FORWARDED'))
     return []
-add_command(Command('trsa', 'sets default response tamper behavior', trsa_description, trsa_function))
+add_command(Command('trsa', 'toggle default response tamper behavior', trsa_description, trsa_function))
+
 # trqf
 def trqf_function(_, rr, *__):
     try:
@@ -646,6 +674,7 @@ def trqf_function(_, rr, *__):
 trqf_description = """
 """
 add_command(Command('trqf [<rrid>[:<rrid>]]', 'forward tampered request', trqf_description, lambda *args: foreach_rrs(trqf_function, *args)))
+
 # trsf
 def trsf_function(_, rr, *__):
     try:
