@@ -388,7 +388,7 @@ Default configuration is located in source/weber.py.
 User configuration can be specified in weber.conf in Weber root directory.
 Configuration can be changed on the fly using the `os` command.
 """
-add_command(Command('o', 'print Weber configuration (alias for `po`)', o_description, o_function))
+add_command(Command('o', 'print Weber configuration (alias for `pwo`)', o_description, o_function))
 
 # os
 def os_function(*args):
@@ -480,7 +480,17 @@ add_command(Command('pp [<rrid>[:<rrid>]]', 'print parameters', pp_description, 
 # pr_function defined in structures.py because it is also used by proxy (realtime overview)
 pr_description = """Use `pr` command to get an overview of all captured request-response pairs. Size of the response and time can be optionally showed as well (using overview.size and overview.time configuration parameters) {#TODO}.
 """
-add_command(Command('pr [<rrid>[:<rrid>]]', 'print request-response pairs', pr_description, lambda *args: weber.rrdb.overview(args)))
+add_command(Command('pr [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: weber.rrdb.overview(args, showlast=False, onlytampered=False)))
+add_command(Command('pro [<rrid>[:<rrid>]]', 'print request-response pairs', pr_description, lambda *args: weber.rrdb.overview(args, showlast=False, onlytampered=False)))
+
+# prol
+prol_description="""
+"""
+add_command(Command('prol [<rrid>[:<rrid>]]', 'print last request-response overview', prol_description, lambda *args: weber.rrdb.overview(args, showlast=True, onlytampered=False)))
+# prot
+prot_description="""
+"""
+add_command(Command('prot [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', prot_description, lambda *args: weber.rrdb.overview(args, showlast=False, onlytampered=True)))
 
 # prX
 def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of desired requests/responses/both

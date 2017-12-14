@@ -291,6 +291,7 @@ class Response():
         # fix temporary changes  
         data = data.replace(b'<comment>', b'<!--').replace(b'</comment>', b'-->') # TODO this is madness
         result += b'\r\n\r\n' + data + b'\r\n\r\n'
+        # TODO self.compute_content_length() here?
         return result
     """
     def get_tags_recursive(tagname, d):
@@ -358,7 +359,7 @@ class RRDB():
     def add_response(self, rrid, response):
         self.rrs[rrid].add_response(response)
 
-    def get_desired_rrs(self, arg):
+    def get_desired_rrs(self, arg, showlast=False, onlytampered=False):
         if len(self.rrs.keys()) == 0:
             return {}
         indices = []
@@ -383,18 +384,18 @@ class RRDB():
                     end = tmp
                 indices += list(range(start, end+1))
         else:
-            indices = range(minimum, maximum+1)
-
-        return {i: self.rrs[i] for i in sorted(indices) if i in self.rrs.keys()}
+            indices = list(range(minimum, maximum+1))[(-10 if showlast else 0):]
+        
+        keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request.tampering or (self.rrs[x].response is not None and self.rrs[x].response.tampering)]
+        return OrderedDict([(i, self.rrs[i]) for i in sorted(indices) if i in keys])
 
     
-    def overview(self, args, header=True):
+    def overview(self, args, header=True, showlast=False, onlytampered=False):
         result = []
         arg = None if len(args)<1 else args[0]
         eidlen = max([3]+[len(str(e)) for e,_ in weber.events.items()])
-        reqlen = max([20]+[1+len(v.request_string(short=True, colored=True)) for v in self.get_desired_rrs(arg).values()])
-        #tampering = any([v.request.tampering for v in self.get_desired_rrs(arg).values()])
-        # TODO tamper information
+        desired = self.get_desired_rrs(arg, showlast=showlast, onlytampered=onlytampered)
+        reqlen = max([20]+[1+len(v.request_string(short=True, colored=True)) for v in desired.values()])
         
         # TODO size, time if desired
         if header:
@@ -403,7 +404,7 @@ class RRDB():
             log.tprint('    %-*s  RRID  %-*s  Response' % (eidlen, 'EID', hreqlen, 'Request'))
             log.tprint('    %s  ====  %-*s  =====================' % ('='*eidlen, hreqlen, '='*hreqlen))
 
-        for rrid, rr in self.get_desired_rrs(arg).items():
+        for rrid, rr in desired.items():
             #specific_reqlen = reqlen-(0 if rr.request.tampering else len(log.COLOR_YELLOW+log.COLOR_NONE))
             #result.append('next reqlen: %d' % specific_reqlen)
             result.append('    %-*s  %-4d  %-*s  %-20s' % (eidlen, '' if rr.eid is None else rr.eid, rrid, reqlen, rr.request_string(short=True, colored=True), rr.response_string(short=True, colored=True)))
