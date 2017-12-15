@@ -62,3 +62,25 @@ def gunzip(data): # gzip -> bytes
        o = g.read()
     return o
 """
+
+def find_between(data, startbytes, endbytes, startpos=0, endpos=0, inner=False):
+    # this function goes through data[startpos:endpos] and locates substrings 'startbytes.*endbytes'
+    # returns list of (absolute_position, match_string)
+    # inner specifies whether startbytes and endbytes should be included in match_string
+    if endpos == 0:
+        endpos = len(data)
+    result = []
+    while True:
+        try:
+            offset = data.index(startbytes, startpos)
+            start = offset+(len(startbytes) if inner else 0)
+            end = data.index(endbytes, start)+(0 if inner else len(endbytes))
+            if end>endpos: # behind the endpos limit?
+                break
+            result.append((offset, data[start:end]))
+            # prepare for next search
+            startpos = end
+        except ValueError: # out of bounds (no more matches)?
+            break
+    return result
+

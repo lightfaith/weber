@@ -44,9 +44,6 @@ def reload_config():
 Universal class for commands.
 """
 class Command():
-    constants = {
-        'link_tags': [('a', 'href', None), ('form', 'action', None), ('frame', 'src', None), ('img', 'src', None), ('script', 'src', None)] # TODO more?
-    }
 
     def __init__(self, command, apropos, description, function):
         self.command = command
@@ -171,13 +168,23 @@ def foreach_rrs(function, *args, **kwargs):
     return result
 
 def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
-    tags = kwargs['tags']
-    valueonly=kwargs['valueonly']
+    #tags = kwargs['tags']
+    startends = kwargs['startends']
+    attrs = kwargs.get('attrs')
+    valueonly = kwargs['valueonly']
     tmpresult = []
-    for tagname, attr_key, attr_value in tags:
-        for t in rr.response.find_tags(tagname, attr_key=attr_key, attr_value=attr_value, form=('value' if valueonly else 'xml')):
-            tmpresult.append(t)
-    return tmpresult
+    #for tagname, attr_key, attr_value in tags:
+    #    for t in rr.response.find_tags(tagname, attr_key=attr_key, attr_value=attr_value, form=('value' if valueonly else 'xml')):
+    #        tmpresult.append(t)
+    #return tmpresult
+    result = []
+    if attrs is None:
+        for startbytes, endbytes in startends:
+            result += [x[1].decode() for x in find_between(rr.response.data, startbytes, endbytes, inner=valueonly)]
+    else:
+        for (startbytes, endbytes), attr in zip(startends, attrs):
+            result += [x[1].decode() for x in rr.response.find_html_attr(startbytes, endbytes, attr)]
+    return result
     
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
 
@@ -454,20 +461,22 @@ add_command(Command('pe [<eid>[:<eid>]]', 'print events', e_description, e_funct
 # pf
 pf_description = """Forms present on given page are shown with `pf` command.
 """
-add_command(Command('pf [<rrid>[:<rrid>]]', 'print forms', pf_description, lambda *args: foreach_rrs(find_tags, *args, tags=[('form', None, None)], valueonly=False)))
+#add_command(Command('pf [<rrid>[:<rrid>]]', 'print forms', pf_description, lambda *args: foreach_rrs(find_tags, *args, tags=[('form', None, None)], valueonly=False)))
+add_command(Command('pf [<rrid>[:<rrid>]]', 'print forms', pf_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<form', b'</form>')], valueonly=False)))
 
 # pl
 pl_description = """Links from all known tags are printed with `pl` command. To see their context, use `plc` command.
 """
-add_command(Command('pl [<rrid>[:<rrid>]]', 'print links', pl_description, lambda *args: foreach_rrs(find_tags, *args, tags=Response.link_tags, valueonly=True)))
+add_command(Command('pl [<rrid>[:<rrid>]]', 'print links', pl_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], attrs=[x[2] for x in Response.link_tags], valueonly=True)))
 plc_description = """Links from all known tags together with their context are printed with `plc` command.
 """
-add_command(Command('plc [<rrid>[:<rrid>]]', 'print links with context', plc_description, lambda *args: foreach_rrs(find_tags, *args, tags=Response.link_tags, valueonly=False)))
+add_command(Command('plc [<rrid>[:<rrid>]]', 'print links with context', plc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], valueonly=False)))
 
 # pn
 pn_description = """HTML comments can be searched with `pn` command.
 """
-add_command(Command('pn [<rrid>[:<rrid>]]', 'print comments', pn_description, lambda *args: foreach_rrs(find_tags, *args, tags=[('comment', None, None)], valueonly=True)))
+#add_command(Command('pn [<rrid>[:<rrid>]]', 'print comments', pn_description, lambda *args: foreach_rrs(find_tags, *args, tags=[('comment', None, None)], valueonly=True)))
+add_command(Command('pn [<rrid>[:<rrid>]]', 'print comments', pn_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<!--', b'-->')], valueonly=False)))
 
 # pp
 def pp_function(_, rr, *__):
@@ -506,7 +515,10 @@ def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of de
             result.append('')
     # deal with responses
     if showresponse:
-        result += rr.response.lines(headers=showheaders, data=showdata)
+        if rr.response is None:
+            result += 'Response not received yet...'
+        else:
+            result += rr.response.lines(headers=showheaders, data=showdata)
     return result
 prX_description="""Commands starting with `pr` are used to show request and/or response headers and/or data.
 """

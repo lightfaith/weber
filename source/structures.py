@@ -2,7 +2,7 @@
 """
 Various structures are defined here.
 """
-import threading, traceback, re, os
+import threading, traceback, re, os, itertools
 from collections import OrderedDict
 from bs4 import BeautifulSoup as soup
 
@@ -33,28 +33,6 @@ class Request():
         self.should_tamper = should_tamper
         self.forward_stopper = os.pipe() if forward_stopper is None else forward_stopper
         self.tampering = self.should_tamper
-        """self.method, wanted, self.version = tuple(lines[0].split(b' '))
-        # parse uri
-        parts = wanted.split(b'/')
-        if wanted.startswith(b'http'):
-            proto = parts[0][:-1]   # e.g. http
-            self.host = parts[2].partition(b':')[0] # e.g. 'google.com'
-            self.port = parts[2].partition(b':')[2] # e.g. '443'
-        else:
-            proto = 'http' # default
-            self.host = parts[0].partition(b':')[0] # e.g. 'google.com'
-            self.port = parts[0].partition(b':')[2] # e.g. '443'
-        if self.port == '' or not self.port.isdigit() or int(self.port)>65535 or int(self.port) < 1:
-            if proto == b'http':
-                self.port = 80
-            elif proto == b'https':
-                self.port = 443
-            else: # default
-                self.port = 80
-        else:
-            self.port = int(self.port)
-        self.path = b''.join([b'/'+part for part in parts[3:]])
-        """
         
         self.headers = OrderedDict()
         self.data = b''
@@ -87,7 +65,7 @@ class Request():
         os.write(self.forward_stopper[1], b'1')
 
     def parse_method(self):
-        # GET method
+        # GET, HEAD method
         if self.method in [b'GET', b'HEAD']:
             self.realpath, _, tmpparams = self.path.partition(b'?')
             for param in tmpparams.split(b'&'):
@@ -147,7 +125,14 @@ class Request():
 
 
 class Response():
-    link_tags = [('a', 'href', None), ('form', 'action', None), ('frame', 'src', None), ('img', 'src', None), (  'script', 'src', None)] # TODO more?
+    link_tags = [
+        (b'<a', b'</a>', b'href'),
+        (b'<form', b'</form>', b'action'),
+        (b'<frame', b'</frame>', b'src'),
+        (b'<img', b'>', b'src'),
+        (b'<script', b'>', b'src'),
+    ] # TODO more
+    #link_tags = [('a', 'href', None), ('form', 'action', None), ('frame', 'src', None), ('img', 'src', None), (  'script', 'src', None)] # TODO more?
 
     def __init__(self, data, should_tamper, forward_stopper=None):
         self.original = data
@@ -216,22 +201,7 @@ class Response():
         self.headers.pop(b'Upgrade', None)
 
         #self.data = b''.join([line+b'\n' for line in lines[line_index+1:]])
-        """
-        # try to parse xml
-        self.dict = {}
-        if b'Content-Type' in self.headers:
-            if self.headers[b'Content-Type'].startswith(b'text/html'):
-                try:
-                    # doctype causes trouble...
-                    xmldata = b'\n'.join(self.data.split(b'\n')[1:]) if self.data.startswith(b'<!DOCTYPE') else self.data
-                    self.dict = xmltodict.parse(xmldata)
-                    # TODO bugged html is not parsed correctly!
-                except Exception as e:
-                    log.err('XMLtoDict Exception:'+str(e))
-                    print(xmldata)
-        #if self.headers.get(b'Content-Encoding') == b'gzip':
-        #    self.data = lib.gunzip(self.data)
-        """
+        
         if b'Content-Type' not in self.headers or self.headers[b'Content-Type'].startswith(b'text/html'):
             self.soup = soup(self.data.replace(b'<!--', b'<comment>').replace(b'-->', b'</comment>'), "lxml") # TODO this is madness
         #print(self.soup.prettify())
@@ -247,8 +217,8 @@ class Response():
     def compute_content_length(self):
         #if b'Content-Length' not in self.headers.keys() and len(self.data)>0:
         log.debug_parsing('Computing Content-Length...')
-        data = self.data if self.soup is None else str(self.soup).encode('utf8')
-        self.headers[b'Content-Length'] = b'%d' % (len(data))
+        #data = self.data if self.soup is None else str(self.soup).encode('utf8')
+        self.headers[b'Content-Length'] = b'%d' % (len(self.data))
 
     def lines(self, headers=True, data=True, as_string=True):
         parts = []
@@ -283,33 +253,60 @@ class Response():
         result += b'%s %d %s\r\n' % (self.version, self.statuscode, self.status)
         result += b'\r\n'.join([b'%s: %s' % (k, b'' if v is None else v) for k, v in self.headers.items()])
         
-        if self.soup is None:
-            data = self.data
-        else:
-            data = str(self.soup).encode('utf8')
+        #if self.soup is None:
+        #    data = self.data
+        #else:
+        #    data = str(self.soup).encode('utf8')
 
         # fix temporary changes  
-        data = data.replace(b'<comment>', b'<!--').replace(b'</comment>', b'-->') # TODO this is madness
-        result += b'\r\n\r\n' + data + b'\r\n\r\n'
+        #data = data.replace(b'<comment>', b'<!--').replace(b'</comment>', b'-->') # TODO this is madness
+        result += b'\r\n\r\n' + self.data + b'\r\n\r\n'
         # TODO self.compute_content_length() here?
         return result
+    
+    def find_html_attr(self, tagstart, tagend, attr):
+        # this method uses find_between() method to locate attributes and their values for specified tag
+        # returns list of (absolute_position, match_string) of attributes
+        tagmatches = find_between(self.data, tagstart, tagend)
+        result = []
+        for pos, _ in tagmatches:
+            # find the end of the tagstart
+            endpos = self.data.index(b'>', pos)
+            linkmatches = find_between(self.data, b'%s="' % (attr), b'"', startpos=pos, endpos=endpos, inner=True)
+            #if not linkmatches: # try without '"' # TODO should be done, but how to get good loffset in self.replace_links()?
+            #    linkmatches = find_between(self.data, b'%s=' % (attr), b' ', startpos=pos, endpos=endpos, inner=True)
+            result += linkmatches
+        return result
+
+    def replace_links(self, tagstart, tagend, attr):
+        # this method searches desired tag attributes using find_html_attr() and replaces its content
+        # result is directly written into self.data
+        oldparts = [] # unchanged HTML chunks
+        loffset = 0
+        linkmatches = self.find_html_attr(tagstart, tagend, attr)
+        for roffset, value in linkmatches:
+            # add chunk until match
+            oldparts.append(self.data[loffset:roffset])
+            # prepare for new chunk
+            loffset = roffset+len(attr) + 2 + len(value) + 1
+            #                  href       =" index.html    "
+        # add last chunk
+        oldparts.append(self.data[loffset:])
+
+        # get new values if desired
+        newparts = [b'%s="%s"' % (attr, (x[1] if not x[1].partition(b'://')[0] in (b'http', b'https') else weber.mapping.get_local(x[1]))) for x in linkmatches]
+        # join oldparts and newparts
+        result = filter(None, [x for x in itertools.chain.from_iterable(itertools.zip_longest(oldparts, newparts))])
+        self.data = b''.join(result)
+
+
     """
-    def get_tags_recursive(tagname, d):
-       # generate desired tags
-        if tagname in d.keys():
-            yield d[tagname]
-        for v in d.values():
-            if isinstance(v, dict):
-                for x in Response.get_tags_recursive(tagname, d=v):
-                    yield x
-    """ 
     def find_tags(self, tagname, attr_key=None, attr_value=None, form='soup'):
-        """
-            Supported forms:
-                soup - beautifulsoup object
-                xml - xml as string
-                value - desired value as string
-        """
+        # Supported forms:
+        #        soup - beautifulsoup object
+        #        xml - xml as string
+        #        value - desired value as string
+        #
         if self.soup is None:
             return []
 
@@ -326,10 +323,10 @@ class Response():
             return list(result)
         elif form in ['xml', 'value']:
             return [str(x) for x in result]
-        """if len(self.dict.items())<=0:
-            print('dict empty!')
-        return list(Response.get_tags_recursive(tagname, self.dict))
-        """
+        #if len(self.dict.items())<=0:
+        #    print('dict empty!')
+        #return list(Response.get_tags_recursive(tagname, self.dict))
+    """
 
     def spoof(self, path):
         # replace data with file content
@@ -341,6 +338,13 @@ class Response():
             self.compute_content_length()
         except:
             log.err('Spoofing failed - cannot open file.')
+
+
+
+
+
+
+
 """
 Database of Request/Response pairs.
 """
@@ -488,7 +492,7 @@ class Mapping():
         self.l_r = OrderedDict() # local->remote
         self.r_l = OrderedDict() # remote->local
         self.map = {}            # bytes->URI
-        self.counter = 0
+        self.counter = 1
         self.lock = threading.Lock()
     
     def add_init(self, remote): # add first known local

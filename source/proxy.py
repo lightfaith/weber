@@ -248,14 +248,18 @@ class ConnectionThread(Thread):
                 response.statuscode = 302 # TODO just for debugging
 
             # TODO change incoming links - probably complete
-            for tagname, attr_key, attr_value in Response.link_tags:
-                olds = response.find_tags(tagname, attr_key=attr_key, attr_value=attr_value, form='soup')
-                for old in olds:
-                    old_value = old[attr_key]
-                    if old_value.partition('://')[0] in ('http', 'https'):
-                        new = weber.mapping.get_local(old_value)
-                        old[attr_key] = new.get_value()
-                        #print('new', old)
+            for starttag, endtag, attr in Response.link_tags:
+                response.replace_links(starttag, endtag, attr)
+            #for tagname, attr_key, attr_value in Response.link_tags:
+            #    if tagname == 'a': # skip a href, # TODO testing new method
+            #        continue
+            #    olds = response.find_tags(tagname, attr_key=attr_key, attr_value=attr_value, form='soup')
+            #    for old in olds:
+            #        old_value = old[attr_key]
+            #        if old_value.partition('://')[0] in ('http', 'https'):
+            #            new = weber.mapping.get_local(old_value)
+            #            old[attr_key] = new.get_value()
+            #            #print('new', old)
 
             log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
 
