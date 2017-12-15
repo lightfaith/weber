@@ -201,7 +201,7 @@ class ConnectionThread(Thread):
                 break
             request.path = remoteuri.path.encode()
             request.parse_method()
-            request.headers[b'Host'] = remoteuri.domain.encode() if remoteuri.port in [80, 443] else b'%s:%d' % (remoteuri.domain, remoteuri.port)
+            request.headers[b'Host'] = remoteuri.domain.encode() if remoteuri.port in [80, 443] else b'%s:%d' % (remoteuri.domain.encode(), remoteuri.port)
             log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
             
             weber.rrdb.add_request(self.rrid, request)
