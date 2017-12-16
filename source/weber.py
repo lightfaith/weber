@@ -39,7 +39,7 @@ config['spoof.arguments'] = (False, bool) # should arguments be taken into consi
 # tamper
 config['tamper.requests'] = (False, bool) # should all requests be tampered by default?
 config['tamper.responses'] = (False, bool) # should all responses be tampered by default?
-
+config['tamper.showupstream'] = (True, bool) # what version of RR should be presented?
 
 
 """

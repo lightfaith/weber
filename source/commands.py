@@ -178,12 +178,13 @@ def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
     #        tmpresult.append(t)
     #return tmpresult
     result = []
+    r = rr.response_upstream if positive(weber.config['tamper.showupstream']) else rr.response_downstream # TODO correct approach here?
     if attrs is None:
         for startbytes, endbytes in startends:
-            result += [x[1].decode() for x in find_between(rr.response.data, startbytes, endbytes, inner=valueonly)]
+            result += [x[1].decode() for x in find_between(r.data, startbytes, endbytes, inner=valueonly)]
     else:
         for (startbytes, endbytes), attr in zip(startends, attrs):
-            result += [x[1].decode() for x in rr.response.find_html_attr(startbytes, endbytes, attr)]
+            result += [x[1].decode() for x in r.find_html_attr(startbytes, endbytes, attr)]
     return result
     
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
@@ -211,7 +212,7 @@ def test_function(*_):
     #print(weber.rrdb.rrs[1].response.find_tags('html'))
     #for x in weber.rrdb.rrs[1].response.soup.prettify().splitlines()[100:200]:
     #    print(x)
-    print(weber.rrdb.rrs[1].response.find_tags('form'))
+    print(weber.rrdb.rrs[1].response_upstream.find_tags('form'))
     return []
 add_command(Command('test', 'prints test message', '', test_function))
 
@@ -326,7 +327,7 @@ add_command(Command('et <eid> <type>', 'define type for an event', et_descriptio
 """
 MODIFY COMMANDS
 """
-m_description=''
+m_description='' # TODO create new if not tampered
 add_command(Command('m', 'modify', m_description, lambda *_: []))
 mr_description="""Received requests and responses can be modified using your favourite text editor with `mrq` and `mrs`, respectively. Modifying multiple RRs is not supported (use spoofs instead). 
 Favourite editor command can be configured under edit.command option.
@@ -337,12 +338,13 @@ mrq_description="""
 mrs_description="""
 """
 def mr_function(*args):
+    # parse command arguments
     try:
         rrid = int(args[1])
         if args[0] == 'request': 
-            r = weber.rrdb.rrs[rrid].request
+            r = weber.rrdb.rrs[rrid].request_upstream
         elif args[0] == 'response':
-            r = weber.rrdb.rrs[rrid].response
+            r = weber.rrdb.rrs[rrid].response_upstream
         else:
             log.err('Invalid type.')
             return []
@@ -362,10 +364,13 @@ def mr_function(*args):
         f.flush()
         subprocess.call((weber.config['edit.command'][0] % (f.name)).split())
         f.seek(0)
+        # read back
         if args[0] == 'request': 
-            weber.rrdb.rrs[rrid].request = Request(f.read(), r.should_tamper, r.forward_stopper)
+            #weber.rrdb.rrs[rrid].request = Request(f.read(), r.should_tamper, r.forward_stopper)
+            weber.rrdb.rrs[rrid].request_upstream.parse(f.read())
         elif args[0] == 'response':
-            weber.rrdb.rrs[rrid].response = Response(f.read(), r.should_tamper, r.forward_stopper)
+            #weber.rrdb.rrs[rrid].response = Response(f.read(), r.should_tamper, r.forward_stopper)
+            weber.rrdb.rrs[rrid].response_upstream.parse(f.read())
     # restore debug and realtime overview settings
     for k, v in oldconfig.items():
         weber.config[k] = v
@@ -435,7 +440,8 @@ add_command(Command('p', 'print', '', lambda *_: []))
 # pc
 def pc_function(_, rr, *__):
     try:
-        cookies = rr.request.headers[b'Cookie'].split(b';')
+        r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
+        cookies = r.headers[b'Cookie'].split(b';')
         cookies = dict([tuple(c.split(b'=')) for c in cookies])
         maxlen = max([0]+[len(k.decode().strip()) for k in cookies.keys()])
         return ['%*s: %s' % (maxlen, k.decode(), v.decode()) for k,v in cookies.items()]
@@ -447,7 +453,8 @@ add_command(Command('pc [<rrid>[:<rrid>]]', 'print cookies', pc_description, lam
 # pcs
 def pcs_function(_, rr, *__):
     try:
-        cookie = rr.response.headers[b'Set-Cookie']
+        r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
+        cookie = r.headers[b'Set-Cookie']
         print(cookie)
         # TODO parse cookie parameters
         return []
@@ -480,8 +487,9 @@ add_command(Command('pn [<rrid>[:<rrid>]]', 'print comments', pn_description, la
 
 # pp
 def pp_function(_, rr, *__):
-    maxlen = max([0]+[len(k) for k in rr.request.parameters.keys()])
-    return ['%*s: %s' % (maxlen, k.decode(), '' if v is None else v.decode()) for k, v in rr.request.parameters.items()]
+    r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
+    maxlen = max([0]+[len(k) for k in r.parameters.keys()])
+    return ['%*s: %s' % (maxlen, k.decode(), '' if v is None else v.decode()) for k, v in r.parameters.items()]
 pp_description = """Parameters of selected requests are printed with `pp` command.
 """
 add_command(Command('pp [<rrid>[:<rrid>]]', 'print parameters', pp_description, lambda *args: foreach_rrs(pp_function, *args)))
@@ -510,15 +518,17 @@ def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of de
     showdata = bool(kwargs['mask'] & 0x1)
     # deal with requests
     if showrequest:
-        result += rr.request.lines(headers=showheaders, data=showdata)
+        r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
+        result += r.lines(headers=showheaders, data=showdata)
         if showresponse:
             result.append('')
     # deal with responses
     if showresponse:
-        if rr.response is None:
-            result += 'Response not received yet...'
+        r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
+        if r is None:
+            result.append('Response not received yet...')
         else:
-            result += rr.response.lines(headers=showheaders, data=showdata)
+            result += r.lines(headers=showheaders, data=showdata)
     return result
 prX_description="""Commands starting with `pr` are used to show request and/or response headers and/or data.
 """
@@ -612,17 +622,16 @@ add_command(Command('t', 'tamper', t_description, lambda *_: []))
 tr_description = """
 """
 add_command(Command('tr', 'tamper requests/responses', tr_description, lambda *_: []))
-# TODO trq, trs, trq <n>, trs <n>
 
 # trf
 def trf_function(_, rr, *__):
     # responses first so race condition won't occur
     try:
-        rr.response.forward()
+        rr.response_upstream.forward()
     except:
         pass
     try:
-        rr.request.forward()
+        rr.request_upstream.forward()
     except:
         pass
     return []
@@ -679,7 +688,7 @@ add_command(Command('trsa', 'toggle default response tamper behavior', trsa_desc
 # trqf
 def trqf_function(_, rr, *__):
     try:
-        rr.request.forward()
+        rr.request_upstream.forward()
     except:
         log.err('No request is available.')
     return []
@@ -690,7 +699,7 @@ add_command(Command('trqf [<rrid>[:<rrid>]]', 'forward tampered request', trqf_d
 # trsf
 def trsf_function(_, rr, *__):
     try:
-        rr.response.forward()
+        rr.response_upstream.forward()
     except: # no response
         log.info('No response is available.')
     return []
@@ -729,17 +738,20 @@ def wrx_function(_, rr, *args, **kwargs): # write headers/data/both of desired r
     showdata = bool(kwargs['mask'] & 0x1)
     # deal with requests
     if showrequest:
-        data += rr.request.lines(headers=showheaders, data=showdata, as_string=False)
+        r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
+        data += r.lines(headers=showheaders, data=showdata, as_string=False)
         if showresponse:
             data.append(b'')
     # deal with responses
     if showresponse:
-        data += rr.response.lines(headers=showheaders, data=showdata, as_string=False)
+        r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
+        if r is None:
+            data.append(b'Response not received yet...')
+        else:
+            data += r.lines(headers=showheaders, data=showdata, as_string=False)
     try:
         with open(path, 'ab') as f:
-            for line in data:
-                f.write(line)
-                f.write(b'\n')
+            f.write(b'\n'.join(data))
     except Exception as e:
         log.err('Cannot write into file \'%s\'.' % (str(path)))
         print(e)

@@ -160,6 +160,7 @@ class ConnectionThread(Thread):
         #self.ssl = (uri.scheme == 'https')
         self.tamper_request = tamper_request
         self.tamper_response = tamper_response
+        #print('New ConnectionThread, tampering request', self.tamper_request, ', response', self.tamper_response)
         self.stopper = os.pipe() # if Weber is terminated while tampering
         #print('new thread: uri', uri, type(uri))
         self.localuri = None
@@ -185,6 +186,11 @@ class ConnectionThread(Thread):
 
             self.keepalive = (request.headers.get(b'Connection') == b'Keep-Alive')
             
+            # create request backup, move into RRDB
+            request_downstream = request.clone()
+            request.sanitize()
+            weber.rrdb.add_request(self.rrid, request_downstream, request)
+            
             # get URI() from request
             self.host, _, port = request.headers[b'Host'].partition(b':')
             self.port = int(port)
@@ -204,7 +210,8 @@ class ConnectionThread(Thread):
             request.headers[b'Host'] = remoteuri.domain.encode() if remoteuri.port in [80, 443] else b'%s:%d' % (remoteuri.domain.encode(), remoteuri.port)
             log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
             
-            weber.rrdb.add_request(self.rrid, request)
+            print('before', request_downstream.headers[b'Host'])
+            print('after', request.headers[b'Host'])
             
             # tamper request
             if request.tampering and positive(weber.config['overview.realtime'][0]):
@@ -213,18 +220,22 @@ class ConnectionThread(Thread):
             if self.stopper[0] in r:
                 # Weber is terminating
                 break
-            request = weber.rrdb.rrs[self.rrid].request # reload in case it's modified
+            #request = weber.rrdb.rrs[self.rrid].request # reload in case it's modified # TODO should be solved with Request.parse() already
 
             # forward request to server        
             log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
             response = self.forward(remoteuri, request.bytes())
-
+            
+            ###############################################################################
             if response is None:
                 break
 
             log.debug_parsing('\n'+str(response)+'\n'+'='*30)
             
-            weber.rrdb.add_response(self.rrid, response)
+            # move response into RRDB
+            response.sanitize()
+            weber.rrdb.add_response(self.rrid, response, None)
+
             
             # tamper response
             if response.tampering and positive(weber.config['overview.realtime'][0]):
@@ -233,13 +244,18 @@ class ConnectionThread(Thread):
             if self.stopper[0] in r:
                 # Weber is terminating
                 break
-            response = weber.rrdb.rrs[self.rrid].response # reload in case it's modified
+            #response = weber.rrdb.rrs[self.rrid].response # reload in case it's modified # TODO should be solved with Response.parse() already
 
             # spoof if desired (with or without GET arguments)
             spoof_path = remoteuri.get_value() if positive(weber.config['spoof.arguments'][0]) else remoteuri.get_value().partition('?')[0]
             if spoof_path in weber.spoofs.keys():
                 response.spoof(weber.spoofs[spoof_path])
 
+            # set response as downstream, create backup (upstream), update RRDB
+            response_upstream = response.clone()
+            response_upstream.tampering = False
+            weber.rrdb.add_response(self.rrid, response_upstream, response)
+            
             # alter redirects # TODO test 302, 303
             if response.statuscode in [301, 302, 303]:
                 newremote = URI(response.headers[b'Location'])
@@ -313,6 +329,9 @@ class ConnectionThread(Thread):
             self.client_socket.connect((uri.domain, uri.port))
         except socket.gaierror:
             log.err('Cannot connect to %s:%d' % (uri.domain, uri.port))
+            return None
+        except TimeoutError:
+            log.err('Site is not accessible (timeout).')
             return None
 
         if uri.scheme == 'https':

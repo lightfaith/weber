@@ -15,7 +15,7 @@ class Request():
     """
     HTTP Request class
     """
-    def __init__(self, data, should_tamper, forward_stopper=None):
+    def __init__(self, data, should_tamper):
         """
             data = request data (bytes)
             should_tamper = should the request be tampered? (bool)
@@ -23,16 +23,31 @@ class Request():
                               None for new request
                               Use original value for modified request (e.g. `mrq`)
         """
+        # TODO mrq should edit the upstream directly
         self.integrity = False
         if not data:
             return
+        
+        # set up tampering mechanism
+        self.should_tamper = should_tamper
+        #self.forward_stopper = os.pipe() if forward_stopper is None else forward_stopper
+        self.forward_stopper = os.pipe()
+        self.tampering = self.should_tamper
+        
+        # parse data
+        self.parse(data)
+
+        # allow forwarding immediately?
+        if not self.should_tamper:
+            self.forward()
+
+    def parse(self, data):
+        # parse given bytes (from socket, editor, file, ...)
         self.original = data
+
         lines = data.splitlines()
         self.method, self.path, self.version = tuple(lines[0].split(b' '))
         self.parameters = {}
-        self.should_tamper = should_tamper
-        self.forward_stopper = os.pipe() if forward_stopper is None else forward_stopper
-        self.tampering = self.should_tamper
         
         self.headers = OrderedDict()
         self.data = b''
@@ -42,23 +57,27 @@ class Request():
             k, _, v = line.partition(b':')
             # TODO duplicit keys? warn
             self.headers[k] = v.strip()
-            
-        # disable encoding
-        self.headers.pop(b'Accept-Encoding', None)
-        # disable Range
-        self.headers.pop(b'Range', None)
-        self.headers.pop(b'If_Range', None)
-
+           
         if len(lines[-1]) > 0:
             self.data = lines[-1]
 
         self.parse_method()
         self.integrity = True
 
-        # allow forwarding?
-        if not self.should_tamper:
-            self.forward()
+    
+    def sanitize(self):
+        # alter the Request so we don't have to deal with problematic options, e.g. encoding
+        # should not be used on the original (downstream) Request
 
+        # disable encoding
+        self.headers.pop(b'Accept-Encoding', None)
+        # disable Range
+        self.headers.pop(b'Range', None)
+        self.headers.pop(b'If_Range', None)
+
+
+    def clone(self):
+        return Request(self.original, False) # TODO or self.should_tamper? probably not, used for creating backups
 
     def forward(self):
         self.tampering = False
@@ -67,7 +86,7 @@ class Request():
     def parse_method(self):
         # GET, HEAD method
         if self.method in [b'GET', b'HEAD']:
-            self.realpath, _, tmpparams = self.path.partition(b'?')
+            self.onlypath, _, tmpparams = self.path.partition(b'?')
             for param in tmpparams.split(b'&'):
                 if param == b'':
                     continue
@@ -76,7 +95,7 @@ class Request():
                 self.parameters[k] = v
         # POST method
         if self.method in [b'POST']:
-            self.realpath, _, _ = self.path.partition(b'?')
+            self.onlypath, _, _ = self.path.partition(b'?')
             for param in self.data.split(b'&'):
                 if param == b'':
                     continue
@@ -132,19 +151,32 @@ class Response():
         (b'<img', b'>', b'src'),
         (b'<script', b'>', b'src'),
     ] # TODO more
-    #link_tags = [('a', 'href', None), ('form', 'action', None), ('frame', 'src', None), ('img', 'src', None), (  'script', 'src', None)] # TODO more?
 
-    def __init__(self, data, should_tamper, forward_stopper=None):
+    def __init__(self, data, should_tamper):
+        # set up tampering mechanism
+        self.should_tamper = should_tamper
+        #self.forward_stopper = os.pipe() if forward_stopper is None else forward_stopper
+        self.forward_stopper = os.pipe()
+        self.tampering = should_tamper
+        
+        # parse data
+        self.parse(data)
+
+        # allow forwarding?
+        if not self.should_tamper:
+            self.forward()
+    
+    
+    def parse(self, data):
+        # parse given bytes (from socket, editor, file, ...)
         self.original = data
+        
         lines = data.split(b'\r\n')
         self.version = lines[0].partition(b' ')[0]
         self.statuscode = int(lines[0].split(b' ')[1])
         self.status = b' '.join(lines[0].split(b' ')[2:])
         self.headers = OrderedDict()
-        self.soup = None
-        self.should_tamper = should_tamper
-        self.forward_stopper = os.pipe() if forward_stopper is None else forward_stopper
-        self.tampering = should_tamper
+        #self.soup = None
 
         # load first set of headers (hopefully only one)
         line_index = 1
@@ -194,21 +226,24 @@ class Response():
             self.data = b'\r\n'.join(lines[line_index:])
             # TODO test for matching Content-Type (HTTP Response-Splitting etc.)
         
+        #if b'Content-Type' not in self.headers or self.headers[b'Content-Type'].startswith(b'text/html'):
+        #    self.soup = soup(self.data.replace(b'<!--', b'<comment>').replace(b'-->', b'</comment>'), "lxml") # TODO this is madness
+        #print(self.soup.prettify())
+        
+    
+    def sanitize(self):
+        # alter the Response so we don't have to deal with problematic options, e.g. chunked
+        # should NOT be used on the original (upstream) Response
+        
         # strip Transfer-Encoding...
         self.headers.pop(b'Transfer-Encoding', None)
         
         # no wild upgrading (HTTP/2)
         self.headers.pop(b'Upgrade', None)
 
-        #self.data = b''.join([line+b'\n' for line in lines[line_index+1:]])
-        
-        if b'Content-Type' not in self.headers or self.headers[b'Content-Type'].startswith(b'text/html'):
-            self.soup = soup(self.data.replace(b'<!--', b'<comment>').replace(b'-->', b'</comment>'), "lxml") # TODO this is madness
-        #print(self.soup.prettify())
-        
-        # allow forwarding?
-        if not self.should_tamper:
-            self.forward()
+
+    def clone(self):
+        return Response(self.original, True) # TODO or self.should_tamper? probably yes, copy is after forward
 
     def forward(self):
         self.tampering = False
@@ -231,15 +266,16 @@ class Response():
         if data:
             # Do not include if string is desired and it is binary content
             # TODO more Content-Types
-            if as_string and (b'Content-Type' not in self.headers or (b'Content-Type' in self.headers and not self.headers[b'Content-Type'].startswith((b'text/', b'application/')))):
+            if as_string and self.statuscode < 300 and (b'Content-Type' not in self.headers or (b'Content-Type' in self.headers and not self.headers[b'Content-Type'].startswith((b'text/', b'application/')))):
                 parts.append(b'--- BINARY DATA ---')
             else:
                 parts += self.data.split(b'\n')
             
         try:
-            parts = [x.decode() for x in parts] if as_string else parts
+            parts = [x.decode('utf-8', 'replace') for x in parts] if as_string else parts # not accurate
         except Exception as e:
-            log.warn('Response encoding problem occured: '+str(e))
+            log.warn('Response encoding problem occured: %s' % (str(e)))
+            log.warn('For '+str(self.headers))
             parts = []
         return parts
 
@@ -357,11 +393,11 @@ class RRDB():
         self.rrid += 1
         return self.rrid
 
-    def add_request(self, rrid, request):
-        self.rrs[rrid] = RR(request)
+    def add_request(self, rrid, request_downstream, request_upstream):
+        self.rrs[rrid] = RR(request_downstream, request_upstream)
 
-    def add_response(self, rrid, response):
-        self.rrs[rrid].add_response(response)
+    def add_response(self, rrid, response_upstream, response_downstream):
+        self.rrs[rrid].add_response(response_upstream, response_downstream)
 
     def get_desired_rrs(self, arg, showlast=False, onlytampered=False):
         if len(self.rrs.keys()) == 0:
@@ -390,7 +426,10 @@ class RRDB():
         else:
             indices = list(range(minimum, maximum+1))[(-10 if showlast else 0):]
         
-        keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request.tampering or (self.rrs[x].response is not None and self.rrs[x].response.tampering)]
+        if positive(weber.config['tamper.showupstream'][0]):
+            keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request_upsstream.tampering or (self.rrs[x].response_upstream is not None and self.rrs[x].response_upstream.tampering)]
+        else:
+            keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request_downstream.tampering or (self.rrs[x].response_downstream is not None and self.rrs[x].response_downstream.tampering)]
         return OrderedDict([(i, self.rrs[i]) for i in sorted(indices) if i in keys])
 
     
@@ -419,67 +458,72 @@ class RRDB():
 weber.rrdb = RRDB()
 
 """
-Request/Response pair
+Request/Response pairs (both downstream and upstream versions)
 """
 class RR():
-    def __init__(self, request):
-        self.request = request
-        self.response = None
+    def __init__(self, request_downstream, request_upstream):
+        self.request_downstream = request_downstream
+        self.request_upstream = request_upstream
+        self.response_upstream = None
+        self.response_downstream = None
         self.eid = None
 
-    def add_response(self, response):
-        self.response = response
+    def add_response(self, response_upstream, response_downstream):
+        self.response_upstream = response_upstream
+        self.response_downstream = response_downstream
 
     def request_string(self, short=False, colored=False):
+        req = self.request_upstream if positive(weber.config['tamper.showupstream'][0]) else self.request_downstream
         if True:#try:
             if short: # TODO long - what was the meaning?
                 # TODO also from Accept:
                 tamperstring = ''
-                if self.request.tampering:
+                if req.tampering:
                     tamperstring = '[T] '
                 color = log.COLOR_NONE
-                if self.request.realpath == b'/' or self.request.realpath.endswith((b'.htm', b'.html', b'.php', b'.xhtml', b'.aspx')):
+                if req.onlypath == b'/' or req.onlypath.endswith((b'.htm', b'.html', b'.php', b'.xhtml', b'.aspx')):
                     color = log.COLOR_GREY
-                elif self.request.realpath.endswith((b'.jpg', b'.svg', b'.png', b'.gif', b'.ico', b'.mp3', b'.ogg', b'.mp4', b'.wav')):
+                elif req.onlypath.endswith((b'.jpg', b'.svg', b'.png', b'.gif', b'.ico', b'.mp3', b'.ogg', b'.mp4', b'.wav')):
                     color = log.COLOR_PURPLE
-                elif self.request.realpath.endswith((b'.js', b'.vbs', b'.swf')):
+                elif req.onlypath.endswith((b'.js', b'.vbs', b'.swf')):
                     color = log.COLOR_BLUE
-                elif self.request.realpath.endswith((b'.css')):
+                elif req.onlypath.endswith((b'.css')):
                     color = log.COLOR_DARK_PURPLE
-                elif self.request.realpath.endswith((b'.pdf', b'.doc', b'.docx', b'.xls', b'.xlsx', b'.ppt', b'.pptx', b'.pps', b'.ppsx', b'.txt')):
+                elif req.onlypath.endswith((b'.pdf', b'.doc', b'.docx', b'.xls', b'.xlsx', b'.ppt', b'.pptx', b'.pps', b'.ppsx', b'.txt')):
                     color = log.COLOR_GREEN
-                elif self.request.realpath.endswith((b'.zip', b'.7z', b'.rar', b'.gz', b'.bz2', b'.jar', b'.bin', b'.iso')):
+                elif req.onlypath.endswith((b'.zip', b'.7z', b'.rar', b'.gz', b'.bz2', b'.jar', b'.bin', b'.iso')):
                     color = log.COLOR_BROWN
                 if not colored:
                     color = log.COLOR_NONE
-                return '%s%s%s%s%s %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, self.request.method.decode(), self.request.path.decode(), log.COLOR_NONE)
+                return '%s%s%s%s%s %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, req.method.decode(), req.path.decode(), log.COLOR_NONE)
         if False:#except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
 
     def response_string(self, short=False, colored=False):
+        res = self.response_upstream if positive(weber.config['tamper.showupstream'][0]) else self.response_downstream
         try:
             if short: # TODO long - what was the meaning?
                 tamperstring = ''
-                if self.response.tampering:
+                if res.tampering:
                     tamperstring = '[T] '
-                if self.response.statuscode < 200:
+                if res.statuscode < 200:
                     color = log.COLOR_NONE
-                elif self.response.statuscode == 200:
+                elif res.statuscode == 200:
                     color = log.COLOR_DARK_GREEN
-                elif self.response.statuscode < 300:
+                elif res.statuscode < 300:
                     color = log.COLOR_GREEN
-                elif self.response.statuscode < 400:
+                elif res.statuscode < 400:
                     color = log.COLOR_BROWN
-                elif self.response.statuscode < 500:
+                elif res.statuscode < 500:
                     color = log.COLOR_DARK_RED
-                elif self.response.statuscode < 600:
+                elif res.statuscode < 600:
                     color = log.COLOR_DARK_PURPLE
                 else:
                     color = log.COLOR_NONE
                 if not colored:
                     color = log.COLOR_NONE
                 
-                return '%s%s%s%s%d %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, self.response.statuscode, self.response.status.decode(), log.COLOR_NONE)
+                return '%s%s%s%s%d %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, res.statuscode, res.status.decode(), log.COLOR_NONE)
         except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
         
