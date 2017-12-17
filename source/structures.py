@@ -400,11 +400,14 @@ class RRDB():
         self.rrs[rrid].add_response(response_upstream, response_downstream)
 
     def get_desired_rrs(self, arg, showlast=False, onlytampered=False):
+        # this method parses rrid specifier (e.g. 1,2,3-5,10)
+        # returns OrderedDict of rrid, RR sorted by rrid and flag whether problem occured
         if len(self.rrs.keys()) == 0:
             return {}
         indices = []
         minimum = 1
         maximum = max(self.rrs.keys())
+        noproblem = True
         if arg is not None:
             for desired in arg.split(','):
                 start = minimum
@@ -416,8 +419,12 @@ class RRDB():
                     _start = _end = desired
                 if _start.isdigit():
                     start = max([start, int(_start)])
+                else:
+                    noproblem = False
                 if _end.isdigit():
                     end = min([end, int(_end)])
+                else:
+                    noproblem = False
                 if start > end:
                     tmp = start
                     start = end
@@ -425,19 +432,19 @@ class RRDB():
                 indices += list(range(start, end+1))
         else:
             indices = list(range(minimum, maximum+1))[(-10 if showlast else 0):]
-        
+       
         if positive(weber.config['tamper.showupstream'][0]):
             keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request_upsstream.tampering or (self.rrs[x].response_upstream is not None and self.rrs[x].response_upstream.tampering)]
         else:
             keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request_downstream.tampering or (self.rrs[x].response_downstream is not None and self.rrs[x].response_downstream.tampering)]
-        return OrderedDict([(i, self.rrs[i]) for i in sorted(indices) if i in keys])
+        return (OrderedDict([(i, self.rrs[i]) for i in sorted(indices) if i in keys]), noproblem)
 
     
     def overview(self, args, header=True, showlast=False, onlytampered=False):
         result = []
         arg = None if len(args)<1 else args[0]
         eidlen = max([3]+[len(str(e)) for e,_ in weber.events.items()])
-        desired = self.get_desired_rrs(arg, showlast=showlast, onlytampered=onlytampered)
+        desired = self.get_desired_rrs(arg, showlast=showlast, onlytampered=onlytampered)[0]
         reqlen = max([20]+[1+len(v.request_string(short=True, colored=True)) for v in desired.values()])
         
         # TODO size, time if desired

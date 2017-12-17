@@ -150,17 +150,18 @@ def foreach_rrs(function, *args, **kwargs):
     """
     result = []
     try:
-        desired_rrs = weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1]).items()
+        desired_rrs, noproblem = weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1])
+        desired_rrs = desired_rrs.items()
+        arg_interval = -1 if noproblem else len(args)
     except Exception as e:
         log.err('Cannot get desired rrs: %s' %  (str(e)))
         log.err('See traceback:')
         traceback.print_exc()
         desired_rrs = []
-    for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1]).items():
-    #for rrid, rr in weber.rrdb.get_desired_rrs(args).items():
+    for rrid, rr in desired_rrs:
         tmpresult = []
         tmpresult.append('{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
-        tmpresult += function(rrid, rr, *args[:-1], **kwargs)
+        tmpresult += function(rrid, rr, *args[:arg_interval], **kwargs)
         #tmpresult += function(rrid, rr, *args[1:], **kwargs)
         tmpresult.append('')
         if len(tmpresult)>1:
@@ -295,7 +296,7 @@ def ea_function(*args):
     # add new EID
     if eid not in weber.events.keys():
         weber.events[eid] = Event(eid)
-    for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1]).items():
+    for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1])[0].items():
         rr.eid = eid
         weber.events[eid].rrids.add(rrid)
     return []
@@ -304,7 +305,7 @@ ea_description="""With `ea` command, request-response pairs are assigned an EID.
 add_command(Command('ea eid <rrid>[:<rrid>]', 'adds requests/responses into event', ea_description, ea_function))
 
 def ed_function(*args):
-    for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1]).items():
+    for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1])[0].items():
         for e in weber.events.values():
             if rrid in e.rrids:
                 e.rrids.remove(rrid)
@@ -757,11 +758,10 @@ wr_description = """
 add_command(Command('wr', 'write requests/responses into file', wr_description, lambda *_: []))
 
 # wrX
-def wrx_function(_, rr, *args, **kwargs): # write headers/data/both of desired requests/responses/both into file
-    # this function just appends! 
+def wrx_function(rrid, rr, *args, **kwargs): # write headers/data/both of desired requests/responses/both into file
     data = []
     try:
-        path = args[0]
+        path = '%s_%d' % (args[0], rrid)
     except:
         log.err('Path to file not specified or incorrect RR interval.')
         return []
@@ -783,14 +783,14 @@ def wrx_function(_, rr, *args, **kwargs): # write headers/data/both of desired r
         else:
             data += r.lines(headers=showheaders, data=showdata, as_string=False)
     try:
-        with open(path, 'ab') as f:
+        with open(path, 'wb') as f:
             f.write(b'\n'.join(data))
     except Exception as e:
         log.err('Cannot write into file \'%s\'.' % (str(path)))
         print(e)
     return []
 
-def wrx_eraser(mask, *args):
+"""def wrx_eraser(mask, *args):
     # first erase the file
     try:
         with open(args[0], 'wb') as f:
@@ -800,17 +800,18 @@ def wrx_eraser(mask, *args):
         return []
     # now write each desired rr
     return foreach_rrs(wrx_function, *args, mask=mask)
+"""
 wrX_description="""
 """
-add_command(Command('wra <file> [<rrid>[:<rrid>]]', 'write requests and responses', wrX_description, lambda *args: wrx_eraser(0xf, *args)))
-add_command(Command('wrh <file> [<rrid>[:<rrid>]]', 'write request and response headers', wrX_description, lambda *args: wrx_eraser(0xe, *args)))
-add_command(Command('wrd <file> [<rrid>[:<rrid>]]', 'write request and response data', wrX_description, lambda *args: wrx_eraser(0xd, *args)))
-add_command(Command('wrq <file> [<rrid>[:<rrid>]]', 'write requests verbose', wrX_description, lambda *args: wrx_eraser(0xb, *args)))
-add_command(Command('wrqh <file> [<rrid>[:<rrid>]]', 'write request headers', wrX_description, lambda *args: wrx_eraser(0xa, *args)))
-add_command(Command('wrqd <file> [<rrid>[:<rrid>]]', 'write request data', wrX_description, lambda *args: wrx_eraser(0x9, *args)))
-add_command(Command('wrs <file> [<rrid>[:<rrid>]]', 'write responses verbose', wrX_description, lambda *args: wrx_eraser(0x7, *args)))
-add_command(Command('wrsh <file> [<rrid>[:<rrid>]]', 'write response headers', wrX_description, lambda *args: wrx_eraser(0x6, *args)))
-add_command(Command('wrsd <file> [<rrid>[:<rrid>]]', 'write response data', wrX_description, lambda *args: wrx_eraser(0x5, *args)))
+add_command(Command('wra <file> [<rrid>[:<rrid>]]', 'write requests and responses', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0xf)))
+add_command(Command('wrh <file> [<rrid>[:<rrid>]]', 'write request and response headers', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0xe)))
+add_command(Command('wrd <file> [<rrid>[:<rrid>]]', 'write request and response data', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0xd)))
+add_command(Command('wrq <file> [<rrid>[:<rrid>]]', 'write requests verbose', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0xb)))
+add_command(Command('wrqh <file> [<rrid>[:<rrid>]]', 'write request headers', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0xa)))
+add_command(Command('wrqd <file> [<rrid>[:<rrid>]]', 'write request data', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0x9)))
+add_command(Command('wrs <file> [<rrid>[:<rrid>]]', 'write responses verbose', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0x7)))
+add_command(Command('wrsh <file> [<rrid>[:<rrid>]]', 'write response headers', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0x6)))
+add_command(Command('wrsd <file> [<rrid>[:<rrid>]]', 'write response data', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0x5)))
 
 
 
