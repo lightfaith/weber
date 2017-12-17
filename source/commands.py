@@ -10,6 +10,7 @@ from source import log
 from source.lib import *
 from source.structures import RRDB, Request, Response, Event, URI
 from bs4 import Comment
+import difflib
 
 """
 Load configuration
@@ -217,8 +218,40 @@ def test_function(*_):
 add_command(Command('test', 'prints test message', '', test_function))
 
 
+"""
+COMPARE COMMANDS
+"""
+# c
+c_description = """
+"""
+add_command(Command('c', 'compare', c_description, lambda *_: []))
 
+# cr
+cr_description = """
+"""
+add_command(Command('cr', 'compare requests/responses', cr_description, lambda *_: []))
 
+# crc common
+#add_command(Command(''))
+# crd diff
+# cr1 only in first
+# cr2 only in second
+# cru diff upstream downstream
+cru_description = """
+"""
+def cru_function(_, rr, *__):
+    reqd = rr.request_downstream.lines()
+    requ = rr.request_upstream.lines()
+    diffonly = lambda lines: [line for line in lines if line.startswith(('-', '+'))]
+    result = diffonly(difflib.Differ().compare(reqd, requ))
+    try:
+        resd = rr.response_downstream.lines()
+        resu = rr.response_upstream.lines()
+        result += ['', ''] + diffonly(difflib.Differ().compare(resu, resd))
+    except:
+        pass
+    return result
+add_command(Command('cru rrid', 'diff upstream and downstream', cru_description, lambda *args: foreach_rrs(cru_function, *args)))
 
 
 

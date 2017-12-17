@@ -210,8 +210,6 @@ class ConnectionThread(Thread):
             request.headers[b'Host'] = remoteuri.domain.encode() if remoteuri.port in [80, 443] else b'%s:%d' % (remoteuri.domain.encode(), remoteuri.port)
             log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
             
-            print('before', request_downstream.headers[b'Host'])
-            print('after', request.headers[b'Host'])
             
             # tamper request
             if request.tampering and positive(weber.config['overview.realtime'][0]):
