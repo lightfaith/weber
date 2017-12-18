@@ -50,12 +50,20 @@ class Proxy(Thread):
         # set up server socket
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_socket.bind((weber.config['proxy.host'][0], weber.config['proxy.port'][0]))
+        try:
+            self.server_socket.bind((weber.config['proxy.host'][0], weber.config['proxy.port'][0]))
+        except Exception as e:
+            log.err('Cannot bind: %s' % (str(e)))
+            return
 
         # set up server socket for SSL
         self.ssl_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.ssl_server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.ssl_server_socket.bind((weber.config['proxy.host'][0], weber.config['proxy.sslport'][0]))
+        try:
+            self.ssl_server_socket.bind((weber.config['proxy.host'][0], weber.config['proxy.sslport'][0]))
+        except Exception as e:
+            log.err('Cannot bind: %s' % (str(e)))
+            return
         self.ssl_server_socket = ssl.wrap_socket(self.ssl_server_socket, certfile=weber.config['proxy.sslcert'][0], keyfile=weber.config['proxy.sslkey'][0], server_side=True, do_handshake_on_connect=False)
         
         weber.mapping.add_init(self.init_target)
@@ -91,8 +99,11 @@ class Proxy(Thread):
 
 
     def run(self):
-        self.server_socket.listen(1)
-        self.ssl_server_socket.listen(1)
+        try:
+            self.server_socket.listen(1)
+            self.ssl_server_socket.listen(1)
+        except Exception as e:
+            log.err('Cannot listen.')
 
         while True:
             r, _, _ = select([self.server_socket, self.ssl_server_socket, self.stopper[0]], [], [])
@@ -254,26 +265,20 @@ class ConnectionThread(Thread):
             response_upstream.tampering = False
             weber.rrdb.add_response(self.rrid, response_upstream, response)
             
-            # alter redirects # TODO test 302, 303
+            # alter redirects # TODO test 302, 303, # TODO more?
             if response.statuscode in [301, 302, 303]:
-                newremote = URI(response.headers[b'Location'])
-                newlocal = weber.mapping.get_local(newremote)
-                response.headers[b'Location'] = newlocal.__bytes__()
+                location = response.headers[b'Location']
+                if location.startswith((b'http://', b'https://')): # absolute redirect
+                    newremote = URI(response.headers[b'Location'])
+                    newlocal = weber.mapping.get_local(newremote)
+                    response.headers[b'Location'] = newlocal.__bytes__()
+                else: # relative redirect
+                    pass
                 response.statuscode = 302 # TODO just for debugging
 
-            # TODO change incoming links - probably complete
+            # change incoming links - probably complete
             for starttag, endtag, attr in Response.link_tags:
                 response.replace_links(starttag, endtag, attr)
-            #for tagname, attr_key, attr_value in Response.link_tags:
-            #    if tagname == 'a': # skip a href, # TODO testing new method
-            #        continue
-            #    olds = response.find_tags(tagname, attr_key=attr_key, attr_value=attr_value, form='soup')
-            #    for old in olds:
-            #        old_value = old[attr_key]
-            #        if old_value.partition('://')[0] in ('http', 'https'):
-            #            new = weber.mapping.get_local(old_value)
-            #            old[attr_key] = new.get_value()
-            #            #print('new', old)
 
             log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
 
