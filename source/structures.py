@@ -41,10 +41,10 @@ class Request():
         if not self.should_tamper:
             self.forward()
 
+
     def parse(self, data):
         # parse given bytes (from socket, editor, file, ...)
         self.original = data
-
         lines = data.splitlines()
         self.method, self.path, self.version = tuple(lines[0].split(b' '))
         self.parameters = {}
@@ -76,8 +76,8 @@ class Request():
         self.headers.pop(b'If_Range', None)
 
 
-    def clone(self):
-        return Request(self.original, False) # TODO or self.should_tamper? probably not, used for creating backups
+    def clone(self, should_tamper=False):
+        return Request(self.bytes(), should_tamper) 
 
     def forward(self):
         self.tampering = False
@@ -170,7 +170,6 @@ class Response():
     def parse(self, data):
         # parse given bytes (from socket, editor, file, ...)
         self.original = data
-        
         lines = data.split(b'\r\n')
         self.version = lines[0].partition(b' ')[0]
         self.statuscode = int(lines[0].split(b' ')[1])
@@ -242,8 +241,8 @@ class Response():
         self.headers.pop(b'Upgrade', None)
 
 
-    def clone(self):
-        return Response(self.original, True) # TODO or self.should_tamper? probably yes, copy is after forward
+    def clone(self, should_tamper=True):
+        return Response(self.bytes(), should_tamper) 
 
     def forward(self):
         self.tampering = False
@@ -434,7 +433,7 @@ class RRDB():
             indices = list(range(minimum, maximum+1))[(-10 if showlast else 0):]
        
         if positive(weber.config['tamper.showupstream'][0]):
-            keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request_upsstream.tampering or (self.rrs[x].response_upstream is not None and self.rrs[x].response_upstream.tampering)]
+            keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request_upstream.tampering or (self.rrs[x].response_upstream is not None and self.rrs[x].response_upstream.tampering)]
         else:
             keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request_downstream.tampering or (self.rrs[x].response_downstream is not None and self.rrs[x].response_downstream.tampering)]
         return (OrderedDict([(i, self.rrs[i]) for i in sorted(indices) if i in keys]), noproblem)
@@ -473,7 +472,12 @@ class RR():
         self.request_upstream = request_upstream
         self.response_upstream = None
         self.response_downstream = None
+        self.uri_downstream = None
+        self.uri_upstream = None
         self.eid = None
+    
+    def __str__(self):
+        return 'RR(%s <--> %s)' % (self.uri_downstream, self.uri_upstream)
 
     def add_response(self, response_upstream, response_downstream):
         self.response_upstream = response_upstream

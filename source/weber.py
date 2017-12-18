@@ -8,6 +8,11 @@ from collections import OrderedDict
 Default configuration options
 """
 config = OrderedDict()
+# brute settings
+config['brute.placeholder'] = ('###', str) # placeholder start and end, e.g. ###credendials:0###
+config['brute.valueseparator'] =   (':', str)   # separator between values
+config['brute.setseparator'] =   ('\n', str)   # separator between value sets
+
 # debug settings
 config['debug.command'] =    (False, bool)   # stuff relevant to user commands
 config['debug.config'] =     (False, bool)   # stuff relevant to configuration
@@ -22,23 +27,23 @@ config['edit.command'] = ('vim %s', str)
 
 # overview settings
 config['overview.realtime'] = (True, bool)  # show request/response communication on the fly
-config['overview.size'] = (True, bool)  # show response size in overview # TODO
-config['overview.time'] = (True, bool)  # show delay in overview # TODO
+config['overview.size'] =     (True, bool)  # show response size in overview # TODO
+config['overview.time'] =     (True, bool)  # show delay in overview # TODO
 
 # proxy-relevant settings
-config['proxy.host'] = ('localhost', str)
-config['proxy.port'] = (8555, int)
-config['proxy.sslport'] = (8556, int)
-config['proxy.sslcert'] = ('cert.pem', str)
-config['proxy.sslkey'] = ('key.pem', str)
+config['proxy.host'] =     ('localhost', str)
+config['proxy.port'] =     (8555, int)
+config['proxy.sslport'] =  (8556, int)
+config['proxy.sslcert'] =  ('cert.pem', str)
+config['proxy.sslkey'] =   ('key.pem', str)
 config['proxy.threaded'] = (True, bool)
 
 # spoof
 config['spoof.arguments'] = (False, bool) # should arguments be taken into consideration for spoofing
 
 # tamper
-config['tamper.requests'] = (False, bool) # should all requests be tampered by default?
-config['tamper.responses'] = (False, bool) # should all responses be tampered by default?
+config['tamper.requests'] =     (False, bool) # should all requests be tampered by default?
+config['tamper.responses'] =    (False, bool) # should all responses be tampered by default?
 config['tamper.showupstream'] = (True, bool) # what version of RR should be presented?
 
 
@@ -70,6 +75,11 @@ mappings = None
 Spoof dictionary (URI in str format  ->  path to file)
 """
 spoofs = {}
+
+"""
+Values for bruteforcing - key: list (lines) of list (values at index)
+"""
+brutes = {}
 
 
 """

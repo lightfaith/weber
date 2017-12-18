@@ -219,6 +219,50 @@ def test_function(*_):
 add_command(Command('test', 'prints test message', '', test_function))
 
 
+
+"""
+BRUTE COMMANDS
+"""
+# b
+b_description = """
+"""
+def b_function(*args):
+    return ['    %s  %s  [%s, ...]' % (k, v[0], str([x.decode() for x in v[1][0]])) for k, v in weber.brutes.items()]
+add_command(Command('b', 'print brute values (alias for `pb`)', b_description, b_function))
+
+# bl
+bl_description = """
+"""
+def bl_function(*args):
+    try:
+        key = args[0]
+    except Exception as e:
+        log.err('Invalid brute key.')
+        return []
+    try:
+        path = args[1]
+        with open(path, 'rb') as f:
+            weber.brutes[key] = (path, [line.split(weber.config['brute.valueseparator'][0].encode()) for line in f.read().split(weber.config['brute.setseparator'][0].encode())])
+        return []
+    except Exception as e:
+        log.err('Cannot open file.')
+        return []
+add_command(Command('bl <key> <path>', 'load file for brute', bl_description, bl_function))
+
+# br
+br_description = """
+"""
+add_command(Command('br', 'brute from rrid', br_description, lambda *_: []))
+
+# bra 
+bra_description = """
+"""
+def bra_function(_, rr, *__):
+    weber.proxy.add_connectionthread_from_template(rr)
+    return []
+add_command(Command('bra [<rrid>[:<rrid>]]', 'brute from rrids for all sets', bra_description, lambda *args: foreach_rrs(bra_function, *args)))
+# TODO brd - brute rrid until difference
+
 """
 COMPARE COMMANDS
 """
@@ -232,7 +276,7 @@ cr_description = """
 """
 add_command(Command('cr', 'compare requests/responses', cr_description, lambda *_: []))
 
-# crc common
+# crc common # TODO
 #add_command(Command(''))
 # crd diff
 # cr1 only in first
@@ -471,6 +515,9 @@ PRINT COMMANDS
 """
 add_command(Command('p', 'print', '', lambda *_: []))
 
+# pb
+add_command(Command('pb', 'print brute lists', b_description, b_function))
+
 # pc
 def pc_function(_, rr, *__):
     try:
@@ -599,7 +646,7 @@ add_command(Command('pws', 'print spoof settings', pws_description, pws_function
 # pwt
 pwt_description="""Alive ConnectionThread objects are printed with `pt` command. This is mostly for debug purposes.
 """
-add_command(Command('pwt', 'print alive threads', '', lambda *_: ['    %s:%d%s' % (t.host.decode(), t.port, t.path) if t.port != 0 else '    ?' for t in weber.proxy.threads]))
+add_command(Command('pwt', 'print alive threads', '', lambda *_: ['    %s' % ('?' if t.remoteuri is None else t.remoteuri) for t in weber.proxy.threads]))
 
 """
 Quit

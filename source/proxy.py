@@ -97,7 +97,15 @@ class Proxy(Thread):
                     return False
         return False
 
-
+    def add_connectionthread_from_template(self, template_rr):
+        # create new connection in new thread
+        t = ConnectionThread(None, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'), template_rr)
+        t.start()
+        if positive(weber.config.get('proxy.threaded')[0]):
+            self.threads.append(t)
+        else:
+            t.join()
+        
     def run(self):
         try:
             self.server_socket.listen(1)
@@ -161,7 +169,12 @@ class Proxy(Thread):
 
 
 class ConnectionThread(Thread):
-    def __init__(self, conn, rrid, tamper_request, tamper_response):
+    def __init__(self, conn, rrid, tamper_request, tamper_response, template_rr=None):
+        # conn - socket to browser, None if from template
+        # rrid - index of request-response pair
+        # tamper_request - should the request forwarding be paused?
+        # tamper_response - should the response forwarding be paused?
+        # known_rr - known request (e.g. copy of existing for bruteforcing) - don't communicate with browser if not None
         Thread.__init__(self)
         self.conn = conn
         self.host = b'?'  # for thread printing
@@ -171,6 +184,7 @@ class ConnectionThread(Thread):
         #self.ssl = (uri.scheme == 'https')
         self.tamper_request = tamper_request
         self.tamper_response = tamper_response
+        self.template_rr = template_rr
         #print('New ConnectionThread, tampering request', self.tamper_request, ', response', self.tamper_response)
         self.stopper = os.pipe() # if Weber is terminated while tampering
         #print('new thread: uri', uri, type(uri))
@@ -187,41 +201,53 @@ class ConnectionThread(Thread):
 
     def run(self):
         while self.keepalive:
-            # receive request from browser
-            request = self.receive_request()
+            # receive request from browser / copy from template RR
+            if self.template_rr is None:
+                request = self.receive_request()
+            else:
+                request = self.template_rr.request_upstream.clone(self.tamper_request)
             
             if request is None: # socket closed? socket problem?
                 #log.debug_parsing('Request is broken, ignoring...')
-                #return
                 break
-
             self.keepalive = (request.headers.get(b'Connection') == b'Keep-Alive')
+            
+            # get URI() from request
+            if self.template_rr is None:
+                self.host, _, port = request.headers[b'Host'].partition(b':')
+                self.port = int(port)
+                self.localuri = URI(URI.build_str(self.host, self.port, request.path))
+            else:
+                self.localuri = self.template_rr.uri_upstream.clone()
+            log.debug_mapping('request source: %s ' % (str(self.localuri)))
+            log.debug_parsing('\n'+'-'*15+'\n'+str(request)+'\n'+'='*20)
+            self.path = request.path.decode()
             
             # create request backup, move into RRDB
             request_downstream = request.clone()
             request.sanitize()
             weber.rrdb.add_request(self.rrid, request_downstream, request)
+            weber.rrdb.rrs[self.rrid].uri_downstream = self.localuri
             
-            # get URI() from request
-            self.host, _, port = request.headers[b'Host'].partition(b':')
-            self.port = int(port)
-            self.localuri = URI(URI.build_str(self.host, self.port, request.path))
-            log.debug_mapping('request source: %s ' % (str(self.localuri)))
-            log.debug_parsing('\n'+'-'*15+'\n'+str(request)+'\n'+'='*20)
-            self.path = request.path.decode()
             
+            # change outgoing links (useless if from template)
+            if self.template_rr is None:
+                self.remoteuri = weber.mapping.get_remote(self.localuri)
+                if self.remoteuri is None:
+                    log.err('Cannot forward - local URI is not mapped. Terminating thread...')
+                    break
+                request.path = self.remoteuri.path.encode()
+                request.parse_method()
+                request.headers[b'Host'] = self.remoteuri.domain.encode() if self.remoteuri.port in [80, 443] else b'%s:%d' % (self.remoteuri.domain.encode(), self.remoteuri.port)
+                log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
+            else:
+                self.remoteuri = self.localuri.clone() # as we are working with upstream rr already
+            
+            weber.rrdb.rrs[self.rrid].uri_upstream = self.remoteuri
+            
+            # change brute placeholders
+            # TODO
 
-            # change outgoing links
-            remoteuri = weber.mapping.get_remote(self.localuri)
-            if remoteuri is None:
-                log.err('Cannot forward - local URI is not mapped. Terminating thread...')
-                break
-            request.path = remoteuri.path.encode()
-            request.parse_method()
-            request.headers[b'Host'] = remoteuri.domain.encode() if remoteuri.port in [80, 443] else b'%s:%d' % (remoteuri.domain.encode(), remoteuri.port)
-            log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
-            
-            
             # tamper request
             if request.tampering and positive(weber.config['overview.realtime'][0]):
                 log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
@@ -233,7 +259,7 @@ class ConnectionThread(Thread):
 
             # forward request to server        
             log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
-            response = self.forward(remoteuri, request.bytes())
+            response = self.forward(self.remoteuri, request.bytes())
             
             ###############################################################################
             if response is None:
@@ -256,7 +282,7 @@ class ConnectionThread(Thread):
             #response = weber.rrdb.rrs[self.rrid].response # reload in case it's modified # TODO should be solved with Response.parse() already
 
             # spoof if desired (with or without GET arguments)
-            spoof_path = remoteuri.get_value() if positive(weber.config['spoof.arguments'][0]) else remoteuri.get_value().partition('?')[0]
+            spoof_path = self.remoteuri.get_value() if positive(weber.config['spoof.arguments'][0]) else self.remoteuri.get_value().partition('?')[0]
             if spoof_path in weber.spoofs.keys():
                 response.spoof(weber.spoofs[spoof_path])
 
@@ -265,44 +291,50 @@ class ConnectionThread(Thread):
             response_upstream.tampering = False
             weber.rrdb.add_response(self.rrid, response_upstream, response)
             
-            # alter redirects # TODO test 302, 303, # TODO more?
-            if response.statuscode in [301, 302, 303]:
-                location = response.headers[b'Location']
-                if location.startswith((b'http://', b'https://')): # absolute redirect
-                    newremote = URI(response.headers[b'Location'])
-                    newlocal = weber.mapping.get_local(newremote)
-                    response.headers[b'Location'] = newlocal.__bytes__()
-                else: # relative redirect
-                    pass
-                response.statuscode = 302 # TODO just for debugging
 
-            # change incoming links - probably complete
-            for starttag, endtag, attr in Response.link_tags:
-                response.replace_links(starttag, endtag, attr)
+            # alter redirects, useless if from template # TODO test 302, 303, # TODO more?
+            if self.template_rr is None:
+                if response.statuscode in [301, 302, 303]:
+                    location = response.headers[b'Location']
+                    if location.startswith((b'http://', b'https://')): # absolute redirect
+                        newremote = URI(response.headers[b'Location'])
+                        newlocal = weber.mapping.get_local(newremote)
+                        response.headers[b'Location'] = newlocal.__bytes__()
+                    else: # relative redirect
+                        pass
+                    response.statuscode = 302 # TODO just for debugging
 
-            log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
+                # change incoming links, useless if from template
+                for starttag, endtag, attr in Response.link_tags:
+                    response.replace_links(starttag, endtag, attr)
 
-            # send response to browser
-            try:
-                self.send_response(response)
-            except socket.error as e:
-                if isinstance(e.args, tuple):
-                    if e.args[0] == errno.EPIPE:
-                        log.err('Connection closed for #%d, response not forwarded.' % (self.rrid))
+                log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
+
+            # send response to browser if not from template
+            if self.template_rr is None:
+                try:
+                    self.send_response(response)
+                except socket.error as e:
+                    if isinstance(e.args, tuple):
+                        if e.args[0] == errno.EPIPE:
+                            log.err('Connection closed for #%d, response not forwarded.' % (self.rrid))
+                        else:
+                            raise e
                     else:
                         raise e
-                else:
-                    raise e
-            except Exception as e:
-                log.err('Failed to forward response (#%d): %s' % (self.rrid, str(e)))
-                log.err('See traceback:')
-                traceback.print_exc()
+                except Exception as e:
+                    log.err('Failed to forward response (#%d): %s' % (self.rrid, str(e)))
+                    log.err('See traceback:')
+                    traceback.print_exc()
 
             # print if desired
             if positive(weber.config['overview.realtime'][0]):
                 log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
             time.sleep(10)
-        self.conn.close()
+        
+        # close connection if not None (from template)
+        if self.conn:
+            self.conn.close()
 
 
     def receive_request(self):
