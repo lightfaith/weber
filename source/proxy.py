@@ -97,9 +97,9 @@ class Proxy(Thread):
                     return False
         return False
 
-    def add_connectionthread_from_template(self, template_rr):
+    def add_connectionthread_from_template(self, template_rr, brute_set):
         # create new connection in new thread
-        t = ConnectionThread(None, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'), template_rr)
+        t = ConnectionThread(None, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'), template_rr, brute_set)
         t.start()
         if positive(weber.config.get('proxy.threaded')[0]):
             self.threads.append(t)
@@ -169,12 +169,13 @@ class Proxy(Thread):
 
 
 class ConnectionThread(Thread):
-    def __init__(self, conn, rrid, tamper_request, tamper_response, template_rr=None):
+    def __init__(self, conn, rrid, tamper_request, tamper_response, template_rr=None, brute_set=None):
         # conn - socket to browser, None if from template
         # rrid - index of request-response pair
         # tamper_request - should the request forwarding be paused?
         # tamper_response - should the response forwarding be paused?
         # known_rr - known request (e.g. copy of existing for bruteforcing) - don't communicate with browser if not None
+        # brute_set - list of values destined for brute placeholder replacing
         Thread.__init__(self)
         self.conn = conn
         self.host = b'?'  # for thread printing
@@ -185,6 +186,7 @@ class ConnectionThread(Thread):
         self.tamper_request = tamper_request
         self.tamper_response = tamper_response
         self.template_rr = template_rr
+        self.brute_set = brute_set
         #print('New ConnectionThread, tampering request', self.tamper_request, ', response', self.tamper_response)
         self.stopper = os.pipe() # if Weber is terminated while tampering
         #print('new thread: uri', uri, type(uri))
@@ -246,7 +248,13 @@ class ConnectionThread(Thread):
             weber.rrdb.rrs[self.rrid].uri_upstream = self.remoteuri
             
             # change brute placeholders
-            # TODO
+            if self.brute_set is not None:
+                brute_bytes = request.bytes()
+                placeholder = weber.config['brute.placeholder'][0].encode()
+                for i in range(len(self.brute_set)):
+                    brute_bytes = brute_bytes.replace(b'%s%d%s' % (placeholder, i, placeholder), self.brute_set[i])
+                request.parse(brute_bytes)
+
 
             # tamper request
             if request.tampering and positive(weber.config['overview.realtime'][0]):

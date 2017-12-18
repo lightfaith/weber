@@ -9,7 +9,7 @@ Default configuration options
 """
 config = OrderedDict()
 # brute settings
-config['brute.placeholder'] = ('###', str) # placeholder start and end, e.g. ###credendials:0###
+config['brute.placeholder'] = ('###', str) # placeholder start and end, e.g. ###0###
 config['brute.valueseparator'] =   (':', str)   # separator between values
 config['brute.setseparator'] =   ('\n', str)   # separator between value sets
 
@@ -77,9 +77,9 @@ Spoof dictionary (URI in str format  ->  path to file)
 spoofs = {}
 
 """
-Values for bruteforcing - key: list (lines) of list (values at index)
+(path, list of lists (values for bruteforcing))
 """
-brutes = {}
+brute = None
 
 
 """

@@ -225,10 +225,6 @@ class Response():
             self.data = b'\r\n'.join(lines[line_index:])
             # TODO test for matching Content-Type (HTTP Response-Splitting etc.)
         
-        #if b'Content-Type' not in self.headers or self.headers[b'Content-Type'].startswith(b'text/html'):
-        #    self.soup = soup(self.data.replace(b'<!--', b'<comment>').replace(b'-->', b'</comment>'), "lxml") # TODO this is madness
-        #print(self.soup.prettify())
-        
     
     def sanitize(self):
         # alter the Response so we don't have to deal with problematic options, e.g. chunked
@@ -288,13 +284,6 @@ class Response():
         result += b'%s %d %s\r\n' % (self.version, self.statuscode, self.status)
         result += b'\r\n'.join([b'%s: %s' % (k, b'' if v is None else v) for k, v in self.headers.items()])
         
-        #if self.soup is None:
-        #    data = self.data
-        #else:
-        #    data = str(self.soup).encode('utf8')
-
-        # fix temporary changes  
-        #data = data.replace(b'<comment>', b'<!--').replace(b'</comment>', b'-->') # TODO this is madness
         result += b'\r\n\r\n' + self.data + b'\r\n\r\n'
         # TODO self.compute_content_length() here?
         return result

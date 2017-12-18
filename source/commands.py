@@ -227,7 +227,8 @@ BRUTE COMMANDS
 b_description = """
 """
 def b_function(*args):
-    return ['    %s  %s  [%s, ...]' % (k, v[0], str([x.decode() for x in v[1][0]])) for k, v in weber.brutes.items()]
+    return ['    %s  [%s, ...]' % (weber.brute[0], str(weber.brute[1][0]))]
+    #return [str(x) for x in weber.brute]
 add_command(Command('b', 'print brute values (alias for `pb`)', b_description, b_function))
 
 # bl
@@ -235,14 +236,9 @@ bl_description = """
 """
 def bl_function(*args):
     try:
-        key = args[0]
-    except Exception as e:
-        log.err('Invalid brute key.')
-        return []
-    try:
-        path = args[1]
+        path = args[0]
         with open(path, 'rb') as f:
-            weber.brutes[key] = (path, [line.split(weber.config['brute.valueseparator'][0].encode()) for line in f.read().split(weber.config['brute.setseparator'][0].encode())])
+            weber.brute = (path, [line.split(weber.config['brute.valueseparator'][0].encode()) for line in f.read().split(weber.config['brute.setseparator'][0].encode())])
         return []
     except Exception as e:
         log.err('Cannot open file.')
@@ -252,13 +248,20 @@ add_command(Command('bl <key> <path>', 'load file for brute', bl_description, bl
 # br
 br_description = """
 """
+# NOTE only one bruter at a time can be used
 add_command(Command('br', 'brute from rrid', br_description, lambda *_: []))
 
 # bra 
 bra_description = """
 """
 def bra_function(_, rr, *__):
-    weber.proxy.add_connectionthread_from_template(rr)
+    # run with values
+    if weber.brute is None: 
+        log.err('No brute loaded, see `bl`.')
+        return []
+    max_setlen = max(len(x) for x in weber.brute[1])
+    for brute_set in [x for x in weber.brute[1] if len(x) == max_setlen]:
+        weber.proxy.add_connectionthread_from_template(rr, brute_set)
     return []
 add_command(Command('bra [<rrid>[:<rrid>]]', 'brute from rrids for all sets', bra_description, lambda *args: foreach_rrs(bra_function, *args)))
 # TODO brd - brute rrid until difference
