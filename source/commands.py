@@ -557,22 +557,24 @@ def pc_function(_, rr, *__, **___):
         cookies = r.headers[b'Cookie'].split(b';')
         cookies = dict([tuple(c.split(b'=')) for c in cookies])
         maxlen = max([0]+[len(k.decode().strip()) for k in cookies.keys()])
-        return ['%*s: %s' % (maxlen, k.decode(), v.decode()) for k,v in cookies.items()]
+        return ['%*s: %s' % (maxlen, k.decode().strip(), v.decode()) for k,v in cookies.items()]
     except:
         return []
 pc_description = """Cookies for specific requests are printed with `pc` command. To see Set-Cookie responses, use `pcs` command.
 """
 add_command(Command('pc [<rrid>[:<rrid>]]', 'print cookies', pc_description, lambda *args: foreach_rrs(pc_function, *args)))
 add_command(Command('ptc [<rrid>[:<rrid>]]', 'print cookies from templates', pc_description, lambda *args: foreach_rrs(pc_function, fromtemplate=True, *args)))
+
 # pcs
 def pcs_function(_, rr, *__, **___):
     try:
         r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
-        cookie = r.headers[b'Set-Cookie']
-        print(cookie)
-        # TODO parse cookie parameters
-        return []
+        cookies = r.headers[b'Set-Cookie'].split(b';')
+        attrs = dict([(tuple(c.split(b'=')+[b''])[:2]) for c in cookies])
+        maxlen = max([0]+[len(k.decode().strip()) for k in attrs.keys()])
+        return ['%*s%s' % (maxlen, k.decode().strip(), (': '+v.decode() if len(v)>0 else '')) for k,v in attrs.items()]
     except:
+        #traceback.print_exc()
         return []
 pcs_description = """Set-Cookie headers can be searched with `pcs` command.
 """
