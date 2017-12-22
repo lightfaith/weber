@@ -105,6 +105,7 @@ class Proxy(Thread):
             self.threads.append(t)
         else:
             t.join()
+        return t.rrid
         
     def run(self):
         try:
@@ -191,6 +192,7 @@ class ConnectionThread(Thread):
         self.stopper = os.pipe() # if Weber is terminated while tampering
         #print('new thread: uri', uri, type(uri))
         self.localuri = None
+        self.remoteuri = None
 
         self.keepalive = True
         self.terminate = False
@@ -263,7 +265,6 @@ class ConnectionThread(Thread):
             if self.stopper[0] in r:
                 # Weber is terminating
                 break
-            #request = weber.rrdb.rrs[self.rrid].request # reload in case it's modified # TODO should be solved with Request.parse() already
 
             # forward request to server        
             log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
@@ -287,7 +288,6 @@ class ConnectionThread(Thread):
             if self.stopper[0] in r:
                 # Weber is terminating
                 break
-            #response = weber.rrdb.rrs[self.rrid].response # reload in case it's modified # TODO should be solved with Response.parse() already
 
             # spoof if desired (with or without GET arguments)
             spoof_path = self.remoteuri.get_value() if positive(weber.config['spoof.arguments'][0]) else self.remoteuri.get_value().partition('?')[0]
@@ -310,7 +310,7 @@ class ConnectionThread(Thread):
                         response.headers[b'Location'] = newlocal.__bytes__()
                     else: # relative redirect
                         pass
-                    response.statuscode = 302 # TODO just for debugging
+                    response.statuscode = 302 # TODO just for debugging (or NOT?)
 
                 # change incoming links, useless if from template
                 for starttag, endtag, attr in Response.link_tags:

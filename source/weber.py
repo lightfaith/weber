@@ -63,6 +63,11 @@ Request-response database (initialized in structures.py)
 rrdb = None
 
 """
+Template database (initialized in structures.py)
+"""
+tdb = None
+
+"""
 Events (filled on request in commands.py)
 """
 events = {}

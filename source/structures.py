@@ -376,16 +376,23 @@ class RRDB():
     def __init__(self):
         self.rrid = 0 # last rrid
         self.rrs = OrderedDict() # rrid:RR()
+        self.lock = threading.Lock()
     
     def get_new_rrid(self): # generated in Proxy(), so it is thread-safe
-        self.rrid += 1
-        return self.rrid
+        with self.lock:
+            self.rrid += 1
+            return self.rrid
 
     def add_request(self, rrid, request_downstream, request_upstream):
         self.rrs[rrid] = RR(request_downstream, request_upstream)
 
     def add_response(self, rrid, response_upstream, response_downstream):
         self.rrs[rrid].add_response(response_upstream, response_downstream)
+    
+    def add_rr(self, rr):
+        rrid = self.get_new_rrid()
+        self.rrs[rrid] = rr
+        return rrid
 
     def get_desired_rrs(self, arg, showlast=False, onlytampered=False):
         # this method parses rrid specifier (e.g. 1,2,3-5,10)
@@ -432,7 +439,10 @@ class RRDB():
         result = []
         arg = None if len(args)<1 else args[0]
         eidlen = max([3]+[len(str(e)) for e,_ in weber.events.items()])
-        desired = self.get_desired_rrs(arg, showlast=showlast, onlytampered=onlytampered)[0]
+        desired = self.get_desired_rrs(arg, showlast=showlast, onlytampered=onlytampered)
+        if not desired:
+            return []
+        desired = desired[0]
         reqlen = max([20]+[1+len(v.request_string(short=True, colored=True)) for v in desired.values()])
         
         # TODO size, time if desired
@@ -451,6 +461,7 @@ class RRDB():
             
 
 weber.rrdb = RRDB()
+weber.tdb = RRDB()
 
 """
 Request/Response pairs (both downstream and upstream versions)
@@ -465,6 +476,20 @@ class RR():
         self.uri_upstream = None
         self.eid = None
     
+    def clone(self):
+        result = RR(self.request_downstream.clone(), self.request_upstream.clone())
+        if self.response_upstream is not None:
+            result.response_upstream = self.response_upstream.clone()
+            result.response_upstream.tampering = False
+        if self.response_downstream is not None:
+            result.response_downstream = self.response_downstream.clone()
+            result.response_downstream.tampering = False
+        if self.uri_upstream is not None:
+            result.uri_upstream = self.uri_upstream.clone()
+        if self.uri_downstream is not None:
+            result.uri_downstream = self.uri_downstream.clone()
+        return result
+
     def __str__(self):
         return 'RR(%s <--> %s)' % (self.uri_downstream, self.uri_upstream)
 
@@ -568,14 +593,6 @@ class Mapping():
         
         log.debug_mapping('get_local() for %s' % (remote.get_value()))
         with self.lock:
-            # try to get existing exact match - TODO no need for specific code, is it not?
-            """
-            if remote.__bytes__() in self.map.keys():
-                r = self.map[remote.__bytes__()]
-                log.debug_mapping('getting local: found exact match: '+str(self.r_l[r])+' <--> '+str(r))
-                return self.r_l[r]
-            log.debug_mapping('getting local: searching for matching domain mapping...')
-            """
             # create new domain mapping if no match, else use existing
             realpath = remote.path
             remote.path = '/'
@@ -618,67 +635,13 @@ class Mapping():
         log.debug_mapping('get_remote():   %s --> %s' % (str(local), str(remote)))
         return remote
 
-
-
-        """if isinstance(uri, URI):
-            uri = uri.__bytes__()
-
-        if result is None:
-            # try to get WEBER-MAPPING
-            #pattern = re.compile('/WEBER-MAPPING/[0-9]+')
-            # TODO will be compatible with domain append approach?
-            urisplit = uri.split(b'/')
-            remotebase = self.l_r.get(b'/'.join(urisplit[:5]))
-            if remotebase is None:
-                log.err('Non-existent remote mapping.')
-                return None
-            else:
-                result = b'/'.join([remotebase] + urisplit[5:])
-                print('get_remote result', result)
-
-        return result
-        """
-
     
     def uri_is_mapped(self, uri):
         if not isinstance(uri, URI):
             uri = URI(uri).clone()
         uri.path = '/'
         return uri.__bytes__() in self.map.keys()
-    
-    def get_remote_hostport(self, key):
-        key = URI(key)
-        matches = [x for x in self.l_r.keys() if x.domain == key.domain and x.port == key.port]
-        if len(matches)>0:
-            if self.l_r[matches[0]].port not in [80, 443]:
-                return ('%s:%d' % (self.l_r[matches[0]].domain, self.l_r[matches[0]].port)).encode()
-            else:
-                return self.l_r[matches[0]].domain.encode()
-        else:
-            return None
 
-    def get_local_hostport(self, key):
-        key = URI(key)
-        matches = [x for x in self.r_l.keys() if x.domain == key.domain and x.port == key.port]
-        if len(matches)>0:
-            if self.r_l[matches[0]].port not in [80, 443]:
-                return ('%s:%d' % (self.r_l[matches[0]].domain, self.r_l[matches[0]].port)).encode()
-            else:
-                return self.r_l[matches[0]].domain.encode()
-        else:
-            return None
-    
-    def get_local_uri_from_hostport_path(self, hostport, path):
-        host, _, port = hostport.decode().partition(':')
-        port = int(port)
-        path = path.decode()
-        scheme = 'https' if port == weber.config['proxy.sslport'][0] else 'http'
-        #print(scheme, type(scheme), host, type(host), port, type(port), path, type(path))
-        for uri, _ in self.l_r.items():
-            #print('comparing to: ', uri.scheme, type(uri.scheme), uri.domain, type(uri.domain), uri.port, type(uri.port), uri.path, type(uri.path) )
-            if uri.scheme == scheme and uri.domain == host and uri.port == port and uri.path == path:
-                return uri
-        return None
 
 weber.mapping = Mapping()
 
@@ -790,4 +753,3 @@ class Event():
         self.rrids = set()
         self.type = ''
 
-    

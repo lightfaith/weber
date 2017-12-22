@@ -78,11 +78,11 @@ def run_command(fullcommand):
     # only help?
     if command.endswith('?'):
         lines = []
-        for k, v in weber.commands.items():
+        for k, v in sorted(weber.commands.items(), key=lambda x:x[0]):
             length = 40
             if k == '': # empty command - just print long description
                 continue
-            # TODO detailed help for exact match
+            
             if k.startswith(command[:-1]) and len(k)-len(command[:-1])<=1:
                 # do colors
                 cmd, _, args = v.command.partition(' ')
@@ -143,16 +143,19 @@ def run_command(fullcommand):
 Important command functions
 """
 
-def foreach_rrs(function, *args, **kwargs):
+def foreach_rrs(function, *args, fromtemplate=False, **kwargs):
     """
     This method iterates through desired RRs and runs desired function on them.
     RRs are expected to be the last item of *args.
     """
     result = []
+    source = weber.tdb if fromtemplate else weber.rrdb
     try:
-        desired_rrs, noproblem = weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1])
+        desired_rrs, noproblem = source.get_desired_rrs(None if len(args)<1 else args[-1])
         desired_rrs = desired_rrs.items()
         arg_interval = -1 if noproblem else len(args)
+    except ValueError: # no items yet
+        return result
     except Exception as e:
         log.err('Cannot get desired rrs: %s' %  (str(e)))
         log.err('See traceback:')
@@ -161,6 +164,7 @@ def foreach_rrs(function, *args, **kwargs):
     for rrid, rr in desired_rrs:
         tmpresult = []
         tmpresult.append('{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
+        kwargs['rr_count'] = len(desired_rrs)
         tmpresult += function(rrid, rr, *args[:arg_interval], **kwargs)
         #tmpresult += function(rrid, rr, *args[1:], **kwargs)
         tmpresult.append('')
@@ -180,7 +184,7 @@ def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
     #        tmpresult.append(t)
     #return tmpresult
     result = []
-    r = rr.response_upstream if positive(weber.config['tamper.showupstream']) else rr.response_downstream # TODO correct approach here?
+    r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream # TODO correct approach here?
     if attrs is None:
         for startbytes, endbytes in startends:
             result += [x[1].decode() for x in find_between(r.data, startbytes, endbytes, inner=valueonly)]
@@ -229,7 +233,7 @@ b_description = """
 def b_function(*args):
     return ['    %s  [%s, ...]' % (weber.brute[0], str(weber.brute[1][0]))]
     #return [str(x) for x in weber.brute]
-add_command(Command('b', 'print brute values (alias for `pb`)', b_description, b_function))
+add_command(Command('b', 'print brute values (alias for `pwb`)', b_description, b_function))
 
 # bl
 bl_description = """
@@ -254,7 +258,7 @@ add_command(Command('br', 'brute from rrid', br_description, lambda *_: []))
 # bra 
 bra_description = """
 """
-def bra_function(_, rr, *__):
+def bra_function(_, rr, *__, **___):
     # run with values
     if weber.brute is None: 
         log.err('No brute loaded, see `bl`.')
@@ -263,7 +267,7 @@ def bra_function(_, rr, *__):
     for brute_set in [x for x in weber.brute[1] if len(x) == max_setlen]:
         weber.proxy.add_connectionthread_from_template(rr, brute_set)
     return []
-add_command(Command('bra [<rrid>[:<rrid>]]', 'brute from rrids for all sets', bra_description, lambda *args: foreach_rrs(bra_function, *args)))
+add_command(Command('bra [<rrid>[:<rrid>]]', 'brute from rrids for all sets', bra_description, lambda *args: foreach_rrs(bra_function, *args, fromtemplate=True)))
 # TODO brd - brute rrid until difference
 
 """
@@ -287,7 +291,7 @@ add_command(Command('cr', 'compare requests/responses', cr_description, lambda *
 # cru diff upstream downstream
 cru_description = """
 """
-def cru_function(_, rr, *__):
+def cru_function(_, rr, *__, **___):
     reqd = rr.request_downstream.lines()
     requ = rr.request_upstream.lines()
     diffonly = lambda lines: [line for line in lines if line.startswith(('-', '+'))]
@@ -408,8 +412,12 @@ add_command(Command('et <eid> <type>', 'define type for an event', et_descriptio
 """
 MODIFY COMMANDS
 """
-m_description='' # TODO create new if not tampered
+m_description = """
+"""
 add_command(Command('m', 'modify', m_description, lambda *_: []))
+mt_description = """
+"""
+add_command(Command('mt', 'modify template', mt_description, lambda *_: []))
 mr_description="""Received requests and responses can be modified using your favourite text editor with `mrq` and `mrs`, respectively. Modifying multiple RRs is not supported (use spoofs instead). 
 Favourite editor command can be configured under edit.command option.
 """
@@ -418,22 +426,43 @@ mrq_description="""
 """
 mrs_description="""
 """
-def mr_function(*args):
+def mr_function(*args, fromtemplate=False): # TODO fromtemplate slightly bugged, 
     # parse command arguments
     try:
+        tid = None
         rrid = int(args[1])
-        if args[0] == 'request': 
-            r = weber.rrdb.rrs[rrid].request_upstream
+        #source = weber.tdb if fromtemplate else weber.rrdb
+
+        if fromtemplate:
+            # modify existing template
+            source = weber.tdb.rrs[rrid]
+        else:
+            # work with real RRs
+            source = weber.rrdb.rrs[rrid]
+        if args[0] == 'request':
+            r = source.request_upstream
         elif args[0] == 'response':
-            r = weber.rrdb.rrs[rrid].response_upstream
+            r = source.response_upstream
         else:
             log.err('Invalid type.')
             return []
+
+        if not r.tampering and not fromtemplate:
+            # create template from RR
+            log.info('Creating template from RR #%d...' % (rrid))
+            tid = weber.tdb.add_rr(weber.rrdb.rrs[rrid].clone())
+            source = weber.tdb.rrs[tid]
+            if args[0] == 'request':
+                r = source.request_upstream
+            elif args[0] == 'response':
+                r = source.response_upstream
+
         if r is None:
             log.err('Non-existent %s for RRID #%d.' % (args[0], rrid))
             return []
     except:
         log.err('Invalid RRID.')
+        #traceback.print_exc()
         return []
     # suppress debugs and realtime overview
     oldconfig = {k:weber.config[k] for k in weber.config.keys() if k.startswith('debug.') or k == 'overview.realtime'}
@@ -445,13 +474,14 @@ def mr_function(*args):
         f.flush()
         subprocess.call((weber.config['edit.command'][0] % (f.name)).split())
         f.seek(0)
+        
         # read back
-        if args[0] == 'request': 
-            #weber.rrdb.rrs[rrid].request = Request(f.read(), r.should_tamper, r.forward_stopper)
-            weber.rrdb.rrs[rrid].request_upstream.parse(f.read())
+        print(args[0], tid)
+        if args[0] == 'request':
+            source.request_upstream.parse(f.read())
         elif args[0] == 'response':
-            #weber.rrdb.rrs[rrid].response = Response(f.read(), r.should_tamper, r.forward_stopper)
-            weber.rrdb.rrs[rrid].response_upstream.parse(f.read())
+            source.response_upstream.parse(f.read())
+                
     # restore debug and realtime overview settings
     for k, v in oldconfig.items():
         weber.config[k] = v
@@ -459,6 +489,8 @@ def mr_function(*args):
         
 add_command(Command('mrq <rrid>', 'modify request', mrq_description, lambda *args: mr_function('request', *args)))
 add_command(Command('mrs <rrid>', 'modify response', mrs_description, lambda *args: mr_function('response', *args)))
+add_command(Command('mtrq <rrid>', 'modify template request', mrq_description, lambda *args: mr_function('request', *args, fromtemplate=True)))
+add_command(Command('mtrs <rrid>', 'modify template response', mrs_description, lambda *args: mr_function('response', *args, fromtemplate=True)))
 
 
 
@@ -474,7 +506,7 @@ add_command(Command('mrs <rrid>', 'modify response', mrs_description, lambda *ar
 """
 OPTIONS COMMANDS
 """
-o_function = lambda *_: ['    %-20s  %s' % (k, (v[0] if v[1] != str else '\''+v[0]+'\'')) for k,v       in weber.config.items()]
+o_function = lambda *_: ['    %-20s  %s' % (k, str(v[0] if v[1] != str else '\''+v[0]+'\'').replace('\n', '\\n').replace('\r', '\\r')) for k,v in weber.config.items()]
 o_description = """Active Weber configuration can be printed with `pwo` and `o` command.
 
 Default configuration is located in source/weber.py.
@@ -518,11 +550,8 @@ PRINT COMMANDS
 """
 add_command(Command('p', 'print', '', lambda *_: []))
 
-# pb
-add_command(Command('pb', 'print brute lists', b_description, b_function))
-
 # pc
-def pc_function(_, rr, *__):
+def pc_function(_, rr, *__, **___):
     try:
         r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
         cookies = r.headers[b'Cookie'].split(b';')
@@ -534,8 +563,9 @@ def pc_function(_, rr, *__):
 pc_description = """Cookies for specific requests are printed with `pc` command. To see Set-Cookie responses, use `pcs` command.
 """
 add_command(Command('pc [<rrid>[:<rrid>]]', 'print cookies', pc_description, lambda *args: foreach_rrs(pc_function, *args)))
+add_command(Command('ptc [<rrid>[:<rrid>]]', 'print cookies from templates', pc_description, lambda *args: foreach_rrs(pc_function, fromtemplate=True, *args)))
 # pcs
-def pcs_function(_, rr, *__):
+def pcs_function(_, rr, *__, **___):
     try:
         r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
         cookie = r.headers[b'Set-Cookie']
@@ -547,47 +577,56 @@ def pcs_function(_, rr, *__):
 pcs_description = """Set-Cookie headers can be searched with `pcs` command.
 """
 add_command(Command('pcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences', pcs_description, lambda *args: foreach_rrs(pcs_function, *args))) #TODO
+add_command(Command('ptcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences from templates', pcs_description, lambda *args: foreach_rrs(pcs_function, fromtemplate=True, *args))) #TODO
 add_command(Command('pe [<eid>[:<eid>]]', 'print events', e_description, e_function))
 
 # pf
 pf_description = """Forms present on given page are shown with `pf` command.
 """
-#add_command(Command('pf [<rrid>[:<rrid>]]', 'print forms', pf_description, lambda *args: foreach_rrs(find_tags, *args, tags=[('form', None, None)], valueonly=False)))
 add_command(Command('pf [<rrid>[:<rrid>]]', 'print forms', pf_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<form', b'</form>')], valueonly=False)))
+add_command(Command('ptf [<rrid>[:<rrid>]]', 'print forms from templates', pf_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<form', b'</form>')], valueonly=False)))
 
 # pl
 pl_description = """Links from all known tags are printed with `pl` command. To see their context, use `plc` command.
 """
 add_command(Command('pl [<rrid>[:<rrid>]]', 'print links', pl_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], attrs=[x[2] for x in Response.link_tags], valueonly=True)))
+add_command(Command('ptl [<rrid>[:<rrid>]]', 'print links from templates', pl_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[x[:2] for x in Response.link_tags], attrs=[x[2] for x in Response.link_tags], valueonly=True)))
 plc_description = """Links from all known tags together with their context are printed with `plc` command.
 """
 add_command(Command('plc [<rrid>[:<rrid>]]', 'print links with context', plc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], valueonly=False)))
+add_command(Command('ptlc [<rrid>[:<rrid>]]', 'print links from templates with context', plc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], valueonly=False)))
 
 # pn
 pn_description = """HTML comments can be searched with `pn` command.
 """
 #add_command(Command('pn [<rrid>[:<rrid>]]', 'print comments', pn_description, lambda *args: foreach_rrs(find_tags, *args, tags=[('comment', None, None)], valueonly=True)))
 add_command(Command('pn [<rrid>[:<rrid>]]', 'print comments', pn_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<!--', b'-->')], valueonly=False)))
+add_command(Command('ptn [<rrid>[:<rrid>]]', 'print comments in templates', pn_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<!--', b'-->')], valueonly=False)))
 
 # pp
-def pp_function(_, rr, *__):
+def pp_function(_, rr, *__, **___):
     r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
     maxlen = max([0]+[len(k) for k in r.parameters.keys()])
     return ['%*s: %s' % (maxlen, k.decode(), '' if v is None else v.decode()) for k, v in r.parameters.items()]
 pp_description = """Parameters of selected requests are printed with `pp` command.
 """
 add_command(Command('pp [<rrid>[:<rrid>]]', 'print parameters', pp_description, lambda *args: foreach_rrs(pp_function, *args)))
+add_command(Command('ptp [<rrid>[:<rrid>]]', 'print template parameters', pp_description, lambda *args: foreach_rrs(pp_function, fromtemplate=True, *args)))
 
 # pr_function defined in structures.py because it is also used by proxy (realtime overview)
 pr_description = """Use `pr` command to get an overview of all captured request-response pairs. Size of the response and time can be optionally showed as well (using overview.size and overview.time configuration parameters) {#TODO}.
 """
 add_command(Command('pr [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: weber.rrdb.overview(args, showlast=False, onlytampered=False)))
 add_command(Command('pro [<rrid>[:<rrid>]]', 'print request-response pairs', pr_description, lambda *args: weber.rrdb.overview(args, showlast=False, onlytampered=False)))
+add_command(Command('pt [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: weber.tdb.overview(args, showlast=False, onlytampered=False)))
+add_command(Command('ptr [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: weber.tdb.overview(args, showlast=False, onlytampered=False)))
+add_command(Command('ptro [<rrid>[:<rrid>]]', 'print templates overview', pr_description, lambda *args: weber.tdb.overview(args, showlast=False, onlytampered=False)))
 
 # prol
 prol_description="""
 """
 add_command(Command('prol [<rrid>[:<rrid>]]', 'print last request-response overview', prol_description, lambda *args: weber.rrdb.overview(args, showlast=True, onlytampered=False)))
+add_command(Command('ptrol [<rrid>[:<rrid>]]', 'print last template request-response overview', prol_description, lambda *args: weber.tdb.overview(args, showlast=True, onlytampered=False)))
 # prot
 prot_description="""
 """
@@ -626,9 +665,22 @@ add_command(Command('prs [<rrid>[:<rrid>]]', 'print responses verbose', prX_desc
 add_command(Command('prsh [<rrid>[:<rrid>]]', 'print response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x6)))
 add_command(Command('prsd [<rrid>[:<rrid>]]', 'print response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x5)))
 
+add_command(Command('ptra [<rrid>[:<rrid>]]', 'print template requests and responses verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xf)))
+add_command(Command('ptrh [<rrid>[:<rrid>]]', 'print template request and response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xe)))
+add_command(Command('ptrd [<rrid>[:<rrid>]]', 'print template request and response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xd)))
+add_command(Command('ptrq [<rrid>[:<rrid>]]', 'print template requests verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xb)))
+add_command(Command('ptrqh [<rrid>[:<rrid>]]', 'print template request headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xa)))
+add_command(Command('ptrqd [<rrid>[:<rrid>]]', 'print template request data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x9)))
+add_command(Command('ptrs [<rrid>[:<rrid>]]', 'print template responses verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x7)))
+add_command(Command('ptrsh [<rrid>[:<rrid>]]', 'print template response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x6)))
+add_command(Command('ptrsd [<rrid>[:<rrid>]]', 'print template response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x5)))
+
 
 # pw 
 add_command(Command('pw', 'print weber-related information', '', lambda *_: []))
+
+# pwb
+add_command(Command('pwb', 'print brute lists', b_description, b_function))
 
 # pwm
 def pwm_function(*args):
@@ -662,7 +714,7 @@ add_command(Command('q', 'quit', '', lambda *_: [])) # solved in weber
 Spoofing
 """
 # s
-add_command(Command('s', 'print spoof settings (alias for pws)', pws_description, pws_function))
+add_command(Command('s', 'print spoof settings (alias for `pws`)', pws_description, pws_function))
 
 # sa
 sa_description="""
@@ -708,7 +760,7 @@ tr_description = """
 add_command(Command('tr', 'tamper requests/responses', tr_description, lambda *_: []))
 
 # trf
-def trf_function(_, rr, *__):
+def trf_function(_, rr, *__, **___):
     # responses first so race condition won't occur
     try:
         rr.response_upstream.forward()
@@ -770,7 +822,7 @@ def trsa_function(*_):
 add_command(Command('trsa', 'toggle default response tamper behavior', trsa_description, trsa_function))
 
 # trqf
-def trqf_function(_, rr, *__):
+def trqf_function(_, rr, *__, **___):
     try:
         rr.request_upstream.forward()
     except:
@@ -781,7 +833,7 @@ trqf_description = """
 add_command(Command('trqf [<rrid>[:<rrid>]]', 'forward tampered request', trqf_description, lambda *args: foreach_rrs(trqf_function, *args)))
 
 # trsf
-def trsf_function(_, rr, *__):
+def trsf_function(_, rr, *__, **___):
     try:
         rr.response_upstream.forward()
     except: # no response
@@ -811,7 +863,10 @@ add_command(Command('wr', 'write requests/responses into file', wr_description, 
 def wrx_function(rrid, rr, *args, **kwargs): # write headers/data/both of desired requests/responses/both into file
     data = []
     try:
-        path = '%s_%d' % (args[0], rrid)
+        if kwargs.get('rr_count') == 1:
+            path = args[0]
+        else:
+            path = '%s_%d' % (args[0], rrid)
     except:
         log.err('Path to file not specified or incorrect RR interval.')
         return []
@@ -862,6 +917,16 @@ add_command(Command('wrqd <file> [<rrid>[:<rrid>]]', 'write request data', wrX_d
 add_command(Command('wrs <file> [<rrid>[:<rrid>]]', 'write responses verbose', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0x7)))
 add_command(Command('wrsh <file> [<rrid>[:<rrid>]]', 'write response headers', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0x6)))
 add_command(Command('wrsd <file> [<rrid>[:<rrid>]]', 'write response data', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0x5)))
+
+add_command(Command('wtra <file> [<rrid>[:<rrid>]]', 'write template requests and responses', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xf)))
+add_command(Command('wtrh <file> [<rrid>[:<rrid>]]', 'write template request and response headers', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xe)))
+add_command(Command('wtrd <file> [<rrid>[:<rrid>]]', 'write template request and response data', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xd)))
+add_command(Command('wtrq <file> [<rrid>[:<rrid>]]', 'write template requests verbose', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xb)))
+add_command(Command('wtrqh <file> [<rrid>[:<rrid>]]', 'write template request headers', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xa)))
+add_command(Command('wtrqd <file> [<rrid>[:<rrid>]]', 'write template request data', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x9)))
+add_command(Command('wtrs <file> [<rrid>[:<rrid>]]', 'write template responses verbose', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x7)))
+add_command(Command('wtrsh <file> [<rrid>[:<rrid>]]', 'write template response headers', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x6)))
+add_command(Command('wtrsd <file> [<rrid>[:<rrid>]]', 'write template response data', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x5)))
 
 
 
