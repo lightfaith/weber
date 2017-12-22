@@ -178,13 +178,12 @@ def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
     startends = kwargs['startends']
     attrs = kwargs.get('attrs')
     valueonly = kwargs['valueonly']
-    tmpresult = []
     #for tagname, attr_key, attr_value in tags:
     #    for t in rr.response.find_tags(tagname, attr_key=attr_key, attr_value=attr_value, form=('value' if valueonly else 'xml')):
     #        tmpresult.append(t)
     #return tmpresult
     result = []
-    r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream # TODO correct approach here?
+    r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
     if attrs is None:
         for startbytes, endbytes in startends:
             result += [x[1].decode() for x in find_between(r.data, startbytes, endbytes, inner=valueonly)]
@@ -609,7 +608,6 @@ add_command(Command('ptlc [<rrid>[:<rrid>]]', 'print links from templates with c
 # pn
 pn_description = """HTML comments can be searched with `pn` command.
 """
-#add_command(Command('pn [<rrid>[:<rrid>]]', 'print comments', pn_description, lambda *args: foreach_rrs(find_tags, *args, tags=[('comment', None, None)], valueonly=True)))
 add_command(Command('pn [<rrid>[:<rrid>]]', 'print comments', pn_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<!--', b'-->')], valueonly=False)))
 add_command(Command('ptn [<rrid>[:<rrid>]]', 'print comments in templates', pn_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<!--', b'-->')], valueonly=False)))
 
@@ -905,17 +903,6 @@ def wrx_function(rrid, rr, *args, **kwargs): # write headers/data/both of desire
         print(e)
     return []
 
-"""def wrx_eraser(mask, *args):
-    # first erase the file
-    try:
-        with open(args[0], 'wb') as f:
-            pass
-    except:
-        log.err('Cannot open file for writing.')
-        return []
-    # now write each desired rr
-    return foreach_rrs(wrx_function, *args, mask=mask)
-"""
 wrX_description="""
 """
 add_command(Command('wra <file> [<rrid>[:<rrid>]]', 'write requests and responses', wrX_description, lambda *args: foreach_rrs(wrx_function, *args, mask=0xf)))

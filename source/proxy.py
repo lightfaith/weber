@@ -34,7 +34,6 @@ class ProxyLib():
                 chunks.append(buf)
             except socket.timeout:
                 break
-        #return result
         return b''.join(chunks)
 
 
@@ -173,8 +172,8 @@ class ConnectionThread(Thread):
     def __init__(self, conn, rrid, tamper_request, tamper_response, template_rr=None, brute_set=None):
         # conn - socket to browser, None if from template
         # rrid - index of request-response pair
-        # tamper_request - should the request forwarding be paused?
-        # tamper_response - should the response forwarding be paused?
+        # tamper_request - should the request forwarding be delayed?
+        # tamper_response - should the response forwarding be delayed?
         # known_rr - known request (e.g. copy of existing for bruteforcing) - don't communicate with browser if not None
         # brute_set - list of values destined for brute placeholder replacing
         Thread.__init__(self)
@@ -183,7 +182,6 @@ class ConnectionThread(Thread):
         self.port = 0      # for thread printing
         self.rrid = rrid
         self.path = '' # parsed from request, for `pt` command
-        #self.ssl = (uri.scheme == 'https')
         self.tamper_request = tamper_request
         self.tamper_response = tamper_response
         self.template_rr = template_rr
@@ -310,7 +308,8 @@ class ConnectionThread(Thread):
                         response.headers[b'Location'] = newlocal.__bytes__()
                     else: # relative redirect
                         pass
-                    response.statuscode = 302 # TODO just for debugging (or NOT?)
+                    # no permanent redirection # TODO for which 3xx's?
+                    response.statuscode = 302
 
                 # change incoming links, useless if from template
                 for starttag, endtag, attr in Response.link_tags:
@@ -400,44 +399,4 @@ class ConnectionThread(Thread):
         else:
             log.debug_parsing('Response is weird.')
  
-
-"""
-class SSLPasser(Thread):
-    def __init__(self, browser, server):
-        Thread.__init__(self)
-        self.browser = browser
-        self.server = server
-        self.terminate = False
-
-    def stop(self):
-        self.terminate = True
-
-    def run(self):
-        sockets = [self.browser, self.server]
-        log.debug_socket('SSLPasser executed.')
-        while True:
-            try:
-                readable, writable, exceptional = select(sockets, [], [], 2)
-                if not (readable or writable or exceptional): # timeout
-                    break
-                if self.browser in readable:
-                    self.forward(self.browser, self.server)
-                if self.server in readable:
-                    self.forward(self.server, self.browser)
-            except ConnectionResetError:
-                self.termiate = True
-            if self.terminate:
-                break
-        log.debug_socket('SSLPasser quits.')
-                
-
-    def forward(self, src, dest):
-        try:
-            data = src.recv(65536)
-            dest.send(data)
-        except:
-            self.terminate = True
-"""
-
-
 

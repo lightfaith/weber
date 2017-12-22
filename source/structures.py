@@ -4,7 +4,6 @@ Various structures are defined here.
 """
 import threading, traceback, re, os, itertools
 from collections import OrderedDict
-from bs4 import BeautifulSoup as soup
 
 from source import weber
 from source import log
@@ -19,11 +18,7 @@ class Request():
         """
             data = request data (bytes)
             should_tamper = should the request be tampered? (bool)
-            forward_stopper = os.pipe() for waiting on forward (used in proxy:ConnectionThread)
-                              None for new request
-                              Use original value for modified request (e.g. `mrq`)
         """
-        # TODO mrq should edit the upstream directly
         self.integrity = False
         if not data:
             return
@@ -175,7 +170,6 @@ class Response():
         self.statuscode = int(lines[0].split(b' ')[1])
         self.status = b' '.join(lines[0].split(b' ')[2:])
         self.headers = OrderedDict()
-        #self.soup = None
 
         # load first set of headers (hopefully only one)
         line_index = 1
@@ -186,10 +180,9 @@ class Response():
             k, _, v = line.partition(b':')
             self.headers[k] = v.strip()
         
-        # TODO splitlines for grep? if text/*
         line_index += 1
 
-        # chunked Transfer-Encoding? TODO no busy-waiting
+        # chunked Transfer-Encoding?
         data_line_index = line_index # backup the value
         try:
             self.data = b''
@@ -247,7 +240,6 @@ class Response():
     def compute_content_length(self):
         #if b'Content-Length' not in self.headers.keys() and len(self.data)>0:
         log.debug_parsing('Computing Content-Length...')
-        #data = self.data if self.soup is None else str(self.soup).encode('utf8')
         self.headers[b'Content-Length'] = b'%d' % (len(self.data))
 
     def lines(self, headers=True, data=True, as_string=True):
@@ -285,7 +277,6 @@ class Response():
         result += b'\r\n'.join([b'%s: %s' % (k, b'' if v is None else v) for k, v in self.headers.items()])
         
         result += b'\r\n\r\n' + self.data + b'\r\n\r\n'
-        # TODO self.compute_content_length() here?
         return result
     
     def find_html_attr(self, tagstart, tagend, attr):
@@ -323,34 +314,6 @@ class Response():
         result = filter(None, [x for x in itertools.chain.from_iterable(itertools.zip_longest(oldparts, newparts))])
         self.data = b''.join(result)
 
-
-    """
-    def find_tags(self, tagname, attr_key=None, attr_value=None, form='soup'):
-        # Supported forms:
-        #        soup - beautifulsoup object
-        #        xml - xml as string
-        #        value - desired value as string
-        #
-        if self.soup is None:
-            return []
-
-        if attr_key is not None:
-            if attr_value is not None: # attribute value condition?
-                #result = soup.find_all(tagname, {attr_key: attr_value})
-                result = list(filter(None, [(x[attr_key] if form=='value' else x) for x in self.soup.find_all(tagname, {attr_key: attr_value})]))
-            else: # attribute name condition?
-                result = list(filter(None, [(x[attr_key] if form=='value' else x) for x in self.soup.find_all(tagname) if x.has_attr(attr_key)]))
-                #result = [x for x in self.soup.find_all(tagname) if attr_key in x]
-        else: # no conditions
-            result = list(filter(None, [(x.string if form=='value' else x) for x in self.soup.find_all(tagname)]))
-        if form == 'soup':
-            return list(result)
-        elif form in ['xml', 'value']:
-            return [str(x) for x in result]
-        #if len(self.dict.items())<=0:
-        #    print('dict empty!')
-        #return list(Response.get_tags_recursive(tagname, self.dict))
-    """
 
     def spoof(self, path):
         # replace data with file content
@@ -443,19 +406,16 @@ class RRDB():
         if not desired:
             return []
         desired = desired[0]
-        reqlen = max([20]+[1+len(v.request_string(short=True, colored=True)) for v in desired.values()])
+        reqlen = max([20]+[1+len(v.request_string(colored=True)) for v in desired.values()])
         
         # TODO size, time if desired
         if header:
             hreqlen = reqlen-2*(len(log.COLOR_GREEN)+len(log.COLOR_NONE))
-            #hreqlen = reqlen-tamperlen-len(log.COLOR_GREEN)-len(log.COLOR_NONE)
             log.tprint('    %-*s  RRID  %-*s  Response' % (eidlen, 'EID', hreqlen, 'Request'))
             log.tprint('    %s  ====  %-*s  =====================' % ('='*eidlen, hreqlen, '='*hreqlen))
 
         for rrid, rr in desired.items():
-            #specific_reqlen = reqlen-(0 if rr.request.tampering else len(log.COLOR_YELLOW+log.COLOR_NONE))
-            #result.append('next reqlen: %d' % specific_reqlen)
-            result.append('    %-*s  %-4d  %-*s  %-20s' % (eidlen, '' if rr.eid is None else rr.eid, rrid, reqlen, rr.request_string(short=True, colored=True), rr.response_string(short=True, colored=True)))
+            result.append('    %-*s  %-4d  %-*s  %-20s' % (eidlen, '' if rr.eid is None else rr.eid, rrid, reqlen, rr.request_string(colored=True), rr.response_string(colored=True)))
         return result
 
             
@@ -497,58 +457,56 @@ class RR():
         self.response_upstream = response_upstream
         self.response_downstream = response_downstream
 
-    def request_string(self, short=False, colored=False):
+    def request_string(self, colored=False):
         req = self.request_upstream if positive(weber.config['tamper.showupstream'][0]) else self.request_downstream
         if True:#try:
-            if short: # TODO long - what was the meaning?
-                # TODO also from Accept:
-                tamperstring = ''
-                if req.tampering:
-                    tamperstring = '[T] '
+            # TODO also from Accept:
+            tamperstring = ''
+            if req.tampering:
+                tamperstring = '[T] '
+            color = log.COLOR_NONE
+            if req.onlypath == b'/' or req.onlypath.endswith((b'.htm', b'.html', b'.php', b'.xhtml', b'.aspx')):
+                color = log.COLOR_GREY
+            elif req.onlypath.endswith((b'.jpg', b'.svg', b'.png', b'.gif', b'.ico', b'.mp3', b'.ogg', b'.mp4', b'.wav')):
+                color = log.COLOR_PURPLE
+            elif req.onlypath.endswith((b'.js', b'.vbs', b'.swf')):
+                color = log.COLOR_BLUE
+            elif req.onlypath.endswith((b'.css')):
+                color = log.COLOR_DARK_PURPLE
+            elif req.onlypath.endswith((b'.pdf', b'.doc', b'.docx', b'.xls', b'.xlsx', b'.ppt', b'.pptx', b'.pps', b'.ppsx', b'.txt')):
+                color = log.COLOR_GREEN
+            elif req.onlypath.endswith((b'.zip', b'.7z', b'.rar', b'.gz', b'.bz2', b'.jar', b'.bin', b'.iso')):
+                color = log.COLOR_BROWN
+            if not colored:
                 color = log.COLOR_NONE
-                if req.onlypath == b'/' or req.onlypath.endswith((b'.htm', b'.html', b'.php', b'.xhtml', b'.aspx')):
-                    color = log.COLOR_GREY
-                elif req.onlypath.endswith((b'.jpg', b'.svg', b'.png', b'.gif', b'.ico', b'.mp3', b'.ogg', b'.mp4', b'.wav')):
-                    color = log.COLOR_PURPLE
-                elif req.onlypath.endswith((b'.js', b'.vbs', b'.swf')):
-                    color = log.COLOR_BLUE
-                elif req.onlypath.endswith((b'.css')):
-                    color = log.COLOR_DARK_PURPLE
-                elif req.onlypath.endswith((b'.pdf', b'.doc', b'.docx', b'.xls', b'.xlsx', b'.ppt', b'.pptx', b'.pps', b'.ppsx', b'.txt')):
-                    color = log.COLOR_GREEN
-                elif req.onlypath.endswith((b'.zip', b'.7z', b'.rar', b'.gz', b'.bz2', b'.jar', b'.bin', b'.iso')):
-                    color = log.COLOR_BROWN
-                if not colored:
-                    color = log.COLOR_NONE
-                return '%s%s%s%s%s %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, req.method.decode(), req.path.decode(), log.COLOR_NONE)
+            return '%s%s%s%s%s %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, req.method.decode(), req.path.decode(), log.COLOR_NONE)
         if False:#except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
 
-    def response_string(self, short=False, colored=False):
+    def response_string(self, colored=False):
         res = self.response_upstream if positive(weber.config['tamper.showupstream'][0]) else self.response_downstream
         try:
-            if short: # TODO long - what was the meaning?
-                tamperstring = ''
-                if res.tampering:
-                    tamperstring = '[T] '
-                if res.statuscode < 200:
-                    color = log.COLOR_NONE
-                elif res.statuscode == 200:
-                    color = log.COLOR_DARK_GREEN
-                elif res.statuscode < 300:
-                    color = log.COLOR_GREEN
-                elif res.statuscode < 400:
-                    color = log.COLOR_BROWN
-                elif res.statuscode < 500:
-                    color = log.COLOR_DARK_RED
-                elif res.statuscode < 600:
-                    color = log.COLOR_DARK_PURPLE
-                else:
-                    color = log.COLOR_NONE
-                if not colored:
-                    color = log.COLOR_NONE
-                
-                return '%s%s%s%s%d %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, res.statuscode, res.status.decode(), log.COLOR_NONE)
+            tamperstring = ''
+            if res.tampering:
+                tamperstring = '[T] '
+            if res.statuscode < 200:
+                color = log.COLOR_NONE
+            elif res.statuscode == 200:
+                color = log.COLOR_DARK_GREEN
+            elif res.statuscode < 300:
+                color = log.COLOR_GREEN
+            elif res.statuscode < 400:
+                color = log.COLOR_BROWN
+            elif res.statuscode < 500:
+                color = log.COLOR_DARK_RED
+            elif res.statuscode < 600:
+                color = log.COLOR_DARK_PURPLE
+            else:
+                color = log.COLOR_NONE
+            if not colored:
+                color = log.COLOR_NONE
+            
+            return '%s%s%s%s%d %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, res.statuscode, res.status.decode(), log.COLOR_NONE)
         except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
         
