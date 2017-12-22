@@ -426,7 +426,7 @@ mrq_description="""
 """
 mrs_description="""
 """
-def mr_function(*args, fromtemplate=False): # TODO fromtemplate slightly bugged, 
+def mr_function(*args, fromtemplate=False):
     # parse command arguments
     try:
         tid = None
@@ -476,11 +476,19 @@ def mr_function(*args, fromtemplate=False): # TODO fromtemplate slightly bugged,
         f.seek(0)
         
         # read back
-        print(args[0], tid)
+        changes = f.read()
+
+    # write if changed
+    if changes != r.bytes():
         if args[0] == 'request':
-            source.request_upstream.parse(f.read())
+            source.request_upstream.parse(changes)
         elif args[0] == 'response':
-            source.response_upstream.parse(f.read())
+            source.response_upstream.parse(changes)
+    else:
+        # delete template if just created
+        if tid is not None:
+            log.info('Template cancelled.')
+            del weber.tdb.rrs[tid]
                 
     # restore debug and realtime overview settings
     for k, v in oldconfig.items():
@@ -578,8 +586,8 @@ def pcs_function(_, rr, *__, **___):
         return []
 pcs_description = """Set-Cookie headers can be searched with `pcs` command.
 """
-add_command(Command('pcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences', pcs_description, lambda *args: foreach_rrs(pcs_function, *args))) #TODO
-add_command(Command('ptcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences from templates', pcs_description, lambda *args: foreach_rrs(pcs_function, fromtemplate=True, *args))) #TODO
+add_command(Command('pcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences', pcs_description, lambda *args: foreach_rrs(pcs_function, *args)))
+add_command(Command('ptcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences from templates', pcs_description, lambda *args: foreach_rrs(pcs_function, fromtemplate=True, *args)))
 add_command(Command('pe [<eid>[:<eid>]]', 'print events', e_description, e_function))
 
 # pf
