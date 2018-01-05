@@ -372,6 +372,9 @@ class ConnectionThread(Thread):
         except socket.gaierror:
             log.err('Cannot connect to %s:%d' % (uri.domain, uri.port))
             return None
+        except ConnectionRefusedError:
+            log.err('Cannot connect to %s:%d (connection refused)' % (uri.domain, uri.port))
+            return None
         except TimeoutError:
             log.err('Site is not accessible (timeout).')
             return None
