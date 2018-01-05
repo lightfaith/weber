@@ -183,6 +183,8 @@ def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
     #return tmpresult
     result = []
     r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
+    if r is None: # race condition, return nothing for now
+        return result
     if attrs is None:
         for startbytes, endbytes in startends:
             result += [x[1].decode() for x in find_between(r.data, startbytes, endbytes, inner=valueonly)]
@@ -286,6 +288,34 @@ add_command(Command('cr', 'compare requests/responses', cr_description, lambda *
 # crd diff
 # cr1 only in first
 # cr2 only in second
+crN_description = """
+"""
+def crN_function(rrid1, rrid2, desired):
+    try:
+        rr1 = weber.rrdb.rrs[int(rrid1)]
+        rr2 = weber.rrdb.rrs[int(rrid2)]
+    except Exception as e:
+        log.err('Invalid RRID(s).')
+        print(weber.rrdb.rrs.keys())
+        print(e)
+        return []
+
+    req1 = (rr1.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr1.request_downstream).lines()
+    req2 = (rr2.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr2.request_downstream).lines()
+    diffonly = lambda lines: [line[2:] for line in lines if line.startswith(desired)]
+    result = diffonly(difflib.Differ().compare(req1, req2))
+    try:
+        res1 = (rr1.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr1.response_downstream).lines()
+        res2 = (rr2.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr2.response_downstream).lines()
+        result += ['', ''] + diffonly(difflib.Differ().compare(res1, res2))
+    except:
+        pass
+    return result
+
+
+add_command(Command('cr1 rrid rrid', 'show unique from first rrid', crN_description, lambda *args: crN_function(*args, '-')))
+add_command(Command('cr2 rrid rrid', 'show unique from second rrid', crN_description, lambda *args: crN_function(*args, '+')))
+
 # cru diff upstream downstream
 cru_description = """
 """
