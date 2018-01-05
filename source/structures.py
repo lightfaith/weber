@@ -145,6 +145,7 @@ class Response():
         (b'<frame', b'</frame>', b'src'),
         (b'<img', b'>', b'src'),
         (b'<script', b'>', b'src'),
+        (b'<link', b'>', b'href'),
     ] # TODO more
 
     def __init__(self, data, should_tamper):
