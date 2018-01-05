@@ -9,7 +9,6 @@ from source import lib
 from source import log
 from source.lib import *
 from source.structures import RRDB, Request, Response, Event, URI
-from bs4 import Comment
 import difflib
 
 """
