@@ -112,6 +112,7 @@ class Proxy(Thread):
             self.ssl_server_socket.listen(1)
         except Exception as e:
             log.err('Cannot listen.')
+            return
 
         while True:
             r, _, _ = select([self.server_socket, self.ssl_server_socket, self.stopper[0]], [], [])
@@ -337,7 +338,7 @@ class ConnectionThread(Thread):
             # print if desired
             if positive(weber.config['overview.realtime'][0]):
                 log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
-            time.sleep(10)
+            #time.sleep(10) # TODO what was the reason again?
         
         # close connection if not None (from template)
         if self.conn:
