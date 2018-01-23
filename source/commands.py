@@ -283,38 +283,91 @@ cr_description = """
 """
 add_command(Command('cr', 'compare requests/responses', cr_description, lambda *_: []))
 
-# crc common # TODO
-#add_command(Command(''))
-# crd diff
-# cr1 only in first
-# cr2 only in second
-crN_description = """
+crX_description = """
 """
-def crN_function(rrid1, rrid2, desired):
-    try:
-        rr1 = weber.rrdb.rrs[int(rrid1)]
-        rr2 = weber.rrdb.rrs[int(rrid2)]
-    except Exception as e:
-        log.err('Invalid RRID(s).')
-        print(weber.rrdb.rrs.keys())
-        print(e)
-        return []
 
-    req1 = (rr1.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr1.request_downstream).lines()
-    req2 = (rr2.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr2.request_downstream).lines()
-    diffonly = lambda lines: [line[2:] for line in lines if line.startswith(desired)]
-    result = diffonly(difflib.Differ().compare(req1, req2))
+#def crX_function(rrid1, rrid2, flag, function, **kwargs):
+def crX_function(*args, **kwargs):
+    # args: flag rrid1 rrid2
+    #
+    # flags: 1 - lines from first
+    #        2 - lines from second
+    #        c - common lines
+    #        d - standard diff
+    
+    result = []
+    # parse args
     try:
-        res1 = (rr1.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr1.response_downstream).lines()
-        res2 = (rr2.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr2.response_downstream).lines()
-        result += ['', ''] + diffonly(difflib.Differ().compare(res1, res2))
+        flag = args[0]
+        if flag not in '12cd':
+            raise TypeError
     except:
-        pass
+        log.err('Invalid flag parameter.')
+        return result
+    try:
+        rr1 = weber.rrdb.rrs[int(args[1])]
+    except:
+        log.err('Invaplid first RRID.')
+        return result
+    try:
+        rr2 = weber.rrdb.rrs[int(args[2])]
+    except:
+        log.err('Invalid second RRID.')
+        return result
+
+    showrequest = bool(kwargs['mask'] & 0x8)
+    showresponse = bool(kwargs['mask'] & 0x4)
+    showheaders = bool(kwargs['mask'] & 0x2)
+    showdata = bool(kwargs['mask'] & 0x1)
+    
+    # deal with requests for both rrs
+    if showrequest:
+        rrs_lines = []
+        for rr in (rr1, rr2):
+            r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
+            rrs_lines.append(r.lines(headers=showheaders, data=showdata))
+        
+        # diff
+        diff_lines = [line for line in difflib.Differ().compare(rrs_lines[0], rrs_lines[1]) if not line.startswith('?')]
+        if flag == '1':
+            diff_lines = [line[2:] for line in diff_lines if line.startswith('-')]
+        elif flag == '2':
+            diff_lines = [line[2:] for line in diff_lines if line.startswith('+')]
+        elif flag == 'c':
+            diff_lines = [line[2:] for line in diff_lines if not line.startswith(('-', '+'))]
+        result += diff_lines
+        if showresponse:
+            result.append('')
+
+    # deal with responses for both rrs
+    if showresponse:
+        rrs_lines = []
+        for rr in (rr1, rr2):
+            r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
+            if r is None:
+                rrs_lines.append(['Response not received yet...'])
+            else:
+                rrs_lines.append(r.lines(headers=showheaders, data=showdata))
+        # diff
+        diff_lines = [line for line in difflib.Differ().compare(rrs_lines[0], rrs_lines[1]) if not line.startswith('?')]
+        if flag == '1':
+            diff_lines = [line[2:] for line in diff_lines if line.startswith('-')]
+        elif flag == '2':
+            diff_lines = [line[2:] for line in diff_lines if line.startswith('+')]
+        elif flag == 'c':
+            diff_lines = [line[2:] for line in diff_lines if not line.startswith(('-', '+'))]
+        result += diff_lines
     return result
-
-
-add_command(Command('cr1 rrid rrid', 'show unique from first rrid', crN_description, lambda *args: crN_function(*args, '-')))
-add_command(Command('cr2 rrid rrid', 'show unique from second rrid', crN_description, lambda *args: crN_function(*args, '+')))
+    
+add_command(Command('cra (12cd) rrid1 rrid2', 'diff two request-response pairs', crX_description, lambda *args: crX_function(*args, mask=0xf)))
+add_command(Command('crh (12cd) rrid1 rrid2', 'diff two request-response headers', crX_description, lambda *args: crX_function(*args, mask=0xe)))
+add_command(Command('crd (12cd) rrid1 rrid2', 'diff two request-response data', crX_description, lambda *args: crX_function(*args, mask=0xd)))
+add_command(Command('crq (12cd) rrid1 rrid2', 'diff two requests', crX_description, lambda *args: crX_function(*args, mask=0xb)))
+add_command(Command('crqh (12cd) rrid1 rrid2', 'diff two request headers', crX_description, lambda *args: crX_function(*args, mask=0xa)))
+add_command(Command('crqd (12cd) rrid1 rrid2', 'diff two request data', crX_description, lambda *args: crX_function(*args, mask=0x9)))
+add_command(Command('crs (12cd) rrid1 rrid2', 'diff two responses', crX_description, lambda *args: crX_function(*args, mask=0x7)))
+add_command(Command('crsh (12cd) rrid1 rrid2', 'diff two response headers', crX_description, lambda *args: crX_function(*args, mask=0x6)))
+add_command(Command('crsd (12cd) rrid1 rrid2', 'diff two response data', crX_description, lambda *args: crX_function(*args, mask=0x5)))
 
 # cru diff upstream downstream
 cru_description = """
@@ -634,6 +687,11 @@ plc_description = """Links from all known tags together with their context are p
 add_command(Command('plc [<rrid>[:<rrid>]]', 'print links with context', plc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], valueonly=False)))
 add_command(Command('ptlc [<rrid>[:<rrid>]]', 'print links from templates with context', plc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], valueonly=False)))
 
+# pm
+pm_description = """HTML <main> tags can be searched with `pn` command.
+"""
+add_command(Command('pm [<rrid>[:<rrid>]]', 'print <main> elements', pm_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<main', b'</main>')], valueonly=False)))
+add_command(Command('ptm [<rrid>[:<rrid>]]', 'print <main> elements in templates', pm_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<main', b'</main>')], valueonly=False)))
 # pn
 pn_description = """HTML comments can be searched with `pn` command.
 """
@@ -692,9 +750,9 @@ def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of de
     return result
 prX_description="""Commands starting with `pr` are used to show request and/or response headers and/or data.
 """
-add_command(Command('pra [<rrid>[:<rrid>]]', 'print requests and responses verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xf)))
-add_command(Command('prh [<rrid>[:<rrid>]]', 'print request and response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xe)))
-add_command(Command('prd [<rrid>[:<rrid>]]', 'print request and response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xd)))
+add_command(Command('pra [<rrid>[:<rrid>]]', 'print requests-response pairs verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xf)))
+add_command(Command('prh [<rrid>[:<rrid>]]', 'print request-response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xe)))
+add_command(Command('prd [<rrid>[:<rrid>]]', 'print request-response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xd)))
 add_command(Command('prq [<rrid>[:<rrid>]]', 'print requests verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xb)))
 add_command(Command('prqh [<rrid>[:<rrid>]]', 'print request headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xa)))
 add_command(Command('prqd [<rrid>[:<rrid>]]', 'print request data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x9)))
@@ -702,13 +760,13 @@ add_command(Command('prs [<rrid>[:<rrid>]]', 'print responses verbose', prX_desc
 add_command(Command('prsh [<rrid>[:<rrid>]]', 'print response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x6)))
 add_command(Command('prsd [<rrid>[:<rrid>]]', 'print response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x5)))
 
-add_command(Command('ptra [<rrid>[:<rrid>]]', 'print template requests and responses verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xf)))
-add_command(Command('ptrh [<rrid>[:<rrid>]]', 'print template request and response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xe)))
-add_command(Command('ptrd [<rrid>[:<rrid>]]', 'print template request and response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xd)))
-add_command(Command('ptrq [<rrid>[:<rrid>]]', 'print template requests verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xb)))
+add_command(Command('ptra [<rrid>[:<rrid>]]', 'print template requests-response pairs verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xf)))
+add_command(Command('ptrh [<rrid>[:<rrid>]]', 'print template request-response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xe)))
+add_command(Command('ptrd [<rrid>[:<rrid>]]', 'print template request-response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xd)))
+add_command(Command('ptrq [<rrid>[:<rrid>]]', 'print template requests', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xb)))
 add_command(Command('ptrqh [<rrid>[:<rrid>]]', 'print template request headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xa)))
 add_command(Command('ptrqd [<rrid>[:<rrid>]]', 'print template request data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x9)))
-add_command(Command('ptrs [<rrid>[:<rrid>]]', 'print template responses verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x7)))
+add_command(Command('ptrs [<rrid>[:<rrid>]]', 'print template responses', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x7)))
 add_command(Command('ptrsh [<rrid>[:<rrid>]]', 'print template response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x6)))
 add_command(Command('ptrsd [<rrid>[:<rrid>]]', 'print template response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x5)))
 
