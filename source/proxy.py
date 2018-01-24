@@ -277,7 +277,7 @@ class ConnectionThread(Thread):
             
             # move response into RRDB
             response.sanitize()
-            weber.rrdb.add_response(self.rrid, response, None)
+            weber.rrdb.add_response(self.rrid, response, None, allow_analysis=False)
 
             
             # tamper response
@@ -293,10 +293,10 @@ class ConnectionThread(Thread):
             if spoof_path in weber.spoofs.keys():
                 response.spoof(weber.spoofs[spoof_path])
 
-            # set response as downstream, create backup (upstream), update RRDB
+            # set response as downstream, create backup (upstream), update RRDB and do the analysis
             response_upstream = response.clone()
             response_upstream.tampering = False
-            weber.rrdb.add_response(self.rrid, response_upstream, response)
+            weber.rrdb.add_response(self.rrid, response_upstream, response, allow_analysis=True)
             
 
             # alter redirects, useless if from template # TODO test 302, 303, # TODO more?

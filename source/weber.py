@@ -8,12 +8,15 @@ from collections import OrderedDict
 Default configuration options
 """
 config = OrderedDict()
+# analysis settings
+config['analysis.immediate'] = (True, bool) # should analysis be done immediately?
 # brute settings
 config['brute.placeholder'] = ('###', str) # placeholder start and end, e.g. ###0###
 config['brute.valueseparator'] =   (':', str)   # separator between values
 config['brute.setseparator'] =   ('\n', str)   # separator between value sets
 
 # debug settings
+config['debug.analysis'] =   (True, bool)   # stuff relevant to analysis
 config['debug.command'] =    (False, bool)   # stuff relevant to user commands
 config['debug.config'] =     (False, bool)   # stuff relevant to configuration
 config['debug.chunks'] =     (False, bool)   # stuff relevant to Transfer-Encoding: chunked parsing
@@ -24,6 +27,9 @@ config['debug.tampering'] =  (True, bool)   # stuff relevant to tampering
 
 # edit settings
 config['edit.command'] = ('vim %s', str)
+
+# how things will be presented to user
+config['interaction.showupstream'] = (True, bool) # what version of RR should be presented?
 
 # overview settings
 config['overview.realtime'] = (True, bool)  # show request/response communication on the fly
@@ -44,7 +50,6 @@ config['spoof.arguments'] = (False, bool) # should arguments be taken into consi
 # tamper
 config['tamper.requests'] =     (False, bool) # should all requests be tampered by default?
 config['tamper.responses'] =    (False, bool) # should all responses be tampered by default?
-config['tamper.showupstream'] = (True, bool) # what version of RR should be presented?
 
 
 """

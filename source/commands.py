@@ -182,7 +182,7 @@ def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
     #        tmpresult.append(t)
     #return tmpresult
     result = []
-    r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
+    r = rr.response_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.response_downstream
     if r is None: # race condition, return nothing for now
         return result
     if attrs is None:
@@ -324,7 +324,7 @@ def crX_function(*args, **kwargs):
     if showrequest:
         rrs_lines = []
         for rr in (rr1, rr2):
-            r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
+            r = rr.request_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.request_downstream
             rrs_lines.append(r.lines(headers=showheaders, data=showdata))
         
         # diff
@@ -343,7 +343,7 @@ def crX_function(*args, **kwargs):
     if showresponse:
         rrs_lines = []
         for rr in (rr1, rr2):
-            r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
+            r = rr.response_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.response_downstream
             if r is None:
                 rrs_lines.append(['Response not received yet...'])
             else:
@@ -639,10 +639,31 @@ PRINT COMMANDS
 """
 add_command(Command('p', 'print', '', lambda *_: []))
 
+# pa
+pa_description = """
+"""
+def pa_function(_, rr, *__, **___):
+    result = []
+    desired = 'upstream' if positive(weber.config['interaction.showupstream'][0]) else 'downstream'
+    for source, severity, message in rr.analysis_notes:
+        if source != desired:
+            continue
+        if severity == 'error':
+            result += log.err(message, stdout=False)
+        elif severity == 'warn':
+            result += log.warn(message, stdout=False)
+        elif severity == 'info':
+            result += log.info(message, stdout=False)
+        else:
+            result.append(message)
+    return result
+add_command(Command('pa [<rrid>[:<rrid>]]', 'print analysis results', pa_description, lambda *args: foreach_rrs(pa_function, *args)))
+
+
 # pc
 def pc_function(_, rr, *__, **___):
     try:
-        r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
+        r = rr.request_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.request_downstream
         cookies = r.headers[b'Cookie'].split(b';')
         cookies = dict([tuple(c.split(b'=')) for c in cookies])
         maxlen = max([0]+[len(k.decode().strip()) for k in cookies.keys()])
@@ -657,7 +678,7 @@ add_command(Command('ptc [<rrid>[:<rrid>]]', 'print cookies from templates', pc_
 # pcs
 def pcs_function(_, rr, *__, **___):
     try:
-        r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
+        r = rr.response_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.response_downstream
         cookies = r.headers[b'Set-Cookie'].split(b';')
         attrs = dict([(tuple(c.split(b'=')+[b''])[:2]) for c in cookies])
         maxlen = max([0]+[len(k.decode().strip()) for k in attrs.keys()])
@@ -700,7 +721,7 @@ add_command(Command('ptn [<rrid>[:<rrid>]]', 'print comments in templates', pn_d
 
 # pp
 def pp_function(_, rr, *__, **___):
-    r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
+    r = rr.request_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.request_downstream
     maxlen = max([0]+[len(k) for k in r.parameters.keys()])
     return ['%*s: %s' % (maxlen, k.decode(), '' if v is None else v.decode()) for k, v in r.parameters.items()]
 pp_description = """Parameters of selected requests are printed with `pp` command.
@@ -736,13 +757,13 @@ def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of de
     showdata = bool(kwargs['mask'] & 0x1)
     # deal with requests
     if showrequest:
-        r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
+        r = rr.request_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.request_downstream
         result += r.lines(headers=showheaders, data=showdata)
         if showresponse:
             result.append('')
     # deal with responses
     if showresponse:
-        r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
+        r = rr.response_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.response_downstream
         if r is None:
             result.append('Response not received yet...')
         else:
@@ -889,6 +910,7 @@ trqa_description = """Toggles tamper.requests value.
 def trqa_function(*_):
     trq = not(positive(weber.config['tamper.requests'][0]))
     weber.config['tamper.requests'] = (trq, weber.config['tamper.requests'][1])
+    weber.proxy.tamper_request_counter = 0
     log.info('Requests will be %s by default.' % ('TAMPERED' if trq else 'FORWARDED'))
     return []
 add_command(Command('trqa', 'toggle default request tamper behavior', trqa_description, trqa_function))
@@ -912,6 +934,7 @@ trsa_description = """Toggles tamper.responses value.
 def trsa_function(*_):
     trs = not(positive(weber.config['tamper.responses'][0]))
     weber.config['tamper.responses'] = (trs, weber.config['tamper.responses'][1])
+    weber.proxy.tamper_response_counter = 0
     log.info('Responses will be %s by default.' % ('TAMPERED' if trs else 'FORWARDED'))
     return []
 add_command(Command('trsa', 'toggle default response tamper behavior', trsa_description, trsa_function))
@@ -971,13 +994,13 @@ def wrx_function(rrid, rr, *args, **kwargs): # write headers/data/both of desire
     showdata = bool(kwargs['mask'] & 0x1)
     # deal with requests
     if showrequest:
-        r = rr.request_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.request_downstream
+        r = rr.request_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.request_downstream
         data += r.lines(headers=showheaders, data=showdata, as_string=False)
         if showresponse:
             data.append(b'')
     # deal with responses
     if showresponse:
-        r = rr.response_upstream if positive(weber.config['tamper.showupstream'][0]) else rr.response_downstream
+        r = rr.response_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.response_downstream
         if r is None:
             data.append(b'Response not received yet...')
         else:

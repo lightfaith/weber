@@ -25,7 +25,6 @@ class Request():
         
         # set up tampering mechanism
         self.should_tamper = should_tamper
-        #self.forward_stopper = os.pipe() if forward_stopper is None else forward_stopper
         self.forward_stopper = os.pipe()
         self.tampering = self.should_tamper
         
@@ -129,7 +128,6 @@ class Request():
         if len(self.data)>0:
             result += self.data
         return result
-
 
 
 
@@ -348,10 +346,10 @@ class RRDB():
             return self.rrid
 
     def add_request(self, rrid, request_downstream, request_upstream):
-        self.rrs[rrid] = RR(request_downstream, request_upstream)
+        self.rrs[rrid] = RR(rrid, request_downstream, request_upstream)
 
-    def add_response(self, rrid, response_upstream, response_downstream):
-        self.rrs[rrid].add_response(response_upstream, response_downstream)
+    def add_response(self, rrid, response_upstream, response_downstream, allow_analysis=True):
+        self.rrs[rrid].add_response(response_upstream, response_downstream, allow_analysis)
     
     def add_rr(self, rr):
         rrid = self.get_new_rrid()
@@ -392,7 +390,7 @@ class RRDB():
         else:
             indices = list(range(minimum, maximum+1))[(-10 if showlast else 0):]
        
-        if positive(weber.config['tamper.showupstream'][0]):
+        if positive(weber.config['interaction.showupstream'][0]):
             keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request_upstream.tampering or (self.rrs[x].response_upstream is not None and self.rrs[x].response_upstream.tampering)]
         else:
             keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request_downstream.tampering or (self.rrs[x].response_downstream is not None and self.rrs[x].response_downstream.tampering)]
@@ -428,7 +426,8 @@ weber.tdb = RRDB()
 Request/Response pairs (both downstream and upstream versions)
 """
 class RR():
-    def __init__(self, request_downstream, request_upstream):
+    def __init__(self, rrid, request_downstream, request_upstream):
+        self.rrid = rrid
         self.request_downstream = request_downstream
         self.request_upstream = request_upstream
         self.response_upstream = None
@@ -436,9 +435,10 @@ class RR():
         self.uri_downstream = None
         self.uri_upstream = None
         self.eid = None
+        self.analysis_notes = [] # list of (upstream|downstream, <severity>, <message>) lines
     
     def clone(self):
-        result = RR(self.request_downstream.clone(), self.request_upstream.clone())
+        result = RR(self.rrid, self.request_downstream.clone(), self.request_upstream.clone())
         if self.response_upstream is not None:
             result.response_upstream = self.response_upstream.clone()
             result.response_upstream.tampering = False
@@ -454,14 +454,18 @@ class RR():
     def __str__(self):
         return 'RR(%s <--> %s)' % (self.uri_downstream, self.uri_upstream)
 
-    def add_response(self, response_upstream, response_downstream):
+    def add_response(self, response_upstream, response_downstream, allow_analysis=True):
         self.response_upstream = response_upstream
         self.response_downstream = response_downstream
+        # do analysis here if permitted by proxy (upstream->downstream already done) and if desired
+        if allow_analysis and weber.config['analysis.immediate'][0] and not self.analysis_notes:
+            self.analyze()
+
 
     def request_string(self, colored=False):
-        req = self.request_upstream if positive(weber.config['tamper.showupstream'][0]) else self.request_downstream
+        req = self.request_upstream if positive(weber.config['interaction.showupstream'][0]) else self.request_downstream
         # also get response to pick proper colors
-        res = self.response_upstream if positive(weber.config['tamper.showupstream'][0]) else self.response_downstream
+        res = self.response_upstream if positive(weber.config['interaction.showupstream'][0]) else self.response_downstream
         if True:#try:
             # TODO also from Accept:
             tamperstring = ''
@@ -545,7 +549,7 @@ class RR():
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
 
     def response_string(self, colored=False):
-        res = self.response_upstream if positive(weber.config['tamper.showupstream'][0]) else self.response_downstream
+        res = self.response_upstream if positive(weber.config['interaction.showupstream'][0]) else self.response_downstream
         try:
             tamperstring = ''
             if res.tampering:
@@ -570,7 +574,20 @@ class RR():
             return '%s%s%s%s%d %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, res.statuscode, res.status.decode(), log.COLOR_NONE)
         except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
-        
+    
+    def analyze(self): # intra-RR analysis
+        # for both upstream and downstream
+        for source, req, res in (('upstream', self.request_upstream, self.response_upstream), ('downstream', self.request_downstream, self.request_downstream)):
+            # run all known tests
+            for testname, test in Analysis.intra_tests:
+                try:
+                    note = test(req, res)
+                    # and remember found issues
+                    if note:
+                        self.analysis_notes.append((source, *note))
+                except Exception as e:
+                    log.debug_analysis('"%s" test failed for RR #%d (%s): %s' % (testname, self.rrid, source, str(e)))
+    
 
 """
 Local-Remote URI mapping
@@ -772,3 +789,10 @@ class Event():
         self.rrids = set()
         self.type = ''
 
+"""
+Analysis
+"""
+class Analysis():
+    intra_tests = [
+        ('Missing Content-Type', lambda req,res:(('warn', 'Content-Type is not defined.') if res and not res.headers.get(b'Content-Type') else None)),
+    ]

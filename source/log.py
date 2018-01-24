@@ -132,4 +132,8 @@ def debug_tampering(string=''):
     if positive(config['debug.tampering'][0]):
         show_marked('tpr.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
+def debug_analysis(string=''):
+    if positive(config['debug.analysis'][0]):
+        show_marked('anl.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+
 
