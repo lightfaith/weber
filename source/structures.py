@@ -460,26 +460,86 @@ class RR():
 
     def request_string(self, colored=False):
         req = self.request_upstream if positive(weber.config['tamper.showupstream'][0]) else self.request_downstream
+        # also get response to pick proper colors
+        res = self.response_upstream if positive(weber.config['tamper.showupstream'][0]) else self.response_downstream
         if True:#try:
             # TODO also from Accept:
             tamperstring = ''
             if req.tampering:
                 tamperstring = '[T] '
             color = log.COLOR_NONE
-            if req.onlypath == b'/' or req.onlypath.endswith((b'.htm', b'.html', b'.php', b'.xhtml', b'.aspx')):
+            
+            """# TODO
+            elif content_type.startswith('text/'):
                 color = log.COLOR_GREY
-            elif req.onlypath.endswith((b'.jpg', b'.svg', b'.png', b'.gif', b'.ico', b'.mp3', b'.ogg', b'.mp4', b'.wav')):
-                color = log.COLOR_PURPLE
-            elif req.onlypath.endswith((b'.js', b'.vbs', b'.swf')):
-                color = log.COLOR_BLUE
-            elif req.onlypath.endswith((b'.css')):
-                color = log.COLOR_DARK_PURPLE
-            elif req.onlypath.endswith((b'.pdf', b'.doc', b'.docx', b'.xls', b'.xlsx', b'.ppt', b'.pptx', b'.pps', b'.ppsx', b'.txt')):
-                color = log.COLOR_GREEN
-            elif req.onlypath.endswith((b'.zip', b'.7z', b'.rar', b'.gz', b'.bz2', b'.jar', b'.bin', b'.iso')):
-                color = log.COLOR_BROWN
-            if not colored:
-                color = log.COLOR_NONE
+            elif content_type.startswith('image/'):
+                color = 
+            """
+
+            color = log.COLOR_NONE
+            # do the coloring
+            if colored:
+                if not res:
+                    # no response received, color by extension
+                    if req.onlypath == b'/' or req.onlypath.endswith((b'.htm', b'.html', b'.php', b'.xhtml', b'.aspx')):
+                        color = log.MIMECOLOR_HTML
+                    elif req.onlypath.endswith((b'.jpg', b'.svg', b'.png', b'.gif', b'.ico')):
+                        color = log.MIMECOLOR_IMAGE
+                    elif req.onlypath.endswith((b'.mp3', b'.ogg', b'.mp4', b'.wav')):
+                        color = log.MIMECOLOR_MULTIMEDIA
+                    elif req.onlypath.endswith((b'.js', b'.vbs', b'.swf')):
+                        color = log.MIMECOLOR_SCRIPT
+                    elif req.onlypath.endswith((b'.css')):
+                        color = log.MIMECOLOR_CSS
+                    elif req.onlypath.endswith((b'.pdf', b'.doc', b'.docx', b'.xls', b'.xlsx', b'.ppt', b'.pptx', b'.pps', b'.ppsx')):
+                        color = log.MIMECOLOR_DOCUMENT
+                    elif req.onlypath.endswith(b'.txt'):
+                        color = log.MIMECOLOR_PLAINTEXT
+                    elif req.onlypath.endswith((b'.zip', b'.7z', b'.rar', b'.gz', b'.bz2', b'.jar', b'.bin', b'.iso')):
+                        color = log.MIMECOLOR_ARCHIVE
+                else:
+                    # response received, color by Content-Type
+                    content_type = res.headers.get(b'Content-Type')
+                    if content_type: # missing Content-Type will be detected by analysis (only for 2xx) # TODO
+                        if content_type.startswith(b'text/'): # text stuff, usually html
+                            color = log.MIMECOLOR_HTML
+                            if content_type[5:].startswith(b'css'): # css
+                                color = log.MIMECOLOR_CSS
+                            elif content_type[5:].startswith(b'javascript'): # javascript
+                                color = log.MIMECOLOR_SCRIPT
+                            elif content_type[5:].startswith(b'plain'): # plaintext
+                                color = log.MIMECOLOR_PLAINTEXT
+                            elif content_type[5:].startswith(b'xml'): # data transfer
+                                color = log.MIMECOLOR_DATATRANSFER
+
+                        elif content_type.startswith(b'application/'): # various types
+                            if content_type[12:].startswith((b'xhtml')):
+                                color = log.MIMECOLOR_HTML
+                            elif content_type[12:].startswith((b'javascript', b'x-javascript', b'x-shockwave')): # scripts
+                                color = log.MIMECOLOR_SCRIPT
+                            elif content_type[12:].startswith(b'octet-stream'): # binary
+                                color = log.MIMECOLOR_BINARY
+                            elif content_type[12:].startswith((b'x-bzip', b'x-rar-compressed', b'x-tar', b'x-7z-compressed', b'zip')): # archives 
+                                color = log.MIMECOLOR_ARCHIVE
+                            elif content_type[12:].startswith((b'msword', b'vnd.ms-powerpoint', b'vnd.ms-excel', b'vnd.openxmlformats-officedocument', b'vnd.oasis.opendocument', b'pdf')): # documents
+                                color = log.MIMECOLOR_DOCUMENT
+                            elif content_type[12:].startswith((b'ogg')): # ogg
+                                color = log.MIMECOLOR_MULTIMEDIA
+                            elif content_type[12:].startswith((b'json', b'xml')): # data transfer
+                                color = log.MIMECOLOR_DATATRANSFER
+                            elif content_type[12:].startswith((b'postscript')): # image
+                                color = log.MIMECOLOR_IMAGE
+
+
+                        elif content_type.startswith(b'image/'): # images
+                            color = log.MIMECOLOR_IMAGE
+
+                        elif content_type.startswith((b'audio/', b'video/')): # multimedia
+                            color = log.MIMECOLOR_MULTIMEDIA
+
+                # TODO color by analysis results
+
+
             return '%s%s%s%s%s %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, req.method.decode(), req.path.decode(), log.COLOR_NONE)
         if False:#except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
