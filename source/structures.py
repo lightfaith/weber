@@ -414,7 +414,8 @@ class RRDB():
             log.tprint('    %s  ====  %-*s  =====================' % ('='*eidlen, hreqlen, '='*hreqlen))
 
         for rrid, rr in desired.items():
-            result.append('    %-*s  %-4d  %-*s  %-20s' % (eidlen, '' if rr.eid is None else rr.eid, rrid, reqlen, rr.request_string(colored=True), rr.response_string(colored=True)))
+            rr_id = ('\033[7m%-4d\033[0m' if rr.analysis_notes else '%-4d') % (rrid)
+            result.append('    %-*s  %s  %-*s  %-20s' % (eidlen, '' if rr.eid is None else rr.eid, rr_id, reqlen, rr.request_string(colored=True), rr.response_string(colored=True)))
         return result
 
             
@@ -449,6 +450,7 @@ class RR():
             result.uri_upstream = self.uri_upstream.clone()
         if self.uri_downstream is not None:
             result.uri_downstream = self.uri_downstream.clone()
+        result.analysis_notes = [x for x in self.analysis_notes]
         return result
 
     def __str__(self):
@@ -542,6 +544,8 @@ class RR():
                             color = log.MIMECOLOR_MULTIMEDIA
 
                 # TODO color by analysis results
+                #if self.analysis_notes:
+                #    color += '\033[7m'
 
 
             return '%s%s%s%s%s %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, req.method.decode(), req.path.decode(), log.COLOR_NONE)
@@ -577,7 +581,7 @@ class RR():
     
     def analyze(self): # intra-RR analysis
         # for both upstream and downstream
-        for source, req, res in (('upstream', self.request_upstream, self.response_upstream), ('downstream', self.request_downstream, self.request_downstream)):
+        for source, req, res in (('upstream', self.request_upstream, self.response_upstream), ('downstream', self.request_downstream, self.response_downstream)):
             # run all known tests
             for testname, test in Analysis.intra_tests:
                 try:
