@@ -177,21 +177,18 @@ def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
     startends = kwargs['startends']
     attrs = kwargs.get('attrs')
     valueonly = kwargs['valueonly']
-    #for tagname, attr_key, attr_value in tags:
-    #    for t in rr.response.find_tags(tagname, attr_key=attr_key, attr_value=attr_value, form=('value' if valueonly else 'xml')):
-    #        tmpresult.append(t)
-    #return tmpresult
-    result = []
+    
     r = rr.response_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.response_downstream
     if r is None: # race condition, return nothing for now
-        return result
-    if attrs is None:
+        return []
+    return r.find_tags(startends, attrs, valueonly)
+    """if attrs is None:
         for startbytes, endbytes in startends:
             result += [x[1].decode() for x in find_between(r.data, startbytes, endbytes, inner=valueonly)]
     else:
         for (startbytes, endbytes), attr in zip(startends, attrs):
             result += [x[1].decode() for x in r.find_html_attr(startbytes, endbytes, attr)]
-    return result
+    return result"""
     
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
 
@@ -648,14 +645,12 @@ def pa_function(_, rr, *__, **___):
     for source, severity, message in rr.analysis_notes:
         if source != desired:
             continue
-        if severity == 'error':
-            result += log.err(message, stdout=False)
-        elif severity == 'warn':
-            result += log.warn(message, stdout=False)
-        elif severity == 'info':
-            result += log.info(message, stdout=False)
-        else:
-            result.append(message)
+        color = log.COLOR_NONE
+        if severity == 'SECURITY':
+            color = log.COLOR_RED
+        if severity == 'WARNING':
+            color = log.COLOR_YELLOW
+        result += log.info('%s%s%s: %s' % (color, severity, log.COLOR_NONE, message), stdout=False)
     return result
 add_command(Command('pa [<rrid>[:<rrid>]]', 'print analysis results', pa_description, lambda *args: foreach_rrs(pa_function, *args)))
 

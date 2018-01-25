@@ -252,7 +252,7 @@ class Response():
         if data:
             # Do not include if string is desired and it is binary content
             # TODO more Content-Types
-            if as_string and self.statuscode < 300 and Response.get_color_by_content_type(self.headers.get(b'Content-Type')) not in (log.MIMECOLOR_PLAINTEXT, log.MIMECOLOR_HTML, log.MIMECOLOR_SCRIPT, log.MIMECOLOR_CSS, log.MIMECOLOR_DATATRANSFER):
+            if as_string and self.statuscode < 300 and not is_content_type_text(self.headers.get(b'Content-Type')):
                 parts.append(b'--- BINARY DATA ---')
             else:
                 parts += self.data.split(b'\n')
@@ -314,6 +314,17 @@ class Response():
         self.data = b''.join(result)
 
 
+    def find_tags(self, startends, attrs=None, valueonly=False):
+        result = []
+        if attrs is None:
+            for startbytes, endbytes in startends:
+                result += [x[1].decode() for x in find_between(self.data, startbytes, endbytes, inner=valueonly)]
+        else:
+            for (startbytes, endbytes), attr in zip(startends, attrs):
+                result += [x[1].decode() for x in self.find_html_attr(startbytes, endbytes, attr)]
+        return result
+
+
     def spoof(self, path):
         # replace data with file content
         try:
@@ -324,50 +335,6 @@ class Response():
             self.compute_content_length()
         except:
             log.err('Spoofing failed - cannot open file.')
-
-    @staticmethod
-    def get_color_by_content_type(content_type):
-        color = log.COLOR_NONE
-        if content_type is None:
-            return color
-        if content_type.startswith(b'text/'): # text stuff, usually html
-            color = log.MIMECOLOR_HTML
-            ct_part = content_type[5:]
-            if ct_part.startswith(b'css'): # css
-                color = log.MIMECOLOR_CSS
-            elif ct_part.startswith(b'javascript'): # javascript
-                color = log.MIMECOLOR_SCRIPT
-            elif ct_part.startswith(b'plain'): # plaintext
-                color = log.MIMECOLOR_PLAINTEXT
-            elif ct_part.startswith(b'xml'): # data transfer
-                color = log.MIMECOLOR_DATATRANSFER
-
-        elif content_type.startswith(b'application/'): # various types
-            ct_part = content_type[12:]
-            if ct_part.startswith((b'xhtml')):
-                color = log.MIMECOLOR_HTML
-            elif ct_part.startswith((b'javascript', b'x-javascript', b'x-shockwave')): # scripts
-                color = log.MIMECOLOR_SCRIPT
-            elif ct_part.startswith(b'octet-stream'): # binary
-                color = log.MIMECOLOR_BINARY
-            elif ct_part.startswith((b'x-bzip', b'x-rar-compressed', b'x-tar', b'x-7z-compressed', b'zip')): # archives 
-                color = log.MIMECOLOR_ARCHIVE
-            elif ct_part.startswith((b'msword', b'vnd.ms-powerpoint', b'vnd.ms-excel', b'vnd.openxmlformats-officedocument', b'vnd.oasis.opendocument', b'pdf')): # documents
-                color = log.MIMECOLOR_DOCUMENT
-            elif ct_part.startswith((b'ogg')): # ogg
-                color = log.MIMECOLOR_MULTIMEDIA
-            elif ct_part.startswith((b'json', b'xml')): # data transfer
-                color = log.MIMECOLOR_DATATRANSFER
-            elif ct_part.startswith((b'postscript')): # image
-                color = log.MIMECOLOR_IMAGE
-
-        elif content_type.startswith(b'image/'): # images
-            color = log.MIMECOLOR_IMAGE
-
-        elif content_type.startswith((b'audio/', b'video/')): # multimedia
-            color = log.MIMECOLOR_MULTIMEDIA
-        return color
-
 
 
 
@@ -549,7 +516,7 @@ class RR():
                     # response received, color by Content-Type
                     content_type = res.headers.get(b'Content-Type')
                     if content_type: # missing Content-Type will be detected in analysis
-                        color = Response.get_color_by_content_type(content_type)
+                        color = get_color_from_content_type(content_type)
 
                 # TODO color by analysis results
                 #if self.analysis_notes:
@@ -560,7 +527,6 @@ class RR():
         if False:#except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
     
-
 
     def response_string(self, colored=False):
         res = self.response_upstream if positive(weber.config['interaction.showupstream'][0]) else self.response_downstream
@@ -808,5 +774,6 @@ Analysis
 """
 class Analysis():
     intra_tests = [
-        ('Missing Content-Type', lambda req,res:(('warn', 'Content-Type is not defined.') if res and not res.headers.get(b'Content-Type') else None)),
+        ('Missing Content-Type', lambda req,res:(('WARNING', 'Content-Type is not defined.') if res and not res.headers.get(b'Content-Type') else None)),
+        ('PHP returned', lambda req,res:(('SECURITY', 'PHP code returned from server.') if res and is_content_type_text(res.headers.get(b'Content-Type')) and res.find_tags(startends=[(b'<?', b'?>')], valueonly=False) else None)),
     ]

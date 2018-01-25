@@ -84,3 +84,48 @@ def find_between(data, startbytes, endbytes, startpos=0, endpos=0, inner=False):
             break
     return result
 
+
+def get_color_from_content_type(content_type=None):
+    color = log.COLOR_NONE
+    if content_type is None:
+        return color
+    if content_type.startswith(b'text/'): # text stuff, usually html
+        color = log.MIMECOLOR_HTML
+        ct_part = content_type[5:]
+        if ct_part.startswith(b'css'): # css
+            color = log.MIMECOLOR_CSS
+        elif ct_part.startswith(b'javascript'): # javascript
+            color = log.MIMECOLOR_SCRIPT
+        elif ct_part.startswith(b'plain'): # plaintext
+            color = log.MIMECOLOR_PLAINTEXT
+        elif ct_part.startswith(b'xml'): # data transfer
+            color = log.MIMECOLOR_DATATRANSFER
+    elif content_type.startswith(b'application/'): # various types
+        ct_part = content_type[12:]
+        if ct_part.startswith((b'xhtml')):
+            color = log.MIMECOLOR_HTML
+        elif ct_part.startswith((b'javascript', b'x-javascript', b'x-shockwave')): # scripts
+            color = log.MIMECOLOR_SCRIPT
+        elif ct_part.startswith(b'octet-stream'): # binary
+            color = log.MIMECOLOR_BINARY
+        elif ct_part.startswith((b'x-bzip', b'x-rar-compressed', b'x-tar', b'x-7z-compressed', b'zip')): # archives
+            color = log.MIMECOLOR_ARCHIVE
+        elif ct_part.startswith((b'msword', b'vnd.ms-powerpoint', b'vnd.ms-excel', b'vnd.openxmlformats-officedocument', b'vnd.oasis.opendocument', b'pdf')): # documents
+            color = log.MIMECOLOR_DOCUMENT
+        elif ct_part.startswith((b'ogg')): # ogg
+            color = log.MIMECOLOR_MULTIMEDIA
+        elif ct_part.startswith((b'json', b'xml')): # data transfer
+            color = log.MIMECOLOR_DATATRANSFER
+        elif ct_part.startswith((b'postscript')): # image
+            color = log.MIMECOLOR_IMAGE
+
+    elif content_type.startswith(b'image/'): # images
+        color = log.MIMECOLOR_IMAGE
+
+    elif content_type.startswith((b'audio/', b'video/')): # multimedia
+        color = log.MIMECOLOR_MULTIMEDIA
+    return color
+ 
+
+def is_content_type_text(content_type):
+    return get_color_from_content_type(content_type) in (log.MIMECOLOR_PLAINTEXT, log.MIMECOLOR_HTML, log.MIMECOLOR_SCRIPT, log.MIMECOLOR_CSS, log.MIMECOLOR_DATATRANSFER)
