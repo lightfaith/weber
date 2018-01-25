@@ -698,6 +698,12 @@ ph_description = """
 add_command(Command('ph', 'print HTML-related info', ph_description, lambda *_: []))
 add_command(Command('pth', 'print HTML-related info in templates', ph_description, lambda *_: []))
 
+# phc
+phc_description = """HTML comments can be searched with `phc` command.
+"""
+add_command(Command('phc [<rrid>[:<rrid>]]', 'print comments', phc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<!--', b'-->')], valueonly=False)))
+add_command(Command('pthc [<rrid>[:<rrid>]]', 'print comments in templates', phc_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<!--', b'-->')], valueonly=False)))
+
 # phf
 phf_description = """Forms present on given page are shown with `pf` command.
 """
@@ -719,11 +725,12 @@ phm_description = """HTML <main> tags can be searched with `phm` command.
 """
 add_command(Command('phm [<rrid>[:<rrid>]]', 'print <main> elements', phm_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<main', b'</main>')], valueonly=False)))
 add_command(Command('pthm [<rrid>[:<rrid>]]', 'print <main> elements in templates', phm_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<main', b'</main>')], valueonly=False)))
-# phc
-phc_description = """HTML comments can be searched with `phc` command.
+
+# phs
+phs_description = """
 """
-add_command(Command('phc [<rrid>[:<rrid>]]', 'print comments', phc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<!--', b'-->')], valueonly=False)))
-add_command(Command('pthc [<rrid>[:<rrid>]]', 'print comments in templates', phc_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<!--', b'-->')], valueonly=False)))
+add_command(Command('phs <start> <end>', 'search in HTML', phm_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(args[0].encode(), args[1].encode())], valueonly=False)))
+add_command(Command('pths <start> <end>', 'search in HTML of templates', phm_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(args[0].encode(), args[1].encode())], valueonly=False)))
 
 # pp
 def pp_function(_, rr, *__, **___):
