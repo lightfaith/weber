@@ -636,6 +636,11 @@ class Mapping():
         remote = None
         if not isinstance(local, URI):
             local = URI(local)
+        else:
+            # work with clone
+            local = local.clone()
+        
+        orig_str = str(local)
 
         log.debug_mapping('get_remote() for %s' % (local.get_value()))
         if local.path.startswith('/WEBER-MAPPING/'):
@@ -648,7 +653,7 @@ class Mapping():
             remote = self.l_r[self.map[local.__bytes__()]].clone()
             remote.path += realpath[1:] # without the leading slash - already present in remote.path
         local.path = realpath
-        log.debug_mapping('get_remote():   %s --> %s' % (str(local), str(remote)))
+        log.debug_mapping('get_remote():   %s --> %s' % (orig_str, str(remote)))
         return remote
 
     

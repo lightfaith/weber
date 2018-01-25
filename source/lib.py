@@ -39,8 +39,13 @@ def exit_program(signal, frame):
 
     # stop the scheduler (will stop all threads)
     weber.proxy.stop()
+    #counter = 0
     while weber.proxy.is_alive():
         time.sleep(0.1)
+    #    counter += 1
+    #    if counter == 50:
+    #        log.info('Force termination.')
+    #        break
     sys.exit(0 if signal is None else 1)
 
 # run exit program on SIGINT

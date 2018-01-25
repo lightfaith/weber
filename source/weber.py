@@ -91,6 +91,10 @@ spoofs = {}
 """
 brute = None
 
+"""
+List of local URIs that could not be forwarded
+"""
+forward_fail_uris = []
 
 """
 MOTDs

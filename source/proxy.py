@@ -170,6 +170,7 @@ class Proxy(Thread):
 
 
 class ConnectionThread(Thread):
+
     def __init__(self, conn, rrid, tamper_request, tamper_response, template_rr=None, brute_set=None):
         # conn - socket to browser, None if from template
         # rrid - index of request-response pair
@@ -222,6 +223,12 @@ class ConnectionThread(Thread):
                 self.localuri = URI(URI.build_str(self.host, self.port, request.path))
             else:
                 self.localuri = self.template_rr.uri_upstream.clone()
+
+            # localuri had problems in the past? give up...
+
+            if str(self.localuri) in weber.forward_fail_uris:
+                break
+
             log.debug_mapping('request source: %s ' % (str(self.localuri)))
             log.debug_parsing('\n'+'-'*15+'\n'+str(request)+'\n'+'='*20)
             self.path = request.path.decode()
@@ -238,7 +245,9 @@ class ConnectionThread(Thread):
                 self.remoteuri = weber.mapping.get_remote(self.localuri)
                 if self.remoteuri is None:
                     log.err('Cannot forward - local URI is not mapped. Terminating thread...')
+                    weber.forward_fail_uris.append(str(self.localuri))
                     break
+
                 request.path = self.remoteuri.path.encode()
                 request.parse_method()
                 request.headers[b'Host'] = self.remoteuri.domain.encode() if self.remoteuri.port in [80, 443] else b'%s:%d' % (self.remoteuri.domain.encode(), self.remoteuri.port)
@@ -269,9 +278,10 @@ class ConnectionThread(Thread):
             log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
             response = self.forward(self.remoteuri, request.bytes())
             
-            ###############################################################################
             if response is None:
+                weber.forward_fail_uris.append(str(self.localuri))
                 break
+            ###############################################################################
 
             log.debug_parsing('\n'+str(response)+'\n'+'='*30)
             
@@ -338,7 +348,6 @@ class ConnectionThread(Thread):
             # print if desired
             if positive(weber.config['overview.realtime'][0]):
                 log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
-            #time.sleep(10) # TODO what was the reason again?
         
         # close connection if not None (from template)
         if self.conn:
