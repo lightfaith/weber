@@ -692,32 +692,38 @@ add_command(Command('pcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences', pcs_
 add_command(Command('ptcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences from templates', pcs_description, lambda *args: foreach_rrs(pcs_function, fromtemplate=True, *args)))
 add_command(Command('pe [<eid>[:<eid>]]', 'print events', e_description, e_function))
 
-# pf
-pf_description = """Forms present on given page are shown with `pf` command.
+# ph
+ph_description = """
 """
-add_command(Command('pf [<rrid>[:<rrid>]]', 'print forms', pf_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<form', b'</form>')], valueonly=False)))
-add_command(Command('ptf [<rrid>[:<rrid>]]', 'print forms from templates', pf_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<form', b'</form>')], valueonly=False)))
+add_command(Command('ph', 'print HTML-related info', ph_description, lambda *_: []))
+add_command(Command('pth', 'print HTML-related info in templates', ph_description, lambda *_: []))
 
-# pl
-pl_description = """Links from all known tags are printed with `pl` command. To see their context, use `plc` command.
+# phf
+phf_description = """Forms present on given page are shown with `pf` command.
 """
-add_command(Command('pl [<rrid>[:<rrid>]]', 'print links', pl_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], attrs=[x[2] for x in Response.link_tags], valueonly=True)))
-add_command(Command('ptl [<rrid>[:<rrid>]]', 'print links from templates', pl_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[x[:2] for x in Response.link_tags], attrs=[x[2] for x in Response.link_tags], valueonly=True)))
-plc_description = """Links from all known tags together with their context are printed with `plc` command.
-"""
-add_command(Command('plc [<rrid>[:<rrid>]]', 'print links with context', plc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], valueonly=False)))
-add_command(Command('ptlc [<rrid>[:<rrid>]]', 'print links from templates with context', plc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], valueonly=False)))
+add_command(Command('phf [<rrid>[:<rrid>]]', 'print HTML forms', phf_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<form', b'</form>')], valueonly=False)))
+add_command(Command('pthf [<rrid>[:<rrid>]]', 'print HTML forms from templates', phf_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<form', b'</form>')], valueonly=False)))
 
-# pm
-pm_description = """HTML <main> tags can be searched with `pn` command.
+# phl
+phl_description = """Links from all known tags are printed with `phl` command. To see their context, use `phlc` command.
 """
-add_command(Command('pm [<rrid>[:<rrid>]]', 'print <main> elements', pm_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<main', b'</main>')], valueonly=False)))
-add_command(Command('ptm [<rrid>[:<rrid>]]', 'print <main> elements in templates', pm_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<main', b'</main>')], valueonly=False)))
-# pn
-pn_description = """HTML comments can be searched with `pn` command.
+add_command(Command('phl [<rrid>[:<rrid>]]', 'print HTML links', phl_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], attrs=[x[2] for x in Response.link_tags], valueonly=True)))
+add_command(Command('pthl [<rrid>[:<rrid>]]', 'print links from templates', phl_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[x[:2] for x in Response.link_tags], attrs=[x[2] for x in Response.link_tags], valueonly=True)))
+phlc_description = """Links from all known tags together with their context are printed with `phlc` command.
 """
-add_command(Command('pn [<rrid>[:<rrid>]]', 'print comments', pn_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<!--', b'-->')], valueonly=False)))
-add_command(Command('ptn [<rrid>[:<rrid>]]', 'print comments in templates', pn_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<!--', b'-->')], valueonly=False)))
+add_command(Command('phlc [<rrid>[:<rrid>]]', 'print links with context', phlc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], valueonly=False)))
+add_command(Command('pthlc [<rrid>[:<rrid>]]', 'print links from templates with context', phlc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], valueonly=False)))
+
+# phm
+phm_description = """HTML <main> tags can be searched with `phm` command.
+"""
+add_command(Command('phm [<rrid>[:<rrid>]]', 'print <main> elements', phm_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<main', b'</main>')], valueonly=False)))
+add_command(Command('pthm [<rrid>[:<rrid>]]', 'print <main> elements in templates', phm_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<main', b'</main>')], valueonly=False)))
+# phc
+phc_description = """HTML comments can be searched with `phc` command.
+"""
+add_command(Command('phc [<rrid>[:<rrid>]]', 'print comments', phc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<!--', b'-->')], valueonly=False)))
+add_command(Command('pthc [<rrid>[:<rrid>]]', 'print comments in templates', phc_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<!--', b'-->')], valueonly=False)))
 
 # pp
 def pp_function(_, rr, *__, **___):
