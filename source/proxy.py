@@ -392,7 +392,20 @@ class ConnectionThread(Thread):
             return None
 
         if uri.scheme == 'https':
-            self.client_socket = ssl.wrap_socket(self.client_socket)
+            try:
+                self.client_socket = ssl.wrap_socket(self.client_socket)
+            except Exception as e:
+                #log.err('Cannot create SSL socket for %s: %s' % (uri.get_value(), str(e)))
+                #log.err('See traceback:')
+                #traceback.print_exc()
+                #return None
+                log.debug_socket('Cannot create SSL socket for %s, using HTTP instead.' % (uri.get_value()))
+                # recreate socket, run forward with HTTP
+                self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                uri.scheme = 'http' # TODO uri changed everywhere? (mapping?)
+                self.client_socket.connect((uri.domain, uri.port))
+                #return self.forward(uri, data)
+
         self.client_socket.send(data)
         try:
             response = Response(ProxyLib.recvall(self.client_socket), self.tamper_response)

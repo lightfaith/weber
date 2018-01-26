@@ -937,9 +937,9 @@ Unlike `sra`, the parameter is not escaped.
 """ # TODO
 def srd_function(*args):
     try:
-        del weber.spoof_files[args[0]]
+        del weber.spoof_regexs[args[0]]
     except:
-        log.err('Invalid spoof URI.')
+        log.err('Invalid spoof value.')
     return []
 add_command(Command('srd <old>', 'delete regex spoof', srd_description, srd_function))
 
