@@ -82,9 +82,11 @@ Local-remote URI mapping (initialized in structures.py)
 mappings = None 
 
 """
-Spoof dictionary (URI in str format  ->  path to file)
+Spoof dictionaries (URI in str format  ->  path to file)
+                   (old string -> new string)
 """
-spoofs = {}
+spoof_files = {}
+spoof_regexs = {}
 
 """
 (path, list of lists (values for bruteforcing))

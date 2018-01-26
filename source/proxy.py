@@ -298,10 +298,12 @@ class ConnectionThread(Thread):
                 # Weber is terminating
                 break
 
-            # spoof if desired (with or without GET arguments)
+
+            # spoof files if desired (with or without GET arguments)
             spoof_path = self.remoteuri.get_value() if positive(weber.config['spoof.arguments'][0]) else self.remoteuri.get_value().partition('?')[0]
-            if spoof_path in weber.spoofs.keys():
-                response.spoof(weber.spoofs[spoof_path])
+            if spoof_path in weber.spoof_files.keys():
+                response.spoof(weber.spoof_files[spoof_path])
+
 
             # set response as downstream, create backup (upstream), update RRDB and do the analysis
             response_upstream = response.clone()

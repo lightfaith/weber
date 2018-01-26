@@ -825,11 +825,36 @@ add_command(Command('pwm', 'print URI mapping', '', pwm_function))
 add_command(Command('pwo', 'print weber configuration', o_description, o_function))
 
 # pws
-pws_description="""Spoofing feature allows you to specify file which should be used instead the real response. Note that the request is sent to remote server to get valid HTML headers.
+pws_description="""Spoofing feature allows you to alter the requested content on the fly:
+- by specifying the file which should be used instead the real response (`sf`)
+- by modifying the response with regular expressions (`sr`) 
 """
 def pws_function(*args):
-    return ['%s -> %s' % (k, v) for k,v in weber.spoofs.items()]
+    result = []
+    files = ['    %s' % (x) for x in weber.commands['pwsf'].run()]
+    if files:
+        result.append('    Files:')
+        result += files
+    regexs = ['    %s' % (x) for x in weber.commands['pwsr'].run()]
+    if regexs:
+        result.append('    Regular expressions:')
+        result += regexs
+    return result
 add_command(Command('pws', 'print spoof settings', pws_description, pws_function))
+
+# pwsf
+pwsf_description = """
+"""
+def pwsf_function(*args):
+    return ['    %s -> %s' % (k, v) for k,v in weber.spoof_files.items()]
+add_command(Command('pwsf', 'print "spoof file" settings', pwsf_description, pwsf_function))
+
+# pwsr
+pwsr_description = """
+"""
+def pwsr_function(*args):
+    return ['    %s -> %s' % (k, v) for k,v in weber.spoof_regexs.items()]
+add_command(Command('pwsr', 'print "spoof regex" settings', pwsr_description, pwsr_function))
 
 # pwt
 pwt_description="""Alive ConnectionThread objects are printed with `pt` command. This is mostly for debug purposes.
@@ -848,36 +873,75 @@ Spoofing
 """
 # s
 add_command(Command('s', 'print spoof settings (alias for `pws`)', pws_description, pws_function))
+add_command(Command('sf', 'print "spoof file" settings', pwsf_description, pwsf_function))
+add_command(Command('sr', 'print "spoof regex" settings', pwsr_description, pwsr_function))
 
-# sa
-sa_description="""
-"""
-def sa_function(*args):
+# sfa
+sfa_description="""
+ (note that the request is sent to remote server to get valid HTML headers.
+""" # TODO
+def sfa_function(*args):
     try:
         uri = URI(args[0])
     except:
         log.err('Invalid URI.')
         return []
     try:
-        with open(args[1], 'rb') as f:
+        with open(args[1], 'rb'):
             pass
     except:
         log.err('Cannot read file.')
         return []
-    weber.spoofs[uri.get_value()] = args[1]
+    weber.spoof_files[uri.get_value()] = args[1]
     return []
-add_command(Command('sa <uri> <file>', 'add new spoof', sa_description, sa_function))
-# sd
-sd_description="""
+add_command(Command('sfa <uri> <file>', 'add/modify file spoof', sfa_description, sfa_function))
+
+# sfd
+sfd_description="""
 """
-def sd_function(*args):
+def sfd_function(*args):
     try:
-        del weber.spoofs[args[0]]
+        del weber.spoof_files[args[0]]
     except:
         log.err('Invalid spoof URI.')
     return []
-add_command(Command('sd <uri>', 'delete spoof', sd_description, sd_function))
+add_command(Command('sfd <uri>', 'delete file spoof', sfd_description, sfd_function))
 
+# sra # TODO desired also for requests?
+sra_description = """
+    First character is the delimiter.
+    Examples:
+        sra /http/https/
+        sra /\/etc\/hostz/\/etc\/hosts/
+        sra |/etc/hostz|/etc/hosts|
+""" # TODO
+
+def sra_function(*args):
+    try:
+        regex = ' '.join(args)
+    except:
+        log.err('Missing regular expression.')
+        return []
+    parts = tuple(split_escaped(regex[1:-1], regex[0]))
+    if len(parts) != 2:
+        log.err('Invalid regular expression.')
+        return []
+    weber.spoof_regexs[parts[0]] = parts[1]
+    return []
+
+add_command(Command('sra /old/new/', 'add/modify regex spoof', sra_description, sra_function))
+
+# srd
+srd_description="""
+Unlike `sra`, the parameter is not escaped.
+""" # TODO
+def srd_function(*args):
+    try:
+        del weber.spoof_files[args[0]]
+    except:
+        log.err('Invalid spoof URI.')
+    return []
+add_command(Command('srd <old>', 'delete regex spoof', srd_description, srd_function))
 
 
 

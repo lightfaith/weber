@@ -134,3 +134,24 @@ def get_color_from_content_type(content_type=None):
 
 def is_content_type_text(content_type):
     return get_color_from_content_type(content_type) in (log.MIMECOLOR_PLAINTEXT, log.MIMECOLOR_HTML, log.MIMECOLOR_SCRIPT, log.MIMECOLOR_CSS, log.MIMECOLOR_DATATRANSFER)
+
+
+def split_escaped(string, delimiter):
+    if len(delimiter) != 1:
+        raise ValueError('Invalid delimiter: ' + delimiter)
+    ln = len(string)
+    i = 0
+    j = 0
+    while j < ln:
+        if string[j] == '\\':
+            if j + 1 >= ln:
+                yield string[i:j].replace('\\', '')
+                return
+            j += 1
+        elif string[j] == delimiter:
+            yield string[i:j].replace('\\', '')
+            i = j + 1
+        j += 1
+    yield string[i:j].replace('\\', '')
+
+

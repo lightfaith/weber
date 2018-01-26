@@ -153,27 +153,41 @@ class Response():
         self.forward_stopper = os.pipe()
         self.tampering = should_tamper
         
+        
         # parse data
         self.parse(data)
 
+        
         # allow forwarding?
         if not self.should_tamper:
             self.forward()
     
-    
+    @staticmethod
+    def spoof_regex(data):
+        for old, new in weber.spoof_regexs.items():
+            data = re.sub(old.encode(), new.encode(), data)
+        return data
+
     def parse(self, data):
         # parse given bytes (from socket, editor, file, ...)
         self.original = data
         lines = data.split(b'\r\n')
-        self.version = lines[0].partition(b' ')[0]
-        self.statuscode = int(lines[0].split(b' ')[1])
-        self.status = b' '.join(lines[0].split(b' ')[2:])
+
+        line0 = Response.spoof_regex(lines[0])
+
+        self.version = line0.partition(b' ')[0]
+        try:
+            self.statuscode = int(line0.split(b' ')[1])
+        except:
+            log.warn('Non-integer status code received.')
+            self.statuscode = 0
+        self.status = b' '.join(line0.split(b' ')[2:])
         self.headers = OrderedDict()
 
         # load first set of headers (hopefully only one)
         line_index = 1
         for line_index in range(1, len(lines)):
-            line = lines[line_index]
+            line = Response.spoof_regex(lines[line_index])
             if len(line) == 0:
                 break
             k, _, v = line.partition(b':')
@@ -206,7 +220,7 @@ class Response():
                         break
                     # chunk spans multiple lines...
                     tmpchunk += b'\r\n'
-                self.data += tmpchunk
+                self.data += Response.spoof_regex(tmpchunk)
         except Exception as e:
             line_index = data_line_index # restore the value
             log.debug_chunks('unchunking failed:')
@@ -214,7 +228,7 @@ class Response():
             #traceback.print_exc()
             log.debug_chunks('treating as non-chunked...')
             # treat as normal data
-            self.data = b'\r\n'.join(lines[line_index:])
+            self.data = Response.spoof_regex(b'\r\n'.join(lines[line_index:]))
             # TODO test for matching Content-Type (HTTP Response-Splitting etc.)
         
     
