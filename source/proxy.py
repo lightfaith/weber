@@ -217,10 +217,17 @@ class ConnectionThread(Thread):
             self.keepalive = (request.headers.get(b'Connection') == b'Keep-Alive')
             
             # get URI() from request
+            downstream_referer = None
             if self.template_rr is None:
-                self.host, _, port = request.headers[b'Host'].partition(b':')
-                self.port = int(port)
+                try:
+                    self.host, _, port = request.headers[b'Host'].partition(b':')
+                    self.port = int(port)
+                except:
+                    self.host = b''
+                    self.port = 80
                 self.localuri = URI(URI.build_str(self.host, self.port, request.path))
+                if request.headers.get(b'Referer'):
+                    downstream_referer = URI(request.headers.get(b'Referer'))
             else:
                 self.localuri = self.template_rr.uri_upstream.clone()
 
@@ -247,10 +254,13 @@ class ConnectionThread(Thread):
                     log.err('Cannot forward - local URI is not mapped. Terminating thread...')
                     weber.forward_fail_uris.append(str(self.localuri))
                     break
+                upstream_referer = weber.mapping.get_remote(downstream_referer)
 
                 request.path = self.remoteuri.path.encode()
                 request.parse_method()
                 request.headers[b'Host'] = self.remoteuri.domain.encode() if self.remoteuri.port in [80, 443] else b'%s:%d' % (self.remoteuri.domain.encode(), self.remoteuri.port)
+                if upstream_referer:
+                    request.headers[b'Referer'] = upstream_referer.domain.encode() if upstream_referer.port in [80, 443] else b'%s:%d' % (upstream_referer.domain.encode(), upstream_referer.port)
                 log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
             else:
                 self.remoteuri = self.localuri.clone() # as we are working with upstream rr already

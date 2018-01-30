@@ -618,6 +618,8 @@ class Mapping():
 
     
     def get_local(self, remote):
+        if remote is None:
+            return None
         if type(remote) in (str, bytes):
             remote = URI(remote)
         
@@ -648,6 +650,8 @@ class Mapping():
         
     def get_remote(self, local):
         remote = None
+        if local is None:
+            return remote
         if not isinstance(local, URI):
             local = URI(local)
         else:
