@@ -109,7 +109,4 @@ ENV/
 # Private stuff
 nogit/
 
-# config file
-weber.conf
-
 
