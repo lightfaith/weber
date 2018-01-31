@@ -14,7 +14,7 @@ from source import weber
 from source import log
 from source.structures import Request, Response, URI
 from source.lib import *
-
+from source.fd_debug import *
 
 
 class ProxyLib():
@@ -44,6 +44,7 @@ class Proxy(Thread):
         self.threads = []
         self.terminate = False
         self.stopper = os.pipe()
+        fd_add_comment(self.stopper, 'proxy stopper')
         self.lock = threading.Lock()
         
         # set up server socket
@@ -75,7 +76,8 @@ class Proxy(Thread):
     def stop(self):
         self.terminate = True
         os.write(self.stopper[1], b'1')
-    
+
+
     def should_tamper(self, what):
         default = weber.config.get('tamper.%ss' % (what), False)[0]
         # TODO domain, regex, mimetype matches
@@ -96,6 +98,7 @@ class Proxy(Thread):
                     return False
         return False
 
+
     def add_connectionthread_from_template(self, template_rr, brute_set):
         # create new connection in new thread
         t = ConnectionThread(None, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'), template_rr, brute_set)
@@ -106,6 +109,7 @@ class Proxy(Thread):
             t.join()
         return t.rrid
         
+
     def run(self):
         try:
             self.server_socket.listen(1)
@@ -115,6 +119,7 @@ class Proxy(Thread):
             return
 
         while True:
+            #print(fd_table_status_str('FIFO'))
             r, _, _ = select([self.server_socket, self.ssl_server_socket, self.stopper[0]], [], [])
             # accept connection, thread it
             if not self.terminate:
@@ -134,6 +139,7 @@ class Proxy(Thread):
                     o, _ = netstat.communicate()
                     for line in [line for line in o.splitlines() if list(filter(None, line.decode().split(' ')))[3] == '%s:%d' % (client)]:
                         log.debug_socket(line.decode())
+                    
 
                     # create new connection in new thread
                     t = ConnectionThread(conn, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'))
@@ -169,8 +175,9 @@ class Proxy(Thread):
                 break
 
 
-class ConnectionThread(Thread):
 
+
+class ConnectionThread(Thread):
     def __init__(self, conn, rrid, tamper_request, tamper_response, template_rr=None, brute_set=None):
         # conn - socket to browser, None if from template
         # rrid - index of request-response pair
@@ -190,6 +197,7 @@ class ConnectionThread(Thread):
         self.brute_set = brute_set
         #print('New ConnectionThread, tampering request', self.tamper_request, ', response', self.tamper_response)
         self.stopper = os.pipe() # if Weber is terminated while tampering
+        fd_add_comment(self.stopper, 'CT (RRID %d) stopper' % (rrid))
         #print('new thread: uri', uri, type(uri))
         self.localuri = None
         self.remoteuri = None
@@ -201,9 +209,12 @@ class ConnectionThread(Thread):
 
     def stop(self):
         self.terminate = True
-        os.write(self.stopper[1], b'1')
+        if self.stopper:
+            os.write(self.stopper[1], b'1')
 
     def run(self):
+        request = None
+        response = None
         while self.keepalive:
             # receive request from browser / copy from template RR
             if self.template_rr is None:
@@ -283,7 +294,7 @@ class ConnectionThread(Thread):
             if self.stopper[0] in r:
                 # Weber is terminating
                 break
-
+            
             # forward request to server        
             log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
             response = self.forward(self.remoteuri, request.bytes())
@@ -364,6 +375,20 @@ class ConnectionThread(Thread):
         # close connection if not None (from template)
         if self.conn:
             self.conn.close()
+
+        # close stoppers
+        
+        for r in [request, response]:
+            if r:
+                for fd in [0, 1]:
+                    if r.forward_stopper:
+                        os.close(r.forward_stopper[fd])
+                r.forward_stopper = None
+        for fd in [0, 1]:
+            if self.stopper:
+                os.close(self.stopper[fd])
+        self.stopper = None
+        
 
 
     def receive_request(self):

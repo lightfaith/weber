@@ -8,13 +8,13 @@ from collections import OrderedDict
 from source import weber
 from source import log
 from source.lib import *
-
+from source.fd_debug import *
 
 class Request():
     """
     HTTP Request class
     """
-    def __init__(self, data, should_tamper):
+    def __init__(self, data, should_tamper, no_stopper=False):
         """
             data = request data (bytes)
             should_tamper = should the request be tampered? (bool)
@@ -25,7 +25,7 @@ class Request():
         
         # set up tampering mechanism
         self.should_tamper = should_tamper
-        self.forward_stopper = os.pipe()
+        self.forward_stopper = None if no_stopper else os.pipe()
         self.tampering = self.should_tamper
         
         # parse data
@@ -41,6 +41,7 @@ class Request():
         self.original = data
         lines = data.splitlines()
         self.method, self.path, self.version = tuple(lines[0].split(b' '))
+        fd_add_comment(self.forward_stopper, 'Request (%s %s) forward stopper' % (self.method, self.path))
         self.parameters = {}
         
         self.headers = OrderedDict()
@@ -70,12 +71,13 @@ class Request():
         self.headers.pop(b'If_Range', None)
 
 
-    def clone(self, should_tamper=False):
-        return Request(self.bytes(), should_tamper) 
+    def clone(self, should_tamper=False, no_stopper=True):
+        return Request(self.bytes(), should_tamper, no_stopper) 
 
     def forward(self):
         self.tampering = False
-        os.write(self.forward_stopper[1], b'1')
+        if self.forward_stopper:
+            os.write(self.forward_stopper[1], b'1')
 
     def parse_method(self):
         # GET, HEAD method
@@ -146,11 +148,10 @@ class Response():
         (b'<link', b'>', b'href'),
     ] # TODO more
 
-    def __init__(self, data, should_tamper):
+    def __init__(self, data, should_tamper, no_stopper=False):
         # set up tampering mechanism
         self.should_tamper = should_tamper
-        #self.forward_stopper = os.pipe() if forward_stopper is None else forward_stopper
-        self.forward_stopper = os.pipe()
+        self.forward_stopper = None if no_stopper else os.pipe()
         self.tampering = should_tamper
         
         
@@ -182,6 +183,8 @@ class Response():
             log.warn('Non-integer status code received.')
             self.statuscode = 0
         self.status = b' '.join(line0.split(b' ')[2:])
+        fd_add_comment(self.forward_stopper, 'Response (%d %s) forward stopper' % (self.statuscode, self.status))
+        
         self.headers = OrderedDict()
 
         # load first set of headers (hopefully only one)
@@ -243,12 +246,13 @@ class Response():
         self.headers.pop(b'Upgrade', None)
 
 
-    def clone(self, should_tamper=True):
-        return Response(self.bytes(), should_tamper) 
+    def clone(self, should_tamper=True, no_stopper=True):
+        return Response(self.bytes(), should_tamper, no_stopper)
 
     def forward(self):
         self.tampering = False
-        os.write(self.forward_stopper[1], b'1')
+        if self.forward_stopper:
+            os.write(self.forward_stopper[1], b'1')
  
     def compute_content_length(self):
         #if b'Content-Length' not in self.headers.keys() and len(self.data)>0:

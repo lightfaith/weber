@@ -10,6 +10,7 @@ from source import log
 from source.lib import *
 from source.structures import RRDB, Request, Response, Event, URI
 import difflib
+from source.fd_debug import *
 
 """
 Load configuration
@@ -224,7 +225,7 @@ def test_function(*_):
     #print(weber.rrdb.rrs[1].response.find_tags('html'))
     #for x in weber.rrdb.rrs[1].response.soup.prettify().splitlines()[100:200]:
     #    print(x)
-    print(weber.rrdb.rrs[1].response_upstream.find_tags('form'))
+    print(fd_table_status_str('FIFO'))
     return []
 add_command(Command('test', 'prints test message', '', test_function))
 
