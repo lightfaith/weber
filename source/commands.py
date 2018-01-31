@@ -136,7 +136,6 @@ def run_command(fullcommand):
             elif type(line) == list:
                 # pick groups if at least one line starts with {grepignore} or matches grep
                 sublines = [l for l in line if str(l).startswith('{grepignore}') or (not grep_regex and grep in nocolor(l)) or (grep_regex and re.search(grep, nocolor(l.strip())))]
-                print(sublines)
                 if len([x for x in sublines if not str(x).startswith('{grepignore}') and len(x.strip())>0])>0:
                     grepped += [x[12:] if x.startswith('{grepignore}') else x for x in sublines]
                 
@@ -241,7 +240,7 @@ b_description = """
 def b_function(*args):
     return ['    %s  [%s, ...]' % (weber.brute[0], str(weber.brute[1][0]))]
     #return [str(x) for x in weber.brute]
-add_command(Command('b', 'print brute values (alias for `pwb`)', b_description, b_function))
+add_command(Command('b', 'brute-force (alias for `pwb`)', b_description, b_function))
 
 # bl
 bl_description = """
@@ -419,7 +418,7 @@ def e_function(*_): #TODO filter?
     return result
 e_description = """Events are used to group relevant request-response pairs together. Use `e` to print them! 
 """
-add_command(Command('e [<eid>[:<eid>]]', 'print events (alias for `pe`)', e_description, e_function))
+add_command(Command('e [<eid>[:<eid>]]', 'events (alias for `pe`)', e_description, e_function))
 
 # ea
 def ea_function(*args):
@@ -610,7 +609,7 @@ Default configuration is located in source/weber.py.
 User configuration can be specified in weber.conf in Weber root directory.
 Configuration can be changed on the fly using the `os` command.
 """
-add_command(Command('o', 'print Weber configuration (alias for `pwo`)', o_description, o_function))
+add_command(Command('o', 'Weber options (alias for `pwo`)', o_description, o_function))
 
 # os
 def os_function(*args):
@@ -874,7 +873,7 @@ add_command(Command('q', 'quit', '', lambda *_: [])) # solved in weber
 Spoofing
 """
 # s
-add_command(Command('s', 'print spoof settings (alias for `pws`)', pws_description, pws_function))
+add_command(Command('s', 'spoofing (alias for `pws`)', pws_description, pws_function))
 add_command(Command('sf', 'print "spoof file" settings', pwsf_description, pwsf_function))
 add_command(Command('sr', 'print "spoof regex" settings', pwsr_description, pwsr_function))
 
