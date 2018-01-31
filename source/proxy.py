@@ -271,7 +271,7 @@ class ConnectionThread(Thread):
                 request.parse_method()
                 request.headers[b'Host'] = self.remoteuri.domain.encode() if self.remoteuri.port in [80, 443] else b'%s:%d' % (self.remoteuri.domain.encode(), self.remoteuri.port)
                 if upstream_referer:
-                    request.headers[b'Referer'] = upstream_referer.domain.encode() if upstream_referer.port in [80, 443] else b'%s:%d' % (upstream_referer.domain.encode(), upstream_referer.port)
+                    request.headers[b'Referer'] = upstream_referer.get_value().encode()
                 log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
             else:
                 self.remoteuri = self.localuri.clone() # as we are working with upstream rr already
