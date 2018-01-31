@@ -135,7 +135,8 @@ def run_command(fullcommand):
                     # TODO `o~~^debug` returns nothing, it must be `o~~^ *debug`, is that ok?
             elif type(line) == list:
                 # pick groups if at least one line starts with {grepignore} or matches grep
-                sublines = [l for l in line if not grep_regex and (str(l).startswith('{grepignore}') or (not grep_regex and grep in nocolor(l)) or (grep_regex and re.search(grep, nocolor(line))))]
+                sublines = [l for l in line if str(l).startswith('{grepignore}') or (not grep_regex and grep in nocolor(l)) or (grep_regex and re.search(grep, nocolor(l.strip())))]
+                print(sublines)
                 if len([x for x in sublines if not str(x).startswith('{grepignore}') and len(x.strip())>0])>0:
                     grepped += [x[12:] if x.startswith('{grepignore}') else x for x in sublines]
                 
