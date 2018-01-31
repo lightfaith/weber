@@ -70,7 +70,7 @@ def run_command(fullcommand):
     log.debug_command('  Fullcmd: \'%s\'' % (fullcommand))
 
     # grep: pra~Cookie          # grep for match
-    #        pra~~(Cookie|Date) # grep for regex
+    #       pra~~(Cookie|Date)  # grep for regex
     command, _, grep = fullcommand.partition('~')
     grep_regex = False
     if grep.startswith('~'):
@@ -130,7 +130,7 @@ def run_command(fullcommand):
                     grepped.append(line[12:])
                 elif not grep_regex and grep in nocolor(line):
                     grepped.append(line)
-                elif grep_regex and re.search(grep, nocolor(line)):
+                elif grep_regex and re.search(grep, nocolor(line.strip())):
                     grepped.append(line)
                     # TODO `o~~^debug` returns nothing, it must be `o~~^ *debug`, is that ok?
             elif type(line) == list:
