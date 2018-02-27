@@ -7,8 +7,9 @@ import os, sys, re, traceback, tempfile, subprocess
 from source import weber
 from source import lib
 from source import log
+from source import protocols
 from source.lib import *
-from source.structures import RRDB, Request, Response, Event, URI
+from source.structures import RRDB, Event, URI
 import difflib
 from source.fd_debug import *
 
@@ -17,15 +18,19 @@ Load configuration
 """
 def reload_config():
     log.info('Loading config file...')
+    # read lines from conf file
     with open(os.path.join(os.path.dirname(sys.argv[0]), 'weber.conf'), 'r') as f:
         for line in f.readlines():
             line = line.strip()
+            # skip empty and comments
             if len(line) == 0 or line.startswith('#'):
                 continue
+            # get keys and values
             k, _, v = line.partition('=')
             log.debug_config('  line: \'%s\'' % (line))
             k = k.strip()
             v = v.strip()
+            # cast to correct type and save into weber.config
             if k in weber.config.keys():
                 if weber.config[k][1] == bool:
                     v = positive(v)
@@ -107,6 +112,7 @@ def run_command(fullcommand):
             log.debug_command('  Command: \'%s\'' % (command))
             log.debug_command('  Args:    %s' % (str(args)))
             log.debug_command('  Grep:    %s (type: %s)' % (grep, 'regex' if grep_regex else 'normal'))
+            # run command
             lines = weber.commands[command].run(*args)
 
         except Exception as e:
@@ -119,7 +125,7 @@ def run_command(fullcommand):
     #         every line matching grep expression or starting with '{grepignore}' will be printed
     #     a list of lists:
     #         every line of inner list matching grep expression or starting with '{grepignore}' will be printed if there is at least one grep matching line WITHOUT '{grepignore}'
-    #         Reason: prdh~Set-Cookie will print all Set-Cookie lines along with RRIDs, RRIDs without match are ignored
+    #         Reason: prsh~Set-Cookie will print all Set-Cookie lines along with RRIDs, RRIDs without match are ignored
     try:
         grepped = []
         for line in lines:
@@ -132,7 +138,6 @@ def run_command(fullcommand):
                     grepped.append(line)
                 elif grep_regex and re.search(grep, nocolor(line.strip())):
                     grepped.append(line)
-                    # TODO `o~~^debug` returns nothing, it must be `o~~^ *debug`, is that ok?
             elif type(line) == list:
                 # pick groups if at least one line starts with {grepignore} or matches grep
                 sublines = [l for l in line if str(l).startswith('{grepignore}') or (not grep_regex and grep in nocolor(l)) or (grep_regex and re.search(grep, nocolor(l.strip())))]
@@ -183,7 +188,6 @@ def foreach_rrs(function, *args, fromtemplate=False, **kwargs):
     return result
 
 def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
-    #tags = kwargs['tags']
     startends = kwargs['startends']
     attrs = kwargs.get('attrs')
     valueonly = kwargs['valueonly']
@@ -192,13 +196,6 @@ def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
     if r is None: # race condition, return nothing for now
         return []
     return r.find_tags(startends, attrs, valueonly)
-    """if attrs is None:
-        for startbytes, endbytes in startends:
-            result += [x[1].decode() for x in find_between(r.data, startbytes, endbytes, inner=valueonly)]
-    else:
-        for (startbytes, endbytes), attr in zip(startends, attrs):
-            result += [x[1].decode() for x in r.find_html_attr(startbytes, endbytes, attr)]
-    return result"""
     
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
 
@@ -239,7 +236,6 @@ b_description = """
 """
 def b_function(*args):
     return ['    %s  [%s, ...]' % (weber.brute[0], str(weber.brute[1][0]))]
-    #return [str(x) for x in weber.brute]
 add_command(Command('b', 'brute-force (alias for `pwb`)', b_description, b_function))
 
 # bl
@@ -254,7 +250,7 @@ def bl_function(*args):
     except Exception as e:
         log.err('Cannot open file.')
         return []
-add_command(Command('bl <key> <path>', 'load file for brute', bl_description, bl_function))
+add_command(Command('bl <path>', 'load file for brute', bl_description, bl_function))
 
 # br
 br_description = """

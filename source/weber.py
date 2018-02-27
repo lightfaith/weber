@@ -43,6 +43,7 @@ config['proxy.sslport'] =  (8556, int)
 config['proxy.sslcert'] =  ('cert.pem', str)
 config['proxy.sslkey'] =   ('key.pem', str)
 config['proxy.threaded'] = (True, bool)
+config['proxy.default_protocol'] = ('http', str) 
 
 # spoof
 config['spoof.arguments'] = (False, bool) # should arguments be taken into consideration for spoofing
@@ -50,6 +51,12 @@ config['spoof.arguments'] = (False, bool) # should arguments be taken into consi
 # tamper
 config['tamper.requests'] =     (False, bool) # should all requests be tampered by default?
 config['tamper.responses'] =    (False, bool) # should all responses be tampered by default?
+
+
+"""
+Dictionary of all supported protocols (filled in source/<protocol>.py)
+"""
+protocols = {}
 
 
 """
@@ -79,7 +86,7 @@ events = {}
 """
 Local-remote URI mapping (initialized in structures.py)
 """
-mappings = None 
+mapping = None 
 
 """
 Spoof dictionaries (URI in str format  ->  path to file)
