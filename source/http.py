@@ -169,7 +169,7 @@ class HTTPConnectionThread(ConnectionThread):
                     self.port = int(port)
                 except:
                     self.host = b''
-                    self.port = 80
+                    self.port = self.Protocol.port
                 self.localuri = URI(URI.build_str(self.host, self.port, request.path))
                 if request.headers.get(b'Referer'):
                     downstream_referer = URI(request.headers.get(b'Referer'))
@@ -203,7 +203,7 @@ class HTTPConnectionThread(ConnectionThread):
 
                 request.path = self.remoteuri.path.encode()
                 request.parse_method()
-                request.headers[b'Host'] = self.remoteuri.domain.encode() if self.remoteuri.port in [80, 443] else b'%s:%d' % (self.remoteuri.domain.encode(), self.remoteuri.port)
+                request.headers[b'Host'] = self.remoteuri.domain.encode() if self.remoteuri.port in [self.Protocol.port, self.Protocol.ssl_port] else b'%s:%d' % (self.remoteuri.domain.encode(), self.remoteuri.port)
                 if upstream_referer:
                     request.headers[b'Referer'] = upstream_referer.get_value().encode()
                 log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
@@ -483,7 +483,7 @@ class HTTPResponse():
             self.forward()
     
     @staticmethod
-    def aspoof_regex(data):
+    def spoof_regex(data):
         for old, new in weber.spoof_regexs.items():
             data = re.sub(old.encode(), new.encode(), data)
         return data
