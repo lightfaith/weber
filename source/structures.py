@@ -278,7 +278,10 @@ Single URI
 """
 class URI():
     @staticmethod
-    def build_str(domain, port, path, Protocol=None, scheme=None, user=None, password=None):
+    def build_str(domain, port, path=b'/', Protocol=None, scheme=None, user=None, password=None):
+        print(domain, port, path, Protocol, scheme, user, password)
+        if isinstance(domain, str):
+            domain = domain.encode()
         if not port:
             port = weber.config['proxy.port'][0]
         port = int(port)
@@ -344,11 +347,16 @@ class URI():
         elif type(uri) == bytes:
             uri = uri.decode()
 
+        log.debug_protocol('Parsing URI \'%s\'' % (uri))
         Protocol = None
 
         # get scheme
         if '://' in uri:
             scheme, _, noscheme = uri.partition('://')
+            for _, protocol in weber.protocols.items():
+                if scheme in (protocol.scheme, protocol.ssl_scheme):
+                    log.debug_protocol('  Found protocol by scheme: %s -> %s' % (scheme, protocol.scheme))
+                    Protocol = protocol
         else:
             scheme = None
             #scheme = Protocol.scheme # unknown, decide from port
@@ -368,15 +376,24 @@ class URI():
         # domain, port
         if ':' in domainport:
             domain, _, port = domainport.partition(':')
-            if not port.isdigit():
-                port = Protocol.port
+            if port.isdigit():
+                port = int(port)
+                if not Protocol:
+                    for _, protocol in weber.protocols.items():
+                        if int(port) in (protocol.port, protocol.ssl_port):
+                            log.debug_protocol('  Found protocol by port: %s -> %s' % (port, protocol.scheme))
+                            Protocol = protocol
+            else:
+                if Protocol:
+                    if scheme == Protocol.scheme:
+                        port = Protocol.port
+                    elif scheme == Protocol.ssl_scheme:
+                        port = Protocol.ssl_port
+                log.debug_protocol('  Using protocol to get port: %s -> %d' % (protocol.scheme, port))
         else:
             domain = domainport
-            if scheme: # get Protocol by scheme
-                Protocol = weber.protocols.get(scheme)
-            if not Protocol and scheme and scheme.endswith('s'): # try to get No SSL protocol
-                Protocol = weber.protocols.get(scheme[:-1])
             if not Protocol: # use default value
+                log.debug_protocol('  Setting default protocol: %s' % (weber.config['proxy.default_protocol'][0]))
                 Protocol = weber.protocols.get(weber.config['proxy.default_protocol'][0])
             if not Protocol: # bad config
                 log.err('Unknown default protocol \'%s\'' % (weber.config['proxy.default_protocol'][0]))
@@ -386,13 +403,14 @@ class URI():
             
             #port = Protocol.ssl_port if scheme == Protocol.ssl_scheme else Protocol.port # default
         
-        for Protocol in weber.protocols.values():
-            if port == Protocol.port:
-                scheme = Protocol.scheme
-                break
-            elif port == Protocol.ssl_port:
-                scheme = Protocol.ssl_scheme
-                break
+        if not scheme:
+            for Protocol in weber.protocols.values():
+                if port == Protocol.port:
+                    scheme = Protocol.scheme
+                    break
+                elif port == Protocol.ssl_port:
+                    scheme = Protocol.ssl_scheme
+                    break
 
         if not scheme:
             log.err('Cannot get scheme for \'%s\'' % (uri))

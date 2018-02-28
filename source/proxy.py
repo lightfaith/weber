@@ -73,11 +73,13 @@ class Proxy(threading.Thread):
         # initialize tamper counters (for `trq <n>` and `trs <n>`)
         self.tamper_request_counter = 0
         self.tamper_response_counter = 0
+        log.debug_flow('Proxy created.')
         
 
     def stop(self):
         self.terminate = True
         os.write(self.stopper[1], b'1')
+        log.debug_flow('Proxy ordered to terminate.')
 
 
     def should_tamper(self, what):
@@ -103,6 +105,7 @@ class Proxy(threading.Thread):
 
     def add_connectionthread_from_template(self, template_rr, brute_set):
         # create new connection in new thread
+        log.debug_flow('Adding connectionthread from template.')
         t = template_rr.Protocol.create_connection_thread(None, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'), template_rr, brute_set)
         t.start()
         if positive(weber.config.get('proxy.threaded')[0]):
@@ -113,6 +116,7 @@ class Proxy(threading.Thread):
         
 
     def run(self):
+        log.debug_flow('Proxy started.')
         try:
             self.server_socket.listen(1)
             self.ssl_server_socket.listen(1)
@@ -124,13 +128,16 @@ class Proxy(threading.Thread):
             #print(fd_table_status_str('FIFO'))
             r, _, _ = select([self.server_socket, self.ssl_server_socket, self.stopper[0]], [], [])
             # accept connection, thread it
+            used_port = None
             if not self.terminate:
                 server_socket = None
                 if self.server_socket in r:
                     server_socket = self.server_socket
+                    used_port = weber.config['proxy.port'][0]
                 elif self.ssl_server_socket in r:
                     server_socket = self.ssl_server_socket
-                if server_socket is None: # should not happen
+                    used_port = weber.config['proxy.sslport'][0]
+                if server_socket is None or used_port is None: # should not happen
                     continue
                 try:
                     conn, client = server_socket.accept()
@@ -144,7 +151,8 @@ class Proxy(threading.Thread):
                     
 
                     # create new connection in new thread
-                    t = weber.mapping.Protocol.create_connection_thread(conn, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'))
+                    log.debug_flow('Proxy creating ConnectionThread.')
+                    t = weber.mapping.Protocol.create_connection_thread(conn, used_port, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'))
                     t.start()
                     if positive(weber.config.get('proxy.threaded')[0]):
                         self.threads.append(t)
@@ -175,13 +183,15 @@ class Proxy(threading.Thread):
                 self.server_socket.shutdown(socket.SHUT_RDWR)
                 self.ssl_server_socket.shutdown(socket.SHUT_RDWR)
                 break
+        log.debug_flow('Proxy stopped.')
 
 
 
 
 class ConnectionThread(threading.Thread):
-    def __init__(self, conn, rrid, tamper_request, tamper_response, template_rr=None, brute_set=None, Protocol=None):
+    def __init__(self, conn, local_port, rrid, tamper_request, tamper_response, template_rr=None, brute_set=None, Protocol=None):
         # conn - socket to browser, None if from template
+        # local_port - port of conn socket
         # rrid - index of request-response pair
         # tamper_request - should the request forwarding be delayed?
         # tamper_response - should the response forwarding be delayed?
@@ -191,6 +201,7 @@ class ConnectionThread(threading.Thread):
         self.Protocol = Protocol
 
         self.conn = conn
+        self.local_port = local_port
         self.host = b'?'  # for thread printing
         self.port = 0      # for thread printing
         self.rrid = rrid
@@ -228,7 +239,7 @@ class ConnectionThread(threading.Thread):
         try:
             request = self.Protocol.create_request(ProxyLib.recvall(self.conn), self.tamper_request)
             if not request.integrity:
-                log.debug_socket('Request is weird - length is zero')
+                log.debug_socket('Request integrity failure...')
                 self.conn.close()
                 return None
             return request
@@ -275,7 +286,7 @@ class ConnectionThread(threading.Thread):
                 uri.scheme = self.Protocol.scheme # TODO uri changed everywhere? (mapping?)
                 self.client_socket.connect((uri.domain, uri.port))
                 #return self.forward(uri, data)
-
+        log.debug_socket('Forwarding request to server...')
         self.client_socket.send(data)
         try:
             response = self.Protocol.create_response(ProxyLib.recvall(self.client_socket), self.tamper_response)

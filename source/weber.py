@@ -16,14 +16,16 @@ config['brute.valueseparator'] =   (':', str)   # separator between values
 config['brute.setseparator'] =   ('\n', str)   # separator between value sets
 
 # debug settings
-config['debug.analysis'] =   (True, bool)   # stuff relevant to analysis
+config['debug.analysis'] =   (False, bool)   # stuff relevant to analysis
 config['debug.command'] =    (False, bool)   # stuff relevant to user commands
 config['debug.config'] =     (False, bool)   # stuff relevant to configuration
 config['debug.chunks'] =     (False, bool)   # stuff relevant to Transfer-Encoding: chunked parsing
+config['debug.flow'] =       (False, bool)   # stuff relevant to program flow
 config['debug.mapping'] =    (False, bool)   # stuff relevant to local-remote URL mapping
 config['debug.parsing'] =    (False, bool)   # stuff relevant to request/response parsing
+config['debug.protocol'] =   (False, bool)   # stuff relevant to protocol decisioning
 config['debug.socket'] =     (False, bool)   # stuff relevant to socket communication
-config['debug.tampering'] =  (True, bool)   # stuff relevant to tampering
+config['debug.tampering'] =  (False, bool)   # stuff relevant to tampering
 
 # edit settings
 config['edit.command'] = ('vim %s', str)

@@ -14,6 +14,8 @@ from source.structures import URI
 from source.lib import *
 from source.fd_debug import *
 
+log.info('  HTTP')
+
 class HTTP():
     """
     HTTP class generating proper HTTP objects and holding HTTP-specific constants
@@ -129,6 +131,9 @@ weber.protocols['http'] = HTTP
 
 
 
+
+
+
 class HTTPConnectionThread(ConnectionThread):
     """
     Class for dealing with HTTP communication.
@@ -137,7 +142,7 @@ class HTTPConnectionThread(ConnectionThread):
     def __init__(self, conn, rrid, tamper_request, tamper_response, template_rr=None, brute_set=None):
         super().__init__(conn, rrid, tamper_request, tamper_response, template_rr, brute_set)
         self.Protocol = HTTP
-        log.debug_socket('HTTP ConnectionThread created.')
+        log.debug_flow('HTTP ConnectionThread created.')
         # conn - socket to browser, None if from template
         # rrid - index of request-response pair
         # tamper_request - should the request forwarding be delayed?
@@ -147,6 +152,7 @@ class HTTPConnectionThread(ConnectionThread):
 
     
     def run(self):
+        log.debug_flow('HTTP ConnectionThread started.')
         request = None
         response = None
         while self.keepalive:
@@ -159,9 +165,11 @@ class HTTPConnectionThread(ConnectionThread):
             if request is None: # socket closed? socket problem?
                 log.debug_parsing('Request is broken, ignoring...') # TODO comment, 
                 break
+            log.debug_flow('Request of integrity received.')
             self.keepalive = (request.headers.get(b'Connection') == b'Keep-Alive')
             
             # get URI() from request
+            log.debug_flow('Getting localuri from request.')
             downstream_referer = None
             if self.template_rr is None:
                 try:
@@ -170,7 +178,7 @@ class HTTPConnectionThread(ConnectionThread):
                 except:
                     self.host = b''
                     self.port = self.Protocol.port
-                self.localuri = URI(URI.build_str(self.host, self.port, request.path))
+                self.localuri = URI(URI.build_str(self.host, self.port, request.path, Protocol=HTTP))
                 if request.headers.get(b'Referer'):
                     downstream_referer = URI(request.headers.get(b'Referer'))
             else:
@@ -179,6 +187,8 @@ class HTTPConnectionThread(ConnectionThread):
             # localuri had problems in the past? give up...
 
             if str(self.localuri) in weber.forward_fail_uris:
+                log.debug_mapping('URI failed in past.')
+                log.debug_flow('Terminating ConnectionThread.')
                 break
 
             log.debug_mapping('request source: %s ' % (str(self.localuri)))
@@ -186,6 +196,7 @@ class HTTPConnectionThread(ConnectionThread):
             self.path = request.path.decode()
             
             # create request backup, move into RRDB
+            log.debug_flow('Saving request downstream.')
             request_downstream = request.clone()
             request.sanitize()
             weber.rrdb.add_request(self.rrid, request_downstream, request, HTTP)
@@ -194,6 +205,7 @@ class HTTPConnectionThread(ConnectionThread):
             
             # change outgoing links (useless if from template)
             if self.template_rr is None:
+                log.debug_flow('Changing outgoing links.')
                 self.remoteuri = weber.mapping.get_remote(self.localuri)
                 if self.remoteuri is None:
                     log.err('Cannot forward - local URI is not mapped. Terminating thread...')
@@ -214,6 +226,7 @@ class HTTPConnectionThread(ConnectionThread):
             
             # change brute placeholders
             if self.brute_set is not None:
+                log.debug_flow('Changing brute placeholders.')
                 brute_bytes = request.bytes()
                 placeholder = weber.config['brute.placeholder'][0].encode()
                 for i in range(len(self.brute_set)):
@@ -222,6 +235,7 @@ class HTTPConnectionThread(ConnectionThread):
 
 
             # tamper request
+            log.debug_flow('Attempting to tamper the request.')
             if request.tampering and positive(weber.config['overview.realtime'][0]):
                 log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
             r, _, _ = select([request.forward_stopper[0], self.stopper[0]], [], [])
@@ -229,13 +243,15 @@ class HTTPConnectionThread(ConnectionThread):
                 # Weber is terminating
                 break
             
-            # forward request to server        
+            # forward request to server
+            log.debug_flow('Forwarding request to server.')
             log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
             response = self.forward(self.remoteuri, request.bytes())
             
             if response is None:
                 weber.forward_fail_uris.append(str(self.localuri))
                 break
+            log.debug_flow('Response received from server.')
             ###############################################################################
 
             log.debug_parsing('\n'+str(response)+'\n'+'='*30)
@@ -246,6 +262,7 @@ class HTTPConnectionThread(ConnectionThread):
 
             
             # tamper response
+            log.debug_flow('Attempting to tamper the response.')
             if response.tampering and positive(weber.config['overview.realtime'][0]):
                 log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
             r, _, _ = select([response.forward_stopper[0], self.stopper[0]], [], [])
@@ -255,12 +272,14 @@ class HTTPConnectionThread(ConnectionThread):
 
 
             # spoof files if desired (with or without GET arguments)
+            log.debug_flow('Spoofing files.')
             spoof_path = self.remoteuri.get_value() if positive(weber.config['spoof.arguments'][0]) else self.remoteuri.get_value().partition('?')[0]
             if spoof_path in weber.spoof_files.keys():
                 response.spoof(weber.spoof_files[spoof_path])
 
 
             # set response as downstream, create backup (upstream), update RRDB and do the analysis
+            log.debug_flow('Saving response upstream.')
             response_upstream = response.clone()
             response_upstream.tampering = False
             weber.rrdb.add_response(self.rrid, response_upstream, response, allow_analysis=True)
@@ -269,6 +288,7 @@ class HTTPConnectionThread(ConnectionThread):
             # alter redirects, useless if from template # TODO test 302, 303, # TODO more?
             if self.template_rr is None:
                 if response.statuscode in [301, 302, 303]:
+                    log.debug_flow('Altering redirect links.')
                     location = response.headers[b'Location']
                     if location.startswith((b'http://', b'https://')): # absolute redirect
                         newremote = URI(response.headers[b'Location'])
@@ -279,6 +299,7 @@ class HTTPConnectionThread(ConnectionThread):
                     # no permanent redirection # TODO for which 3xx's?
                     response.statuscode = 302
 
+                log.debug_flow('Changing response data links.')
                 # change incoming links, useless if from template
                 for starttag, endtag, attr in HTTP.link_tags:
                     response.replace_links(starttag, endtag, attr)
@@ -287,6 +308,7 @@ class HTTPConnectionThread(ConnectionThread):
 
             # send response to browser if not from template
             if self.template_rr is None:
+                log.debug_flow('Sending response to client.')
                 try:
                     self.send_response(response)
                 except socket.error as e:
@@ -306,12 +328,12 @@ class HTTPConnectionThread(ConnectionThread):
             if positive(weber.config['overview.realtime'][0]):
                 log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
         
+        log.debug_flow('Terminating HTTP ConnectionThread.')
         # close connection if not None (from template)
         if self.conn:
             self.conn.close()
 
         # close stoppers
-        
         for r in [request, response]:
             if r:
                 for fd in [0, 1]:
@@ -322,6 +344,7 @@ class HTTPConnectionThread(ConnectionThread):
             if self.stopper:
                 os.close(self.stopper[fd])
         self.stopper = None
+        log.debug_flow('HTTP ConnectionThread terminated.')
         
 
 

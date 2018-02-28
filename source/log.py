@@ -136,4 +136,12 @@ def debug_analysis(string=''):
     if positive(config['debug.analysis'][0]):
         show_marked('anl.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
+def debug_protocol(string=''):
+    if positive(config['debug.protocol'][0]):
+        show_marked('prt.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+
+def debug_flow(string=''):
+    if positive(config['debug.flow'][0]):
+        show_marked('flw.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+
 
