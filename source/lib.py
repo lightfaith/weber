@@ -116,6 +116,26 @@ def find_between(data, startbytes, endbytes, startpos=0, endpos=0, inner=False):
             break
     return result
 
+def get_color_from_extension(path):
+    color = log.COLOR_NONE
+    if path.endswith((b'/', b'.htm', b'.html', b'.php', b'.xhtml', b'.aspx')):
+        color = log.MIMECOLOR_HTML
+    elif path.endswith((b'.jpg', b'.svg', b'.png', b'.gif', b'.ico')):
+        color = log.MIMECOLOR_IMAGE
+    elif path.endswith((b'.mp3', b'.ogg', b'.mp4', b'.wav')):
+        color = log.MIMECOLOR_MULTIMEDIA
+    elif path.endswith((b'.js', b'.vbs', b'.swf')):
+        color = log.MIMECOLOR_SCRIPT
+    elif path.endswith((b'.css')):
+        color = log.MIMECOLOR_CSS
+    elif path.endswith((b'.pdf', b'.doc', b'.docx', b'.xls', b'.xlsx', b'.ppt', b'.pptx', b'.pps', b'.ppsx')):
+        color = log.MIMECOLOR_DOCUMENT
+    elif path.endswith(b'.txt'):
+        color = log.MIMECOLOR_PLAINTEXT
+    elif path.endswith((b'.zip', b'.7z', b'.rar', b'.gz', b'.bz2', b'.jar', b'.bin', b'.iso')):
+        color = log.MIMECOLOR_ARCHIVE
+    return color
+
 
 def get_color_from_content_type(content_type=None):
     color = log.COLOR_NONE

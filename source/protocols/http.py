@@ -63,22 +63,7 @@ class HTTP():
             if colored:
                 if not res:
                     # no response received, color by extension
-                    if req.onlypath == b'/' or req.onlypath.endswith((b'.htm', b'.html', b'.php', b'.xhtml', b'.aspx')):
-                        color = log.MIMECOLOR_HTML
-                    elif req.onlypath.endswith((b'.jpg', b'.svg', b'.png', b'.gif', b'.ico')):
-                        color = log.MIMECOLOR_IMAGE
-                    elif req.onlypath.endswith((b'.mp3', b'.ogg', b'.mp4', b'.wav')):
-                        color = log.MIMECOLOR_MULTIMEDIA
-                    elif req.onlypath.endswith((b'.js', b'.vbs', b'.swf')):
-                        color = log.MIMECOLOR_SCRIPT
-                    elif req.onlypath.endswith((b'.css')):
-                        color = log.MIMECOLOR_CSS
-                    elif req.onlypath.endswith((b'.pdf', b'.doc', b'.docx', b'.xls', b'.xlsx', b'.ppt', b'.pptx', b'.pps', b'.ppsx')):
-                        color = log.MIMECOLOR_DOCUMENT
-                    elif req.onlypath.endswith(b'.txt'):
-                        color = log.MIMECOLOR_PLAINTEXT
-                    elif req.onlypath.endswith((b'.zip', b'.7z', b'.rar', b'.gz', b'.bz2', b'.jar', b'.bin', b'.iso')):
-                        color = log.MIMECOLOR_ARCHIVE
+                    color = get_color_from_extension(req.onlypath)
                 else:
                     # response received, color by Content-Type
                     content_type = res.headers.get(b'Content-Type')
