@@ -2,7 +2,7 @@
 """
 General-purpose stuff is defined here.
 """
-import sys, signal, io, time
+import os, sys, signal, io, time
 from gzip import GzipFile
 from source import weber
 from source import log
@@ -50,6 +50,33 @@ def exit_program(signal, frame):
 
 # run exit program on SIGINT
 signal.signal(signal.SIGINT, exit_program)
+
+def reload_config():
+    log.info('Loading config file...')
+    # read lines from conf file
+    with open(os.path.join(os.path.dirname(sys.argv[0]), 'weber.conf'), 'r') as f:
+        for line in f.readlines():
+            line = line.strip()
+            # skip empty and comments
+            if len(line) == 0 or line.startswith('#'):
+                continue
+            # get keys and values
+            k, _, v = line.partition('=')
+            log.debug_config('  line: \'%s\'' % (line))
+            k = k.strip()
+            v = v.strip()
+            # cast to correct type and save into weber.config
+            if k in weber.config.keys():
+                if weber.config[k][1] in (bool, int, float):
+                    if weber.config[k][1] == bool:
+                        v = positive(v)
+                    weber.config[k] = (weber.config[k][1](v), weber.config[k][1])
+                else:
+                    weber.config[k] = (v, str)
+            log.info('  %s = %s' % (k, v))
+            log.debug_config('  parsed: %s = %s (%s)' % (k, v, str(type(v))))
+
+
 
 """
 # for some reason does not work with responses: [-] Not a gzipped file (b'7a')

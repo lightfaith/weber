@@ -4,11 +4,14 @@ Weber
 """
 
 import sys, readline, re, random
-from source import weber
-from source.proxy import *
-from source import lib
-from source import commands
 from source import log
+from source import lib
+
+lib.reload_config()
+
+from source import weber
+from source import commands
+from source.proxy import *
 from source.lib import exit_program
 
 # get first target
@@ -18,8 +21,6 @@ except:
     log.err('Usage: %s example.com' % (sys.argv[0]))
     exit_program(-1, None)
 
-# load config
-commands.reload_config()
 
 # motd
 log.newline()

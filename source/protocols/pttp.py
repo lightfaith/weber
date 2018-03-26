@@ -15,7 +15,6 @@ from source.lib import *
 from source.fd_debug import *
 
 
-log.info('  PTTP')
 class PTTP():
     """
     PTTP class for multiple-protocol-support testing

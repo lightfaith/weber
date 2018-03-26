@@ -7,8 +7,9 @@ from collections import OrderedDict
 
 from source import weber
 from source import log
-from source import protocols
 from source.lib import *
+from source.protocols import protocols
+from source.analysis import analysis
 from source.fd_debug import *
 
 
@@ -143,6 +144,7 @@ class RR():
         self.response_downstream = response_downstream
         # do analysis here if permitted by proxy (upstream->downstream already done) and if desired
         if allow_analysis and weber.config['analysis.immediate'][0] and not self.analysis_notes:
+            log.debug_analysis('Running immediate analysis.')
             self.analyze()
 
     
@@ -158,15 +160,27 @@ class RR():
     def analyze(self): # intra-RR analysis
         # for both upstream and downstream
         for source, req, res in (('upstream', self.request_upstream, self.response_upstream), ('downstream', self.request_downstream, self.response_downstream)):
+            log.debug_analysis(' Analyzing %s' % (source))
             # run all known tests
-            for testname, test in self.Protocol.intra_tests:
-                try:
-                    note = test(req, res)
-                    # and remember found issues
-                    if note:
-                        self.analysis_notes.append((source, *note))
-                except Exception as e:
-                    log.debug_analysis('"%s" test failed for RR #%d (%s): %s' % (testname, self.rrid, source, str(e)))
+            for name, analysis in weber.analysis.items():
+                log.debug_analysis('  using %s' % (name))
+                if not analysis['enabled']:
+                    log.debug_analysis('   NOT enabled, skipping...')
+                    continue
+
+                for testname, supported, test in analysis['rr_tests']:
+                    log.debug_analysis('  Trying \'%s\'' % (testname))
+                    if self.Protocol.scheme not in supported:
+                        log.debug_analysis('   NOT supported for this protocol, skipping...')
+                        continue
+                    try:
+                        note = test(req, res)
+                        # and remember found issues
+                        if note:
+                            log.debug_analysis('  MATCH => %s: %s' % (note[0], note[1]))
+                            self.analysis_notes.append((source, *note))
+                    except Exception as e:
+                        log.debug_analysis('"%s" test failed for RR #%d (%s): %s' % (testname, self.rrid, source, str(e)))
     
 
 """

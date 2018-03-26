@@ -7,7 +7,7 @@ import os, sys, re, traceback, tempfile, subprocess
 from source import weber
 from source import lib
 from source import log
-from source import protocols
+from source.protocols import protocols
 from source.lib import *
 from source.structures import RRDB, Event, URI
 import difflib
@@ -15,7 +15,6 @@ from source.fd_debug import *
 
 """
 Load configuration
-"""
 def reload_config():
     log.info('Loading config file...')
     # read lines from conf file
@@ -39,6 +38,7 @@ def reload_config():
                 weber.config[k] = (v, str)
             log.info('  %s = %s' % (k, v))
             log.debug_config('  parsed: %s = %s (%s)' % (k, v, str(type(v))))
+""" # now in source/lib
 
 """
 Universal class for commands.

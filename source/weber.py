@@ -108,6 +108,14 @@ List of local URIs that could not be forwarded
 forward_fail_uris = []
 
 """
+Dictionary of analysis modules, filled in source/analysis/*
+{
+    'name': {'enabled': True, 'rr_tests': [], }
+}
+"""
+analysis = {}
+
+"""
 MOTDs
 """
 motd = [

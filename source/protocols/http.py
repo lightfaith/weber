@@ -14,8 +14,6 @@ from source.structures import URI
 from source.lib import *
 from source.fd_debug import *
 
-log.info('  HTTP')
-
 class HTTP():
     """
     HTTP class generating proper HTTP objects and holding HTTP-specific constants
