@@ -20,13 +20,14 @@ class PTTP():
     """
     PTTP class for multiple-protocol-support testing
     """
-    
-    link_tags = [] # TODO more
 
     scheme = 'pttp'
     ssl_scheme = 'pttps'
     port = 81
     ssl_port = 444
+
+    link_tags = [] 
+    fault_injection_delimiters = tuple()
 
     @staticmethod
     def create_connection_thread(conn, rrid, tamper_request, tamper_response, template_rr=None, brute_set=None):
@@ -65,7 +66,6 @@ class PTTP():
             if res.tampering:
                 tamperstring = '[T] '
             color = log.COLOR_NONE
-            print('>'+res.command+'<')    
             return '%s%s%s%s%s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, res.command, log.COLOR_NONE)
         except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
@@ -106,7 +106,6 @@ class PTTPConnectionThread(ConnectionThread):
             # receive request from browser / copy from template RR
             if self.template_rr is None:
                 request = self.receive_request()
-                print(request)
             else:
                 request = self.template_rr.request_upstream.clone(self.tamper_request)
             
@@ -119,7 +118,6 @@ class PTTPConnectionThread(ConnectionThread):
             log.debug_flow('Getting localuri from request.')
             if self.template_rr is None:
                 self.localuri = URI(URI.build_str(weber.config['proxy.host'][0], self.local_port, Protocol=PTTP))
-                print(self.localuri)
             else:
                 self.localuri = self.template_rr.uri_upstream.clone()
 

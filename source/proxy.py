@@ -103,10 +103,16 @@ class Proxy(threading.Thread):
         return False
 
 
-    def add_connectionthread_from_template(self, template_rr, brute_set):
+    def add_connectionthread_from_template(self, template_rr, request_modifier=None):
+        """
+            template_rr      = template RR to clone
+            brute_set        = brute values to fill in before sending
+            request_modifier = function to alter request after receiving
+        """ # TODO remove brute-set
         # create new connection in new thread
         log.debug_flow('Adding connectionthread from template.')
-        t = template_rr.Protocol.create_connection_thread(None, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'), template_rr, brute_set)
+        t = template_rr.Protocol.create_connection_thread(None, template_rr.uri_downstream.port, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'), template_rr, request_modifier)
+        # TODO bfi - need rrid before transmission even when proxy.threaded
         t.start()
         if positive(weber.config.get('proxy.threaded')[0]):
             self.threads.append(t)
@@ -189,14 +195,14 @@ class Proxy(threading.Thread):
 
 
 class ConnectionThread(threading.Thread):
-    def __init__(self, conn, local_port, rrid, tamper_request, tamper_response, template_rr=None, brute_set=None, Protocol=None):
+    def __init__(self, conn, local_port, rrid, tamper_request, tamper_response, template_rr=None, request_modifier=None, Protocol=None):
         # conn - socket to browser, None if from template
         # local_port - port of conn socket
         # rrid - index of request-response pair
         # tamper_request - should the request forwarding be delayed?
         # tamper_response - should the response forwarding be delayed?
-        # known_rr - known request (e.g. copy of existing for bruteforcing) - don't communicate with browser if not None
-        # brute_set - list of values destined for brute placeholder replacing
+        # template_rr - known request (e.g. copy of existing for bruteforcing) - don't communicate with browser if not None
+        # request_modifier - function to alter request (e.g. fault injection, brute values)
         threading.Thread.__init__(self)
         self.Protocol = Protocol
 
@@ -209,7 +215,7 @@ class ConnectionThread(threading.Thread):
         self.tamper_request = tamper_request
         self.tamper_response = tamper_response
         self.template_rr = template_rr
-        self.brute_set = brute_set
+        self.request_modifier = request_modifier
         #print('New ConnectionThread, tampering request', self.tamper_request, ', response', self.tamper_response)
         self.stopper = os.pipe() # if Weber is terminated while tampering
         fd_add_comment(self.stopper, 'CT (RRID %d) stopper' % (rrid))
@@ -232,12 +238,13 @@ class ConnectionThread(threading.Thread):
         pass 
 
 
-    def receive_request(self):
+    def receive_request(self, request_modifier=None):
         if not self.Protocol:
             log.debug_socket('Receiving request for unknown protocol, aborting.')
             return None
         try:
-            request = self.Protocol.create_request(ProxyLib.recvall(self.conn), self.tamper_request)
+            # set request_modifier to do nothing if not defined
+            request = self.Protocol.create_request(ProxyLib.recvall(self.conn), self.tamper_request, request_modifier)
             if not request.integrity:
                 log.debug_socket('Request integrity failure...')
                 self.conn.close()

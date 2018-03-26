@@ -279,7 +279,6 @@ Single URI
 class URI():
     @staticmethod
     def build_str(domain, port, path=b'/', Protocol=None, scheme=None, user=None, password=None):
-        print(domain, port, path, Protocol, scheme, user, password)
         if isinstance(domain, str):
             domain = domain.encode()
         if not port:

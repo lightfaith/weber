@@ -129,11 +129,14 @@ def get_color_from_content_type(content_type=None):
 
     elif content_type.startswith((b'audio/', b'video/')): # multimedia
         color = log.MIMECOLOR_MULTIMEDIA
+    
+    elif content_type.startswith((b'message/')): # multimedia
+        color = log.MIMECOLOR_MESSAGE
     return color
  
 
 def is_content_type_text(content_type):
-    return get_color_from_content_type(content_type) in (log.MIMECOLOR_PLAINTEXT, log.MIMECOLOR_HTML, log.MIMECOLOR_SCRIPT, log.MIMECOLOR_CSS, log.MIMECOLOR_DATATRANSFER)
+    return get_color_from_content_type(content_type) in (log.MIMECOLOR_PLAINTEXT, log.MIMECOLOR_HTML, log.MIMECOLOR_SCRIPT, log.MIMECOLOR_CSS, log.MIMECOLOR_DATATRANSFER, log.MIMECOLOR_MESSAGE)
 
 
 def split_escaped(string, delimiter):

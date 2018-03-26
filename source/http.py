@@ -20,6 +20,11 @@ class HTTP():
     """
     HTTP class generating proper HTTP objects and holding HTTP-specific constants
     """
+
+    scheme = 'http'
+    ssl_scheme = 'https'
+    port = 80
+    ssl_port = 443
     
     link_tags = [
         (b'<a', b'</a>', b'href'),
@@ -30,18 +35,15 @@ class HTTP():
         (b'<link', b'>', b'href'),
     ] # TODO more
 
-    scheme = 'http'
-    ssl_scheme = 'https'
-    port = 80
-    ssl_port = 443
+    fault_injection_delimiters = tuple(' \r\n:;/&?')
 
     @staticmethod
-    def create_connection_thread(conn, rrid, tamper_request, tamper_response, template_rr=None, brute_set=None):
-        return HTTPConnectionThread(conn, rrid, tamper_request, tamper_response, template_rr, brute_set)
+    def create_connection_thread(conn, local_port, rrid, tamper_request, tamper_response, template_rr=None, request_modifier=None):
+        return HTTPConnectionThread(conn, local_port, rrid, tamper_request, tamper_response, template_rr, request_modifier)
 
     @staticmethod
-    def create_request(data, should_tamper, no_stopper=False):
-        return HTTPRequest(data, should_tamper, no_stopper)
+    def create_request(data, should_tamper, request_modifier=None):
+        return HTTPRequest(data, should_tamper, request_modifier)
     
     @staticmethod
     def create_response(data, should_tamper, no_stopper=False):
@@ -139,16 +141,16 @@ class HTTPConnectionThread(ConnectionThread):
     Class for dealing with HTTP communication.
     Most stuff is done in parent generic ConnectionThread (source.proxy).
     """
-    def __init__(self, conn, rrid, tamper_request, tamper_response, template_rr=None, brute_set=None):
-        super().__init__(conn, rrid, tamper_request, tamper_response, template_rr, brute_set)
-        self.Protocol = HTTP
-        log.debug_flow('HTTP ConnectionThread created.')
+    def __init__(self, conn, local_port, rrid, tamper_request, tamper_response, template_rr=None, request_modifier=None):
+        super().__init__(conn, local_port, rrid, tamper_request, tamper_response, template_rr, request_modifier)
         # conn - socket to browser, None if from template
         # rrid - index of request-response pair
         # tamper_request - should the request forwarding be delayed?
         # tamper_response - should the response forwarding be delayed?
         # known_rr - known request (e.g. copy of existing for bruteforcing) - don't communicate with browser if not None
-        # brute_set - list of values destined for brute placeholder replacing
+        # request_modifier - function to alter request (e.g. fault injection, brute values)
+        self.Protocol = HTTP
+        log.debug_flow('HTTP ConnectionThread created.')
 
     
     def run(self):
@@ -158,15 +160,19 @@ class HTTPConnectionThread(ConnectionThread):
         while self.keepalive:
             # receive request from browser / copy from template RR
             if self.template_rr is None:
-                request = self.receive_request()
+                request = self.receive_request(self.request_modifier)
             else:
-                request = self.template_rr.request_upstream.clone(self.tamper_request)
+                request = self.template_rr.request_upstream.clone(self.tamper_request, self.request_modifier)
             
             if request is None: # socket closed? socket problem?
                 log.debug_parsing('Request is broken, ignoring...') # TODO comment, 
                 break
             log.debug_flow('Request of integrity received.')
-            self.keepalive = (request.headers.get(b'Connection') == b'Keep-Alive')
+
+            if self.template_rr is None:
+                self.keepalive = (request.headers.get(b'Connection') == b'Keep-Alive')
+            else:
+                self.keepalive = False # whole template request used; do not repeat
             
             # get URI() from request
             log.debug_flow('Getting localuri from request.')
@@ -182,7 +188,7 @@ class HTTPConnectionThread(ConnectionThread):
                 if request.headers.get(b'Referer'):
                     downstream_referer = URI(request.headers.get(b'Referer'))
             else:
-                self.localuri = self.template_rr.uri_upstream.clone()
+                self.localuri = self.template_rr.uri_upstream.clone() # TODO not downstream?
 
             # localuri had problems in the past? give up...
 
@@ -224,6 +230,7 @@ class HTTPConnectionThread(ConnectionThread):
             
             weber.rrdb.rrs[self.rrid].uri_upstream = self.remoteuri
             
+            """
             # change brute placeholders
             if self.brute_set is not None:
                 log.debug_flow('Changing brute placeholders.')
@@ -232,6 +239,7 @@ class HTTPConnectionThread(ConnectionThread):
                 for i in range(len(self.brute_set)):
                     brute_bytes = brute_bytes.replace(b'%s%d%s' % (placeholder, i, placeholder), self.brute_set[i])
                 request.parse(brute_bytes)
+            """
 
 
             # tamper request
@@ -323,6 +331,8 @@ class HTTPConnectionThread(ConnectionThread):
                     log.err('Failed to forward response (#%d): %s' % (self.rrid, str(e)))
                     log.err('See traceback:')
                     traceback.print_exc()
+            else:
+                log.debug_flow('Response not sent to client (generated from template request).')
 
             # print if desired
             if positive(weber.config['overview.realtime'][0]):
@@ -361,15 +371,19 @@ class HTTPRequest():
     """
     HTTP Request class
     """
-    def __init__(self, data, should_tamper, no_stopper=False):
+    def __init__(self, data, should_tamper, request_modifier=None):
         """
             data = request data (bytes)
             should_tamper = should the request be tampered? (bool)
+            request_modifier = function to alter request bytes before parsing
         """
         self.integrity = False
         if not data:
             return
         
+        if request_modifier:
+            data = request_modifier(data)
+
         # set up tampering mechanism
         self.should_tamper = should_tamper
         #self.forward_stopper = None if no_stopper else os.pipe()
@@ -421,8 +435,8 @@ class HTTPRequest():
         self.headers.pop(b'If_Range', None)
 
 
-    def clone(self, should_tamper=False, no_stopper=True):
-        return HTTP.create_request(self.bytes(), should_tamper, no_stopper) 
+    def clone(self, should_tamper=False, request_modifier=None):
+        return HTTP.create_request(self.bytes(), should_tamper, request_modifier)
 
     def forward(self):
         self.tampering = False
@@ -448,6 +462,7 @@ class HTTPRequest():
                 k, _, v = param.partition(b'=')
                 v = None if v == b'' else v
                 self.parameters[k] = v
+        # TRACE works natively
         # TODO more methods
 
 

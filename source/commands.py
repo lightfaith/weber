@@ -235,7 +235,11 @@ BRUTE COMMANDS
 b_description = """
 """
 def b_function(*args):
-    return ['    %s  [%s, ...]' % (weber.brute[0], str(weber.brute[1][0]))]
+    if weber.brute:
+        return ['    %s  [%s, ...]' % (weber.brute[0], str(weber.brute[1][0]))]
+    else:
+        log.err('No brute loaded, see `bl`.')
+        return []
 add_command(Command('b', 'brute-force (alias for `pwb`)', b_description, b_function))
 
 # bl
@@ -252,15 +256,30 @@ def bl_function(*args):
         return []
 add_command(Command('bl <path>', 'load file for brute', bl_description, bl_function))
 
+# bfi
+bfi_description = """
+"""
+def bfi_function(_, rr, *__, **___):
+    data = rr.__bytes__()
+
+    return [] # TODO change
+add_command(Command('bfi [<rrid>[:<rrid>]]', 'brute fault injection from template rrids', bfi_description, lambda *args: foreach_rrs(bfi_function, *args, fromtemplate=True)))
+
 # br
 br_description = """
 """
 # NOTE only one bruter at a time can be used
-add_command(Command('br', 'brute from rrid', br_description, lambda *_: []))
+add_command(Command('br', 'brute from template rrid', br_description, lambda *_: []))
 
 # bra 
 bra_description = """
 """
+def bra_modifier(data, brute_set):
+    placeholder = weber.config['brute.placeholder'][0].encode()
+    for i in range(len(brute_set)):
+        data = data.replace(b'%s%d%s' % (placeholder, i, placeholder), brute_set[i])
+    return data
+    
 def bra_function(_, rr, *__, **___):
     # run with values
     if weber.brute is None: 
@@ -268,9 +287,9 @@ def bra_function(_, rr, *__, **___):
         return []
     max_setlen = max(len(x) for x in weber.brute[1])
     for brute_set in [x for x in weber.brute[1] if len(x) == max_setlen]:
-        weber.proxy.add_connectionthread_from_template(rr, brute_set)
+        weber.proxy.add_connectionthread_from_template(rr, lambda data: bra_modifier(data, brute_set))
     return []
-add_command(Command('bra [<rrid>[:<rrid>]]', 'brute from rrids for all sets', bra_description, lambda *args: foreach_rrs(bra_function, *args, fromtemplate=True)))
+add_command(Command('bra [<rrid>[:<rrid>]]', 'brute from template rrids for all sets', bra_description, lambda *args: foreach_rrs(bra_function, *args, fromtemplate=True)))
 # TODO brd - brute rrid until difference
 
 """
@@ -293,16 +312,17 @@ crX_description = """
 def crX_function(*args, **kwargs):
     # args: flag rrid1 rrid2
     #
-    # flags: 1 - lines from first
-    #        2 - lines from second
+    # flags: 1 - lines only present in first
+    #        2 - lines only present in second
     #        c - common lines
-    #        d - standard diff
+    #        d - different lines only
+    #        D - standard diff
     
     result = []
     # parse args
     try:
         flag = args[0]
-        if flag not in '12cd':
+        if flag not in '12cdD':
             raise TypeError
     except:
         log.err('Invalid flag parameter.')
@@ -338,6 +358,8 @@ def crX_function(*args, **kwargs):
             diff_lines = [line[2:] for line in diff_lines if line.startswith('+')]
         elif flag == 'c':
             diff_lines = [line[2:] for line in diff_lines if not line.startswith(('-', '+'))]
+        elif flag == 'd':
+            diff_lines = [line for line in diff_lines if line.startswith(('-', '+'))]
         result += diff_lines
         if showresponse:
             result.append('')
@@ -359,18 +381,20 @@ def crX_function(*args, **kwargs):
             diff_lines = [line[2:] for line in diff_lines if line.startswith('+')]
         elif flag == 'c':
             diff_lines = [line[2:] for line in diff_lines if not line.startswith(('-', '+'))]
+        elif flag == 'd':
+            diff_lines = [line for line in diff_lines if line.startswith(('-', '+'))]
         result += diff_lines
     return result
     
-add_command(Command('cra (12cd) rrid1 rrid2', 'diff two request-response pairs', crX_description, lambda *args: crX_function(*args, mask=0xf)))
-add_command(Command('crh (12cd) rrid1 rrid2', 'diff two request-response headers', crX_description, lambda *args: crX_function(*args, mask=0xe)))
-add_command(Command('crd (12cd) rrid1 rrid2', 'diff two request-response data', crX_description, lambda *args: crX_function(*args, mask=0xd)))
-add_command(Command('crq (12cd) rrid1 rrid2', 'diff two requests', crX_description, lambda *args: crX_function(*args, mask=0xb)))
-add_command(Command('crqh (12cd) rrid1 rrid2', 'diff two request headers', crX_description, lambda *args: crX_function(*args, mask=0xa)))
-add_command(Command('crqd (12cd) rrid1 rrid2', 'diff two request data', crX_description, lambda *args: crX_function(*args, mask=0x9)))
-add_command(Command('crs (12cd) rrid1 rrid2', 'diff two responses', crX_description, lambda *args: crX_function(*args, mask=0x7)))
-add_command(Command('crsh (12cd) rrid1 rrid2', 'diff two response headers', crX_description, lambda *args: crX_function(*args, mask=0x6)))
-add_command(Command('crsd (12cd) rrid1 rrid2', 'diff two response data', crX_description, lambda *args: crX_function(*args, mask=0x5)))
+add_command(Command('cra (12cdD) rrid1 rrid2', 'diff two request-response pairs', crX_description, lambda *args: crX_function(*args, mask=0xf)))
+add_command(Command('crh (12cdD) rrid1 rrid2', 'diff two request-response headers', crX_description, lambda *args: crX_function(*args, mask=0xe)))
+add_command(Command('crd (12cdD) rrid1 rrid2', 'diff two request-response data', crX_description, lambda *args: crX_function(*args, mask=0xd)))
+add_command(Command('crq (12cdD) rrid1 rrid2', 'diff two requests', crX_description, lambda *args: crX_function(*args, mask=0xb)))
+add_command(Command('crqh (12cdD) rrid1 rrid2', 'diff two request headers', crX_description, lambda *args: crX_function(*args, mask=0xa)))
+add_command(Command('crqd (12cdD) rrid1 rrid2', 'diff two request data', crX_description, lambda *args: crX_function(*args, mask=0x9)))
+add_command(Command('crs (12cdD) rrid1 rrid2', 'diff two responses', crX_description, lambda *args: crX_function(*args, mask=0x7)))
+add_command(Command('crsh (12cdD) rrid1 rrid2', 'diff two response headers', crX_description, lambda *args: crX_function(*args, mask=0x6)))
+add_command(Command('crsd (12cdD) rrid1 rrid2', 'diff two response data', crX_description, lambda *args: crX_function(*args, mask=0x5)))
 
 # cru diff upstream downstream
 cru_description = """
