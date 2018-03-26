@@ -8,7 +8,7 @@ from source.lib import *
 from source import log
 
 
-debug_lines = ['Loaded known protocols...']
+debug_lines = ['Loaded known protocols:']
 
 for f in os.listdir(os.path.dirname(os.path.abspath(__file__))):
     if f.endswith('.py') and f not in ('protocols.py', '__init__.py'):

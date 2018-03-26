@@ -6,7 +6,7 @@ import os, importlib
 from source import log
 from source import weber
 
-debug_lines = ['Loaded known analysis modules...']
+debug_lines = ['Loaded known analysis modules:']
 
 for f in os.listdir(os.path.dirname(os.path.abspath(__file__))):
     if f.endswith('.py') and f not in ('analysis.py', '__init__.py'):

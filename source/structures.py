@@ -159,7 +159,7 @@ class RR():
 
     def analyze(self): # intra-RR analysis
         # for both upstream and downstream
-        for source, req, res in (('upstream', self.request_upstream, self.response_upstream), ('downstream', self.request_downstream, self.response_downstream)):
+        for source, req, res, uri in (('upstream', self.request_upstream, self.response_upstream, self.uri_upstream), ('downstream', self.request_downstream, self.response_downstream, self.uri_downstream)):
             log.debug_analysis(' Analyzing %s' % (source))
             # run all known tests
             for name, analysis in weber.analysis.items():
@@ -174,7 +174,7 @@ class RR():
                         log.debug_analysis('   NOT supported for this protocol, skipping...')
                         continue
                     try:
-                        note = test(req, res)
+                        note = test(req, res, uri)
                         # and remember found issues
                         if note:
                             log.debug_analysis('  MATCH => %s: %s' % (note[0], note[1]))
