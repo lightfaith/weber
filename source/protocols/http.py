@@ -479,11 +479,13 @@ class HTTPRequest():
     def __str__(self):
         return '\n'.join(self.lines())
 
-    def bytes(self):
-        result = b'%s %s %s\r\n' % (self.method, self.path, self.version)
-        result += b'\r\n'.join([b'%s: %s' % (k, b'' if v is None else v) for k, v in self.headers.items()])
-        result += b'\r\n\r\n'
-        if len(self.data)>0:
+    def bytes(self, headers=True, data=True):
+        result = b''
+        if headers:
+            result += b'%s %s %s\r\n' % (self.method, self.path, self.version)
+            result += b'\r\n'.join([b'%s: %s' % (k, b'' if v is None else v) for k, v in self.headers.items()])
+            result += b'\r\n\r\n'
+        if data and len(self.data)>0:
             result += self.data
         return result
 
@@ -634,14 +636,16 @@ class HTTPResponse():
     def __str__(self):
         return '\n'.join(self.lines())
 
-    def bytes(self):
+    def bytes(self, headers=True, data=True):
         self.compute_content_length()
         #data = lib.gzip(self.data) if self.headers.get(b'Content-Encoding') == b'gzip'  else self.data
         result = b''
-        result += b'%s %d %s\r\n' % (self.version, self.statuscode, self.status)
-        result += b'\r\n'.join([b'%s: %s' % (k, b'' if v is None else v) for k, v in self.headers.items()])
-        
-        result += b'\r\n\r\n' + self.data + b'\r\n\r\n'
+        if headers:
+            result += b'%s %d %s\r\n' % (self.version, self.statuscode, self.status)
+            result += b'\r\n'.join([b'%s: %s' % (k, b'' if v is None else v) for k, v in self.headers.items()])
+        if data:
+            result += b'\r\n\r\n' + self.data 
+        result += b'\r\n\r\n'
         return result
     
     def find_html_attr(self, tagstart, tagend, attr):

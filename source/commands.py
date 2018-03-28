@@ -101,10 +101,10 @@ def run_command(fullcommand):
     #     a list of lists:
     #         every line of inner list matching grep expression or starting with '{grepignore}' will be printed if there is at least one grep matching line WITHOUT '{grepignore}'
     #         Reason: prsh~Set-Cookie will print all Set-Cookie lines along with RRIDs, RRIDs without match are ignored
+    nocolor = lambda line: re.sub('\033\\[[0-9]+m', '', str(line))
     try:
         grepped = []
         for line in lines:
-            nocolor = lambda line: re.sub(r'\[[1-9]*m', '', str(line))
             if type(line) == str:
                 # add lines if starts with {grepignore} or matches grep 
                 if str(line).startswith('{grepignore}'):
@@ -761,21 +761,20 @@ def overview_handler(args, source, show_last=False, only_tampered=False):
 
 add_command(Command('pr [estu] [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=False)))
 
-#add_command(Command('pr [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: weber.rrdb.overview(args, source=, showlast=False, onlytampered=False)))
-add_command(Command('pro [<rrid>[:<rrid>]]', 'print request-response pairs', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=False)))
-add_command(Command('pt [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
-add_command(Command('ptr [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
-add_command(Command('ptro [<rrid>[:<rrid>]]', 'print templates overview', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
+add_command(Command('pro [estu] [<rrid>[:<rrid>]]', 'print request-response pairs', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=False)))
+add_command(Command('pt [estu] [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
+add_command(Command('ptr [estu] [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
+add_command(Command('ptro [estu] [<rrid>[:<rrid>]]', 'print templates overview', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
 
 # prol
 prol_description="""
 """
-add_command(Command('prol [<rrid>[:<rrid>]]', 'print last request-response overview', prol_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=True, only_tampered=False)))
-add_command(Command('ptrol [<rrid>[:<rrid>]]', 'print last template request-response overview', prol_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=True, only_tampered=False)))
+add_command(Command('prol [estu] [<rrid>[:<rrid>]]', 'print last request-response overview', prol_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=True, only_tampered=False)))
+add_command(Command('ptrol [estu] [<rrid>[:<rrid>]]', 'print last template request-response overview', prol_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=True, only_tampered=False)))
 # prot
 prot_description="""
 """
-add_command(Command('prot [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', prot_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=True)))
+add_command(Command('prot [estu] [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', prot_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=True)))
 
 # prX
 def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of desired requests/responses/both
@@ -784,10 +783,12 @@ def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of de
     showresponse = bool(kwargs['mask'] & 0x4)
     showheaders = bool(kwargs['mask'] & 0x2)
     showdata = bool(kwargs['mask'] & 0x1)
+    usehexdump = kwargs.get('hexdump') or False
+
     # deal with requests
     if showrequest:
         r = rr.request_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.request_downstream
-        result += r.lines(headers=showheaders, data=showdata)
+        result += r.lines(headers=showheaders, data=showdata) if not usehexdump else hexdump(r.bytes(headers=showheaders, data=showdata))
         if showresponse:
             result.append('')
     # deal with responses
@@ -796,8 +797,9 @@ def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of de
         if r is None:
             result.append('Response not received yet...')
         else:
-            result += r.lines(headers=showheaders, data=showdata)
+            result += r.lines(headers=showheaders, data=showdata) if not usehexdump else hexdump(r.bytes(headers=showheaders, data=showdata))
     return result
+
 prX_description="""Commands starting with `pr` are used to show request and/or response headers and/or data.
 """
 add_command(Command('pra [<rrid>[:<rrid>]]', 'print requests-response pairs verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xf)))
@@ -810,6 +812,16 @@ add_command(Command('prs [<rrid>[:<rrid>]]', 'print responses verbose', prX_desc
 add_command(Command('prsh [<rrid>[:<rrid>]]', 'print response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x6)))
 add_command(Command('prsd [<rrid>[:<rrid>]]', 'print response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x5)))
 
+add_command(Command('prax [<rrid>[:<rrid>]]', 'print requests-response pairs verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xf, hexdump=True)))
+add_command(Command('prhx [<rrid>[:<rrid>]]', 'print request-response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xe, hexdump=True)))
+add_command(Command('prdx [<rrid>[:<rrid>]]', 'print request-response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xd, hexdump=True)))
+add_command(Command('prqx [<rrid>[:<rrid>]]', 'print requests verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xb, hexdump=True)))
+add_command(Command('prqhx [<rrid>[:<rrid>]]', 'print request headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xa, hexdump=True)))
+add_command(Command('prqdx [<rrid>[:<rrid>]]', 'print request data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x9, hexdump=True)))
+add_command(Command('prsx [<rrid>[:<rrid>]]', 'print responses verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x7, hexdump=True)))
+add_command(Command('prshx [<rrid>[:<rrid>]]', 'print response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x6, hexdump=True)))
+add_command(Command('prsdx [<rrid>[:<rrid>]]', 'print response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x5, hexdump=True)))
+
 add_command(Command('ptra [<rrid>[:<rrid>]]', 'print template requests-response pairs verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xf)))
 add_command(Command('ptrh [<rrid>[:<rrid>]]', 'print template request-response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xe)))
 add_command(Command('ptrd [<rrid>[:<rrid>]]', 'print template request-response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xd)))
@@ -819,6 +831,16 @@ add_command(Command('ptrqd [<rrid>[:<rrid>]]', 'print template request data', pr
 add_command(Command('ptrs [<rrid>[:<rrid>]]', 'print template responses', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x7)))
 add_command(Command('ptrsh [<rrid>[:<rrid>]]', 'print template response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x6)))
 add_command(Command('ptrsd [<rrid>[:<rrid>]]', 'print template response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x5)))
+
+add_command(Command('ptrax [<rrid>[:<rrid>]]', 'print template requests-response pairs verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xf, hexdump=True)))
+add_command(Command('ptrhx [<rrid>[:<rrid>]]', 'print template request-response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xe, hexdump=True)))
+add_command(Command('ptrdx [<rrid>[:<rrid>]]', 'print template request-response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xd, hexdump=True)))
+add_command(Command('ptrqx [<rrid>[:<rrid>]]', 'print template requests', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xb, hexdump=True)))
+add_command(Command('ptrqhx [<rrid>[:<rrid>]]', 'print template request headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xa, hexdump=True)))
+add_command(Command('ptrqdx [<rrid>[:<rrid>]]', 'print template request data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x9, hexdump=True)))
+add_command(Command('ptrsx [<rrid>[:<rrid>]]', 'print template responses', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x7, hexdump=True)))
+add_command(Command('ptrshx [<rrid>[:<rrid>]]', 'print template response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x6, hexdump=True)))
+add_command(Command('ptrsdx [<rrid>[:<rrid>]]', 'print template response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x5, hexdump=True)))
 
 
 # pw 

@@ -2,7 +2,7 @@
 """
 Protocol loader
 """
-import os, importlib
+import os, sys, importlib
 from source import log
 from source import weber
 
@@ -11,6 +11,7 @@ debug_lines = ['Loaded known analysis modules:']
 def is_true(comment, expression):
     result = bool(expression)
     log.debug_analysis('    checking \'%s\': %s' % (comment, str(result)))
+    sys.stdout.flush()
     return result
 
 for f in os.listdir(os.path.dirname(os.path.abspath(__file__))):
