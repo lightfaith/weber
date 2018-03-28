@@ -121,11 +121,12 @@ class RRDB():
         for rrid, rr in desired.items():
             row = []
             if show_time:
-                time = rr.request_upstream.time_forwarded
-                row.append(time.strftime('%H:%M:%S.%f')[:-3] if time else '')
+                time_forwarded = rr.request_upstream.time_forwarded
+                row.append(time_forwarded.strftime('%H:%M:%S.%f')[:-3] if time_forwarded else '')
             if show_event:
                 row.append(rr.eid or '')
-            row.append(('\033[07m%-4d\033[00m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
+            row.append(('\033[07m%-4d\033[27m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
+            #row.append(('\033[07m%-4d\033[00m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
             if show_uri:
                 row.append((rr.uri_upstream if weber.config['interaction.showupstream'][0] else rr.uri_downstream).get_value(path=False)) 
             row.append(rr.request_string(colored=True))
@@ -228,26 +229,32 @@ class RR():
         for source, req, res, uri in (('upstream', self.request_upstream, self.response_upstream, self.uri_upstream), ('downstream', self.request_downstream, self.response_downstream, self.uri_downstream)):
             log.debug_analysis(' Analyzing %s' % (source))
             # run all known tests
-            for name, analysis in weber.analysis.items():
+            for name, analysis_pack in weber.analysis.items():
                 log.debug_analysis('  using %s' % (name))
-                if not analysis['enabled']:
+                if not analysis_pack['enabled']:
                     log.debug_analysis('   NOT enabled, skipping...')
                     continue
 
-                for testname, supported, test in analysis['rr_tests']:
+                for testname, note, supported, conditions in analysis_pack['rr_tests']:
                     log.debug_analysis('  Trying \'%s\'' % (testname))
                     if self.Protocol.scheme not in supported:
                         log.debug_analysis('   NOT supported for this protocol, skipping...')
                         continue
                     try:
-                        note = test(req, res, uri)
+                        match = True
+                        for comment, condition in conditions:
+                            result = bool(condition(req, res, uri))
+                            log.debug_analysis('    checking \'%s\': %s' % (comment, str(result)))
+                            if not result:
+                                match = False
+                                break
                         # and remember found issues
-                        if note:
+                        if match:
                             log.debug_analysis('    MATCH => %s: %s' % (note[0], note[1]))
                             self.analysis_notes.append((source, *note))
                     except Exception as e:
-                        log.debug_analysis('"%s" test failed for RR #%d (%s): %s' % (testname, self.rrid, source, str(e)))
-                        print(str(e))
+                        log.debug_analysis('!!! "%s" test failed for RR #%d (%s): %s' % (testname, self.rrid, source, str(e)))
+                        traceback.print_exc()
     
 
 """
