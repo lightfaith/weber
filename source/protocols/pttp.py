@@ -6,6 +6,7 @@ import socket, traceback, errno, ssl, re, itertools, threading
 from threading import Thread
 from collections import OrderedDict
 from select import select
+from datetime import datetime
 
 from source import weber
 from source import log
@@ -275,6 +276,7 @@ class PTTPRequest():
         #self.forward_stopper = None if no_stopper else os.pipe()
         self.forward_stopper = os.pipe()
         self.tampering = self.should_tamper
+        self.time_forwarded = None
         
         # parse data
         self.command = ''
@@ -305,6 +307,7 @@ class PTTPRequest():
         self.tampering = False
         if self.forward_stopper:
             os.write(self.forward_stopper[1], b'1')
+        self.time_forwarded = datetime.now()
 
     def parse_method(self):
         pass

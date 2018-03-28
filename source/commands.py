@@ -744,10 +744,10 @@ pr_description = """Use `pr` command to get an overview of all captured request-
 def overview_handler(args, show_last=False, only_tampered=False, from_template=False):
     source = weber.tdb if from_template else weber.rrdb
     #args = list(filter(None, args))
-    show_event = False # TODO default values from config
-    show_size = False
-    show_time = False
-    show_uri = False
+    show_event = weber.config['overview.showevent'][0]
+    show_size = weber.config['overview.showsize'][0]
+    show_time = weber.config['overview.showtime'][0]
+    show_uri = weber.config['overview.showuri'][0]
     if args and re.match('^[estu]+$', args[0]): # some modifiers
         if 'e' in args[0]:
             show_event = True

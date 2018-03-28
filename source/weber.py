@@ -34,9 +34,12 @@ config['edit.command'] = ('vim %s', str)
 config['interaction.showupstream'] = (True, bool) # what version of RR should be presented?
 
 # overview settings
-config['overview.realtime'] = (True, bool)  # show request/response communication on the fly
-config['overview.size'] =     (True, bool)  # show response size in overview # TODO
-config['overview.time'] =     (True, bool)  # show delay in overview # TODO
+config['overview.realtime'] =     (True, bool)  # show request/response communication on the fly
+config['overview.shortrequest'] = (False, bool) # reduce size of too long URLs
+config['overview.showevent'] =    (False, bool) # show event ID in overview
+config['overview.showsize'] =     (True, bool)  # show response size in overview
+config['overview.showtime'] =     (False, bool) # show forwarded time in overview # TODO also relative?
+config['overview.showuri'] =      (True, bool)  # show uri in overview
 
 # proxy-relevant settings
 config['proxy.host'] =     ('localhost', str)

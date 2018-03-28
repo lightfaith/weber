@@ -121,7 +121,8 @@ class RRDB():
         for rrid, rr in desired.items():
             row = []
             if show_time:
-                row.append('03:15:00.123')
+                time = rr.request_upstream.time_forwarded
+                row.append(time.strftime('%H:%M:%S.%f')[:-3] if time else '')
             if show_event:
                 row.append(rr.eid or '')
             row.append(('\033[07m%-4d\033[00m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))

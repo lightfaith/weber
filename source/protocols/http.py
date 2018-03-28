@@ -4,6 +4,7 @@ Class for HTTP is here.
 """
 import socket, traceback, errno, ssl, re, itertools, threading
 from threading import Thread
+from datetime import datetime
 from collections import OrderedDict
 from select import select
 
@@ -70,8 +71,13 @@ class HTTP():
                     if content_type: # missing Content-Type will be detected in analysis
                         color = get_color_from_content_type(content_type)
 
+            # shorten path if desired
+            path = req.path.decode()
+            if weber.config['overview.shortrequest'][0] and len(path)>50:
+                path = '...'+path[-47:]
 
-            return '%s%s%s%s%s %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, req.method.decode(), req.path.decode(), log.COLOR_NONE)
+            # return pretty string
+            return '%s%s%s%s%s %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, req.method.decode(), path, log.COLOR_NONE)
         if False:#except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
     
@@ -374,6 +380,7 @@ class HTTPRequest():
         self.tampering = self.should_tamper
         
         self.onlypath = '' 
+        self.time_forwarded = None
 
         # parse data
         self.parse(data)
@@ -425,6 +432,7 @@ class HTTPRequest():
         self.tampering = False
         if self.forward_stopper:
             os.write(self.forward_stopper[1], b'1')
+        self.time_forwarded = datetime.now()
 
     def parse_method(self):
         # GET, HEAD method
