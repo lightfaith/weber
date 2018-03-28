@@ -79,26 +79,91 @@ class RRDB():
         return (OrderedDict([(i, self.rrs[i]) for i in sorted(indices) if i in keys]), noproblem)
 
     
-    def overview(self, args, header=True, showlast=False, onlytampered=False):
+    def overview(self, args, header=True, show_event=False, show_size=False, show_time=False, show_uri=False, show_last=False, only_tampered=False):
         result = []
         arg = None if len(args)<1 else args[0]
-        eidlen = max([3]+[len(str(e)) for e,_ in weber.events.items()])
-        desired = self.get_desired_rrs(arg, showlast=showlast, onlytampered=onlytampered)
+        #eidlen = max([3]+[len(str(e)) for e,_ in weber.events.items()])
+        desired = self.get_desired_rrs(arg, showlast=show_last, onlytampered=only_tampered)
         if not desired:
             return []
-        desired = desired[0]
-        reqlen = max([20]+[1+len(v.request_string(colored=True)) for v in desired.values()])
-        
-        # TODO size, time if desired
-        if header:
-            hreqlen = reqlen-2*(len(log.COLOR_GREEN)+len(log.COLOR_NONE))
-            log.tprint('    %-*s  RRID  %-*s  Response' % (eidlen, 'EID', hreqlen, 'Request'))
-            log.tprint('    %s  ====  %-*s  =====================' % ('='*eidlen, hreqlen, '='*hreqlen))
+        desired = desired[0] # forget the noproblem flag
 
+        # create big table with everything desired
+        table = []
+        format_line = '    '
+
+        # header and format string
+        row = []
+        if show_time:
+            row.append('Time')
+            format_line += '%-*s  '
+        if show_event:
+            row.append('EID')
+            format_line += '%-*s  '
+        row.append('{0}{0}RRID'.format(log.COLOR_NONE))
+        format_line += '%-*s  '
+        if show_uri:
+            row.append('Server')
+            format_line += '%-*s  '
+        row.append('{0}{0}{0}{0}Request'.format(log.COLOR_NONE))
+        format_line += '%-*s  '
+        row.append('{0}{0}{0}{0}Response'.format(log.COLOR_NONE))
+        format_line += '%-*s  '
+        if show_size:
+            row.append('Size')
+            format_line += '%*s'
+
+        # remember header if desired
+        if header:
+            table.append(row)
+        
+        # get lines
         for rrid, rr in desired.items():
-            rr_id = ('\033[7m%-4d\033[0m' if rr.analysis_notes else '%-4d') % (rrid)
-            result.append('    %-*s  %s  %-*s  %-20s' % (eidlen, '' if rr.eid is None else rr.eid, rr_id, reqlen, rr.request_string(colored=True), rr.response_string(colored=True)))
+            row = []
+            if show_time:
+                row.append('03:15:00.123')
+            if show_event:
+                row.append(rr.eid or '')
+            row.append(('\033[07m%-4d\033[00m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
+            if show_uri:
+                row.append((rr.uri_upstream if weber.config['interaction.showupstream'][0] else rr.uri_downstream).get_value(path=False)) 
+            row.append(rr.request_string(colored=True))
+            row.append(rr.response_string(colored=True))
+            if show_size:
+                try:
+                    row.append('%d B' % len((rr.response_upstream if weber.config['interaction.showupstream'][0] else rr.response_downstream).data))
+                except:
+                    row.append('- B')
+            table.append(row)
+
+        # get max lengths for each column
+        color_length = len(log.COLOR_GREEN)+len(log.COLOR_NONE)
+        lengths = []
+
+        for i in range(len(table[0])):
+            lengths.append(max([0] + [len(row[i]) for row in table]))
+            
+        # add border
+        if header:
+            table.insert(1, [])
+            for i in range(len(table[0])):
+                if table[0][i].endswith('RRID'):
+                    border = '{0}{0}'.format(log.COLOR_NONE)+'='*(lengths[i]-color_length)
+                elif table[0][i].endswith(('Request', 'Response')):
+                    border = '{0}{0}{0}{0}'.format(log.COLOR_NONE)+'='*(lengths[i]-2*color_length)
+                else:
+                    border = '='*lengths[i]
+                table[1].append(border)
+
+        # return pretty lines
+        for line in table:
+            # prepare arguments
+            arguments = []
+            for i in range(len(line)):
+                arguments += [lengths[i], line[i]]
+            result.append(format_line % tuple(arguments))
         return result
+
 
             
 
@@ -177,10 +242,11 @@ class RR():
                         note = test(req, res, uri)
                         # and remember found issues
                         if note:
-                            log.debug_analysis('  MATCH => %s: %s' % (note[0], note[1]))
+                            log.debug_analysis('    MATCH => %s: %s' % (note[0], note[1]))
                             self.analysis_notes.append((source, *note))
                     except Exception as e:
                         log.debug_analysis('"%s" test failed for RR #%d (%s): %s' % (testname, self.rrid, source, str(e)))
+                        print(str(e))
     
 
 """
@@ -323,11 +389,11 @@ class URI():
     def clone(self):
         return URI(self.__bytes__())
 
-    def get_value(self):
+    def get_value(self, path=True):
         if len(self.user)>0 and len(self.password)>0:
-            return '%s://%s:%s@%s:%d%s' % (self.scheme, self.user, self.password, self.domain, self.port, self.path)
+            return '%s://%s:%s@%s:%d%s' % (self.scheme, self.user, self.password, self.domain, self.port, (self.path if path else ''))
         else:
-            return '%s://%s:%d%s' % (self.scheme, self.domain, self.port, self.path)
+            return '%s://%s:%d%s' % (self.scheme, self.domain, self.port, (self.path if path else ''))
         
     def __str__(self):
         return 'URI(%s)' % (self.get_value()) 

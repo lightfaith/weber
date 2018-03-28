@@ -7,38 +7,13 @@ import os, sys, re, traceback, tempfile, subprocess
 from source import weber
 from source import lib
 from source import log
-from source.protocols import protocols
+#from source.protocols import protocols
+from source.protocols.protocols import *
 from source.lib import *
 from source.structures import RRDB, Event, URI
 import difflib
 from source.fd_debug import *
 
-"""
-Load configuration
-def reload_config():
-    log.info('Loading config file...')
-    # read lines from conf file
-    with open(os.path.join(os.path.dirname(sys.argv[0]), 'weber.conf'), 'r') as f:
-        for line in f.readlines():
-            line = line.strip()
-            # skip empty and comments
-            if len(line) == 0 or line.startswith('#'):
-                continue
-            # get keys and values
-            k, _, v = line.partition('=')
-            log.debug_config('  line: \'%s\'' % (line))
-            k = k.strip()
-            v = v.strip()
-            # cast to correct type and save into weber.config
-            if k in weber.config.keys():
-                if weber.config[k][1] == bool:
-                    v = positive(v)
-                weber.config[k] = (weber.config[k][1](v), weber.config[k][1])
-            else:
-                weber.config[k] = (v, str)
-            log.info('  %s = %s' % (k, v))
-            log.debug_config('  parsed: %s = %s (%s)' % (k, v, str(type(v))))
-""" # now in source/lib
 
 """
 Universal class for commands.
@@ -213,16 +188,9 @@ add_command(Command('', '', help_description, lambda: []))
 TEST COMMANDS
 """
 def test_function(*_):
-    #d = xmltodict.parse(weber.rrdb.rrs[1].response.data)
-    #print(d)
-    #d['html']['body']['center']['h1'] = 'Welcome to modified nginx!'
-    #xml = xmltodict.unparse({'body': d['html']['body']})
-    #print(xml)
-    
-    #print(weber.rrdb.rrs[1].response.find_tags('html'))
-    #for x in weber.rrdb.rrs[1].response.soup.prettify().splitlines()[100:200]:
-    #    print(x)
-    print(fd_table_status_str('FIFO'))
+    while True:
+        print('> ', end='')
+        exec(input())
     return []
 add_command(Command('test', 'prints test message', '', test_function))
 
@@ -622,7 +590,7 @@ add_command(Command('mtrs <rrid>', 'modify template response', mrs_description, 
 """
 OPTIONS COMMANDS
 """
-o_function = lambda *_: ['    %-20s  %s' % (k, str(v[0] if v[1] != str else '\''+v[0]+'\'').replace('\n', '\\n').replace('\r', '\\r')) for k,v in weber.config.items()]
+o_function = lambda *_: ['    %-30s  %s' % (k, str(v[0] if v[1] != str else '\''+v[0]+'\'').replace('\n', '\\n').replace('\r', '\\r')) for k,v in weber.config.items()]
 o_description = """Active Weber configuration can be printed with `pwo` and `o` command.
 
 Default configuration is located in source/weber.py.
@@ -717,45 +685,48 @@ add_command(Command('pcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences', pcs_
 add_command(Command('ptcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences from templates', pcs_description, lambda *args: foreach_rrs(pcs_function, fromtemplate=True, *args)))
 add_command(Command('pe [<eid>[:<eid>]]', 'print events', e_description, e_function))
 
-# ph
-ph_description = """
-"""
-add_command(Command('ph', 'print HTML-related info', ph_description, lambda *_: []))
-add_command(Command('pth', 'print HTML-related info in templates', ph_description, lambda *_: []))
 
-# phc
-phc_description = """HTML comments can be searched with `phc` command.
-"""
-add_command(Command('phc [<rrid>[:<rrid>]]', 'print comments', phc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<!--', b'-->')], valueonly=False)))
-add_command(Command('pthc [<rrid>[:<rrid>]]', 'print comments in templates', phc_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<!--', b'-->')], valueonly=False)))
+# ph - only relevant for HTTP
+if 'source.protocols.http' in sys.modules.keys():
+    ph_description = """
+    """
+    add_command(Command('ph', 'print HTML-related info', ph_description, lambda *_: []))
+    add_command(Command('pth', 'print HTML-related info in templates', ph_description, lambda *_: []))
 
-# phf
-phf_description = """Forms present on given page are shown with `pf` command.
-"""
-add_command(Command('phf [<rrid>[:<rrid>]]', 'print HTML forms', phf_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<form', b'</form>')], valueonly=False)))
-add_command(Command('pthf [<rrid>[:<rrid>]]', 'print HTML forms from templates', phf_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<form', b'</form>')], valueonly=False)))
+    # phc
+    phc_description = """HTML comments can be searched with `phc` command.
+    """
+    add_command(Command('phc [<rrid>[:<rrid>]]', 'print comments', phc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<!--', b'-->')], valueonly=False)))
+    add_command(Command('pthc [<rrid>[:<rrid>]]', 'print comments in templates', phc_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<!--', b'-->')], valueonly=False)))
 
-# phl
-phl_description = """Links from all known tags are printed with `phl` command. To see their context, use `phlc` command.
-"""
-add_command(Command('phl [<rrid>[:<rrid>]]', 'print HTML links', phl_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], attrs=[x[2] for x in Response.link_tags], valueonly=True)))
-add_command(Command('pthl [<rrid>[:<rrid>]]', 'print links from templates', phl_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[x[:2] for x in Response.link_tags], attrs=[x[2] for x in Response.link_tags], valueonly=True)))
-phlc_description = """Links from all known tags together with their context are printed with `phlc` command.
-"""
-add_command(Command('phlc [<rrid>[:<rrid>]]', 'print links with context', phlc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], valueonly=False)))
-add_command(Command('pthlc [<rrid>[:<rrid>]]', 'print links from templates with context', phlc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in Response.link_tags], valueonly=False)))
+    # phf
+    phf_description = """Forms present on given page are shown with `pf` command.
+    """
+    add_command(Command('phf [<rrid>[:<rrid>]]', 'print HTML forms', phf_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<form', b'</form>')], valueonly=False)))
+    add_command(Command('pthf [<rrid>[:<rrid>]]', 'print HTML forms from templates', phf_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<form', b'</form>')], valueonly=False)))
 
-# phm
-phm_description = """HTML <main> tags can be searched with `phm` command.
-"""
-add_command(Command('phm [<rrid>[:<rrid>]]', 'print <main> elements', phm_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<main', b'</main>')], valueonly=False)))
-add_command(Command('pthm [<rrid>[:<rrid>]]', 'print <main> elements in templates', phm_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<main', b'</main>')], valueonly=False)))
+    # phl
+    phl_description = """Links from all known tags are printed with `phl` command. To see their context, use `phlc` command.
+    """
+    add_command(Command('phl [<rrid>[:<rrid>]]', 'print HTML links', phl_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], attrs=[x[2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], valueonly=True)))
+    add_command(Command('pthl [<rrid>[:<rrid>]]', 'print links from templates', phl_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[x[:2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], attrs=[x[2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], valueonly=True)))
+    phlc_description = """Links from all known tags together with their context are printed with `phlc` command.
+    """
+    add_command(Command('phlc [<rrid>[:<rrid>]]', 'print links with context', phlc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], valueonly=False)))
+    add_command(Command('pthlc [<rrid>[:<rrid>]]', 'print links from templates with context', phlc_description, lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], valueonly=False)))
 
-# phs
-phs_description = """
-"""
-add_command(Command('phs <start> <end>', 'search in HTML', phm_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(args[0].encode(), args[1].encode())], valueonly=False)))
-add_command(Command('pths <start> <end>', 'search in HTML of templates', phm_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(args[0].encode(), args[1].encode())], valueonly=False)))
+    # phm
+    phm_description = """HTML <main> tags can be searched with `phm` command.
+    """
+    add_command(Command('phm [<rrid>[:<rrid>]]', 'print <main> elements', phm_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<main', b'</main>')], valueonly=False)))
+    add_command(Command('pthm [<rrid>[:<rrid>]]', 'print <main> elements in templates', phm_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<main', b'</main>')], valueonly=False)))
+
+    # phs
+    phs_description = """
+    """
+    add_command(Command('phs <start> <end>', 'search in HTML', phm_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(args[0].encode(), args[1].encode())], valueonly=False)))
+    add_command(Command('pths <start> <end>', 'search in HTML of templates', phm_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(args[0].encode(), args[1].encode())], valueonly=False)))
+
 
 # pp
 def pp_function(_, rr, *__, **___):
@@ -770,7 +741,28 @@ add_command(Command('ptp [<rrid>[:<rrid>]]', 'print template parameters', pp_des
 # pr_function defined in structures.py because it is also used by proxy (realtime overview)
 pr_description = """Use `pr` command to get an overview of all captured request-response pairs. Size of the response and time can be optionally showed as well (using overview.size and overview.time configuration parameters) {#TODO}.
 """
-add_command(Command('pr [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: weber.rrdb.overview(args, showlast=False, onlytampered=False)))
+def overview_handler(args, show_last=False, only_tampered=False, from_template=False):
+    source = weber.tdb if from_template else weber.rrdb
+    #args = list(filter(None, args))
+    show_event = False # TODO default values from config
+    show_size = False
+    show_time = False
+    show_uri = False
+    if args and re.match('^[estu]+$', args[0]): # some modifiers
+        if 'e' in args[0]:
+            show_event = True
+        if 's' in args[0]:
+            show_size = True
+        if 't' in args[0]:
+            show_time = True
+        if 'u' in args[0]:
+            show_uri = True
+        args = args[1:]
+    return source.overview(args, show_event=show_event, show_size=show_size, show_time=show_time, show_uri=show_uri, show_last=show_last, only_tampered=only_tampered)
+
+add_command(Command('pr [estu] [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: overview_handler(args, show_last=False, only_tampered=False)))
+
+#add_command(Command('pr [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: weber.rrdb.overview(args, showlast=False, onlytampered=False)))
 add_command(Command('pro [<rrid>[:<rrid>]]', 'print request-response pairs', pr_description, lambda *args: weber.rrdb.overview(args, showlast=False, onlytampered=False)))
 add_command(Command('pt [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: weber.tdb.overview(args, showlast=False, onlytampered=False)))
 add_command(Command('ptr [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: weber.tdb.overview(args, showlast=False, onlytampered=False)))

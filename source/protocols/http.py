@@ -77,7 +77,7 @@ class HTTP():
     
 
     @staticmethod
-    def response_string(res, colored=False):
+    def response_string(res, colored=False, show_size=False):
         try:
             tamperstring = ''
             if res.tampering:
@@ -98,8 +98,8 @@ class HTTP():
                 color = log.COLOR_NONE
             if not colored:
                 color = log.COLOR_NONE
-            
-            return '%s%s%s%s%d %s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, res.statuscode, res.status.decode(), log.COLOR_NONE)
+            size_string = '' if not show_size else (' (%d B)' % len(res.data))
+            return '%s%s%s%s%d %s%s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, res.statuscode, res.status.decode(), size_string, log.COLOR_NONE)
         except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
     
