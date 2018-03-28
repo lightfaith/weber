@@ -206,20 +206,36 @@ def split_escaped(string, delimiter):
 
 chunks = lambda data,size: [data[x:x+size] for x in range(0, len(data), size)]
 
-def print_colored_printable(b):
+def get_colored_printable(b):
+    color = log.COLOR_BROWN
+    if b in (0x9, 0xa, 0xd):
+        color = log.COLOR_DARK_GREEN
+        b = ord('.')
+    elif b<0x20 or b>=0x7f:
+        color = log.COLOR_NONE
+        b = ord('.')
+    return color+chr(b)+log.COLOR_NONE
+
+def get_colored_printable_hex(b):
+    color = log.COLOR_NONE
     if b>=0x20 and b<0x7f:
-        return log.COLOR_BROWN+chr(b)+log.COLOR_NONE
+        color = log.COLOR_BROWN
     elif b in (0x9, 0xa, 0xd):
-        return log.COLOR_DARK_GREEN+'.'+log.COLOR_NONE
-    return '.'
+        color = log.COLOR_DARK_GREEN
+    return color + '%02x' % b + log.COLOR_NONE
 
 def hexdump(data):
     # prints data as with `hexdump -C` command
     result = []
     line_count = 0
     for chunk in chunks(data, 16):
-        hexa = ' '.join(''.join('%02x' % (b) for b in byte) for byte in [chunk[start:start+2] for start in range(0, 16, 2)])
-        result.append(log.COLOR_DARK_GREEN + '%08x' % (line_count*16) + log.COLOR_NONE +'  %-40s' % (hexa) + ' |' + ''.join(print_colored_printable(b) for b in chunk) + '|')
+        hexa = ' '.join(''.join(get_colored_printable_hex(b) for b in byte) for byte in [chunk[start:start+2] for start in range(0, 16, 2)])
+        
+        # add none with coloring - for layout
+        if len(hexa)<199:
+            hexa += (log.COLOR_NONE+'  '+log.COLOR_NONE)*(16-len(chunk))
+
+        result.append(log.COLOR_DARK_GREEN + '%08x' % (line_count*16) + log.COLOR_NONE +'  %-160s' % (hexa) + ' |' + ''.join(get_colored_printable(b) for b in chunk) + '|')
         line_count += 1
     #if result: # if request matches and response not, 2 headers are printed...
     #    result.insert(0, '{grepignore}-offset-   0 1  2 3  4 5  6 7  8 9  A B  C D  E F   0123456789ABCDEF')
