@@ -741,8 +741,7 @@ add_command(Command('ptp [<rrid>[:<rrid>]]', 'print template parameters', pp_des
 # pr_function defined in structures.py because it is also used by proxy (realtime overview)
 pr_description = """Use `pr` command to get an overview of all captured request-response pairs. Size of the response and time can be optionally showed as well (using overview.size and overview.time configuration parameters) {#TODO}.
 """
-def overview_handler(args, show_last=False, only_tampered=False, from_template=False):
-    source = weber.tdb if from_template else weber.rrdb
+def overview_handler(args, source, show_last=False, only_tampered=False):
     #args = list(filter(None, args))
     show_event = weber.config['overview.showevent'][0]
     show_size = weber.config['overview.showsize'][0]
@@ -760,23 +759,23 @@ def overview_handler(args, show_last=False, only_tampered=False, from_template=F
         args = args[1:]
     return source.overview(args, show_event=show_event, show_size=show_size, show_time=show_time, show_uri=show_uri, show_last=show_last, only_tampered=only_tampered)
 
-add_command(Command('pr [estu] [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: overview_handler(args, show_last=False, only_tampered=False)))
+add_command(Command('pr [estu] [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=False)))
 
-#add_command(Command('pr [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: weber.rrdb.overview(args, showlast=False, onlytampered=False)))
-add_command(Command('pro [<rrid>[:<rrid>]]', 'print request-response pairs', pr_description, lambda *args: weber.rrdb.overview(args, showlast=False, onlytampered=False)))
-add_command(Command('pt [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: weber.tdb.overview(args, showlast=False, onlytampered=False)))
-add_command(Command('ptr [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: weber.tdb.overview(args, showlast=False, onlytampered=False)))
-add_command(Command('ptro [<rrid>[:<rrid>]]', 'print templates overview', pr_description, lambda *args: weber.tdb.overview(args, showlast=False, onlytampered=False)))
+#add_command(Command('pr [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: weber.rrdb.overview(args, source=, showlast=False, onlytampered=False)))
+add_command(Command('pro [<rrid>[:<rrid>]]', 'print request-response pairs', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=False)))
+add_command(Command('pt [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
+add_command(Command('ptr [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
+add_command(Command('ptro [<rrid>[:<rrid>]]', 'print templates overview', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
 
 # prol
 prol_description="""
 """
-add_command(Command('prol [<rrid>[:<rrid>]]', 'print last request-response overview', prol_description, lambda *args: weber.rrdb.overview(args, showlast=True, onlytampered=False)))
-add_command(Command('ptrol [<rrid>[:<rrid>]]', 'print last template request-response overview', prol_description, lambda *args: weber.tdb.overview(args, showlast=True, onlytampered=False)))
+add_command(Command('prol [<rrid>[:<rrid>]]', 'print last request-response overview', prol_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=True, only_tampered=False)))
+add_command(Command('ptrol [<rrid>[:<rrid>]]', 'print last template request-response overview', prol_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=True, only_tampered=False)))
 # prot
 prot_description="""
 """
-add_command(Command('prot [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', prot_description, lambda *args: weber.rrdb.overview(args, showlast=False, onlytampered=True)))
+add_command(Command('prot [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', prot_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=True)))
 
 # prX
 def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of desired requests/responses/both
