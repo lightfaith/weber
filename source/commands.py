@@ -722,7 +722,7 @@ if 'source.protocols.http' in sys.modules.keys():
     add_command(Command('pthm [<rrid>[:<rrid>]]', 'print <main> elements in templates', phm_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<main', b'</main>')], valueonly=False)))
 
     # phs
-    phs_description = """
+    phs_description = """You can do interval search with `phs` command. Note that for certain elements (form, comment, etc.) there are other predefined commands.
     """
     add_command(Command('phs <start> <end>', 'search in HTML', phm_description, lambda *args: foreach_rrs(find_tags, *args, startends=[(args[0].encode(), args[1].encode())], valueonly=False)))
     add_command(Command('pths <start> <end>', 'search in HTML of templates', phm_description, lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(args[0].encode(), args[1].encode())], valueonly=False)))
@@ -739,7 +739,31 @@ add_command(Command('pp [<rrid>[:<rrid>]]', 'print parameters', pp_description, 
 add_command(Command('ptp [<rrid>[:<rrid>]]', 'print template parameters', pp_description, lambda *args: foreach_rrs(pp_function, fromtemplate=True, *args)))
 
 # pr_function defined in structures.py because it is also used by proxy (realtime overview)
-pr_description = """Use `pr` command to get an overview of all captured request-response pairs. Size of the response and time can be optionally showed as well (using overview.size and overview.time configuration parameters) {#TODO}.
+pr_description = """Use `pr` or `pro` commands to get an overview of all captured request-response pairs, or `pt`, `ptr`, `ptro` for template overview. There are optional parameters 'e', 's', 't', 'u'. You can additionaly specify RRIDs of entries to show, separated by commas and hyphens (e.g. 1,2,4-7).
+
+You can see various columns:
+    Time     - Time of request being forwarded to the remote server
+             - shown if overview.showtime is set to True or 't' is used as argument
+    EID      - Event ID for this request-response pair
+             - shown if overview.showevent is set to True or 'e' is used as argument
+    RRID     - ID of request-response pair
+             - always shown
+    Server   - Server the request is sent to (actually URI without the path)
+             - shown if overview.showuri is set to True or 'u' is used as argument
+    Request  - Request essential data (method and path for HTTP)
+             - always shown
+             - path can be ellipsized if overview.shortrequest is set to True
+    Response - Response essential data (status code and status for HTTP)
+             - always shown
+    Size     - size of response data
+             - shown if overview.showevent is set to True or 'e' is used as argument
+
+Entries are shown in real-time if overview.realtime is set to True.
+Request and responses with [T] prepended are tampered and must be forwarded manually. See `t` for more information.
+Entries with emphasized RRID were marked as interesting by analysis processes. Use `pa` to see the reason.
+
+You can use `prol` and `ptrol`, respectively, to see only last 10 entries.
+You can use `prot` to see only entries with active tampering.
 """
 def overview_handler(args, source, show_last=False, only_tampered=False):
     #args = list(filter(None, args))
@@ -767,14 +791,10 @@ add_command(Command('ptr [estu] [<rrid>[:<rrid>]]', 'print templates overview (a
 add_command(Command('ptro [estu] [<rrid>[:<rrid>]]', 'print templates overview', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
 
 # prol
-prol_description="""
-"""
-add_command(Command('prol [estu] [<rrid>[:<rrid>]]', 'print last request-response overview', prol_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=True, only_tampered=False)))
-add_command(Command('ptrol [estu] [<rrid>[:<rrid>]]', 'print last template request-response overview', prol_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=True, only_tampered=False)))
+add_command(Command('prol [estu] [<rrid>[:<rrid>]]', 'print last request-response overview', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=True, only_tampered=False)))
+add_command(Command('ptrol [estu] [<rrid>[:<rrid>]]', 'print last template request-response overview', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=True, only_tampered=False)))
 # prot
-prot_description="""
-"""
-add_command(Command('prot [estu] [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', prot_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=True)))
+add_command(Command('prot [estu] [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=True)))
 
 # prX
 def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of desired requests/responses/both
@@ -812,15 +832,15 @@ add_command(Command('prs [<rrid>[:<rrid>]]', 'print responses verbose', prX_desc
 add_command(Command('prsh [<rrid>[:<rrid>]]', 'print response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x6)))
 add_command(Command('prsd [<rrid>[:<rrid>]]', 'print response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x5)))
 
-add_command(Command('prax [<rrid>[:<rrid>]]', 'print requests-response pairs verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xf, hexdump=True)))
-add_command(Command('prhx [<rrid>[:<rrid>]]', 'print request-response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xe, hexdump=True)))
-add_command(Command('prdx [<rrid>[:<rrid>]]', 'print request-response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xd, hexdump=True)))
-add_command(Command('prqx [<rrid>[:<rrid>]]', 'print requests verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xb, hexdump=True)))
-add_command(Command('prqhx [<rrid>[:<rrid>]]', 'print request headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xa, hexdump=True)))
-add_command(Command('prqdx [<rrid>[:<rrid>]]', 'print request data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x9, hexdump=True)))
-add_command(Command('prsx [<rrid>[:<rrid>]]', 'print responses verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x7, hexdump=True)))
-add_command(Command('prshx [<rrid>[:<rrid>]]', 'print response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x6, hexdump=True)))
-add_command(Command('prsdx [<rrid>[:<rrid>]]', 'print response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x5, hexdump=True)))
+add_command(Command('prax [<rrid>[:<rrid>]]', 'print hexdump of requests-response pairs verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xf, hexdump=True)))
+add_command(Command('prhx [<rrid>[:<rrid>]]', 'print hexdump of request-response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xe, hexdump=True)))
+add_command(Command('prdx [<rrid>[:<rrid>]]', 'print hexdump of request-response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xd, hexdump=True)))
+add_command(Command('prqx [<rrid>[:<rrid>]]', 'print hexdump of requests verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xb, hexdump=True)))
+add_command(Command('prqhx [<rrid>[:<rrid>]]', 'print hexdump of request headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0xa, hexdump=True)))
+add_command(Command('prqdx [<rrid>[:<rrid>]]', 'print hexdump of request data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x9, hexdump=True)))
+add_command(Command('prsx [<rrid>[:<rrid>]]', 'print hexdump of responses verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x7, hexdump=True)))
+add_command(Command('prshx [<rrid>[:<rrid>]]', 'print hexdump of response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x6, hexdump=True)))
+add_command(Command('prsdx [<rrid>[:<rrid>]]', 'print hexdump of response data', prX_description, lambda *args: foreach_rrs(prx_function, *args, mask=0x5, hexdump=True)))
 
 add_command(Command('ptra [<rrid>[:<rrid>]]', 'print template requests-response pairs verbose', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xf)))
 add_command(Command('ptrh [<rrid>[:<rrid>]]', 'print template request-response headers', prX_description, lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xe)))
