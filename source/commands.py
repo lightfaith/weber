@@ -167,7 +167,7 @@ def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
     attrs = kwargs.get('attrs')
     valueonly = kwargs['valueonly']
     
-    r = rr.response_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.response_downstream
+    r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
     if r is None: # race condition, return nothing for now
         return []
     return r.find_tags(startends, attrs, valueonly)
@@ -194,6 +194,48 @@ def test_function(*_):
     return []
 add_command(Command('test', 'prints test message', '', test_function))
 
+
+"""
+ANALYSIS COMMANDS
+"""
+# ap
+ap_description = """
+"""
+def ap_function(*args):
+    result = []
+    for k, v in weber.analysis.items():
+        result.append('    %s %s' % ('+' if v['enabled'] else '-', k))
+        # rr_tests
+        if 'rr_tests' in v.keys():
+            result.append('       RR tests:')
+            for testname, info, *_ in v['rr_tests']:
+                result.append('        %s: %s' % (testname, info[1]))
+    return result
+
+add_command(Command('ap', 'print analysis packs (alias for `pap`)', ap_description, ap_function))
+add_command(Command('pap', 'print analysis packs', ap_description, ap_function))
+
+# ape, apd
+def ap_function(*args, enable):
+    try:
+        weber.analysis[args[0]]['enabled'] = enable
+    except:
+        log.err('Invalid analysis pack name.')
+    return []
+
+add_command(Command('ape <pack>', 'enable analysis pack', ap_description, lambda *args: ap_function(*args, enable=True)))
+add_command(Command('apd <pack>', 'disnable analysis pack', ap_description, lambda *args: ap_function(*args, enable=False)))
+
+# ar
+ar_description = """
+"""
+def ar_function(_, rr, *__, **___):
+    result = []
+    rr.analyze()
+    if rr.analysis_notes:
+       result += par_function(_, rr, *__, **___)
+    return result
+add_command(Command('ar [<rrid>[:<rrid>]]', 'run RR analysis on specified request-response pairs', ar_description, lambda *args: foreach_rrs(ar_function, *args)))
 
 
 """
@@ -315,7 +357,7 @@ def crX_function(*args, **kwargs):
     if showrequest:
         rrs_lines = []
         for rr in (rr1, rr2):
-            r = rr.request_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.request_downstream
+            r = rr.request_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.request_downstream
             rrs_lines.append(r.lines(headers=showheaders, data=showdata))
         
         # diff
@@ -336,7 +378,7 @@ def crX_function(*args, **kwargs):
     if showresponse:
         rrs_lines = []
         for rr in (rr1, rr2):
-            r = rr.response_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.response_downstream
+            r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
             if r is None:
                 rrs_lines.append(['Response not received yet...'])
             else:
@@ -634,13 +676,13 @@ PRINT COMMANDS
 """
 add_command(Command('p', 'print', '', lambda *_: []))
 
-# pa
-pa_description = """
+# par
+par_description = """
 """
-def pa_function(_, rr, *__, **___):
+def par_function(_, rr, *__, **___):
     result = []
-    desired = 'upstream' if positive(weber.config['interaction.showupstream'][0]) else 'downstream'
-    for source, severity, message in rr.analysis_notes:
+    desired = 'upstream' if positive(weber.config['interaction.show_upstream'][0]) else 'downstream'
+    for source, testname, severity, message, certainity in rr.analysis_notes:
         if source != desired:
             continue
         color = log.COLOR_NONE
@@ -648,15 +690,20 @@ def pa_function(_, rr, *__, **___):
             color = log.COLOR_RED
         if severity == 'WARNING':
             color = log.COLOR_YELLOW
-        result += log.info('%s%s%s: %s' % (color, severity, log.COLOR_NONE, message), stdout=False)
+        if severity == 'INFOLEAK':
+            color = log.COLOR_CYAN
+
+        if certainity:
+            color += log.COLOR_BOLD
+        result += log.info('%s<%s>%s %s: %s' % (color, severity, log.COLOR_NONE, testname, message), stdout=False)
     return result
-add_command(Command('pa [<rrid>[:<rrid>]]', 'print analysis results', pa_description, lambda *args: foreach_rrs(pa_function, *args)))
+add_command(Command('par [<rrid>[:<rrid>]]', 'print results of RR analysis', par_description, lambda *args: foreach_rrs(par_function, *args)))
 
 
 # pc
 def pc_function(_, rr, *__, **___):
     try:
-        r = rr.request_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.request_downstream
+        r = rr.request_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.request_downstream
         cookies = r.headers[b'Cookie'].split(b';')
         cookies = dict([tuple(c.split(b'=')) for c in cookies])
         maxlen = max([0]+[len(k.decode().strip()) for k in cookies.keys()])
@@ -671,7 +718,7 @@ add_command(Command('ptc [<rrid>[:<rrid>]]', 'print cookies from templates', pc_
 # pcs
 def pcs_function(_, rr, *__, **___):
     try:
-        r = rr.response_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.response_downstream
+        r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
         cookies = r.headers[b'Set-Cookie'].split(b';')
         attrs = dict([(tuple(c.split(b'=')+[b''])[:2]) for c in cookies])
         maxlen = max([0]+[len(k.decode().strip()) for k in attrs.keys()])
@@ -730,7 +777,7 @@ if 'source.protocols.http' in sys.modules.keys():
 
 # pp
 def pp_function(_, rr, *__, **___):
-    r = rr.request_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.request_downstream
+    r = rr.request_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.request_downstream
     maxlen = max([0]+[len(k) for k in r.parameters.keys()])
     return ['%*s: %s' % (maxlen, k.decode(), '' if v is None else v.decode()) for k, v in r.parameters.items()]
 pp_description = """Parameters of selected requests are printed with `pp` command.
@@ -743,34 +790,35 @@ pr_description = """Use `pr` or `pro` commands to get an overview of all capture
 
 You can see various columns:
     Time     - Time of request being forwarded to the remote server
-             - shown if overview.showtime is set to True or 't' is used as argument
+             - shown if overview.show_time is set to True or 't' is used as argument
     EID      - Event ID for this request-response pair
-             - shown if overview.showevent is set to True or 'e' is used as argument
+             - shown if overview.show_event is set to True or 'e' is used as argument
     RRID     - ID of request-response pair
              - always shown
     Server   - Server the request is sent to (actually URI without the path)
-             - shown if overview.showuri is set to True or 'u' is used as argument
+             - shown if overview.show_uri is set to True or 'u' is used as argument
     Request  - Request essential data (method and path for HTTP)
              - always shown
              - path can be ellipsized if overview.shortrequest is set to True
     Response - Response essential data (status code and status for HTTP)
              - always shown
     Size     - size of response data
-             - shown if overview.showevent is set to True or 'e' is used as argument
+             - shown if overview.show_event is set to True or 'e' is used as argument
 
 Entries are shown in real-time if overview.realtime is set to True.
 Request and responses with [T] prepended are tampered and must be forwarded manually. See `t` for more information.
 Entries with emphasized RRID were marked as interesting by analysis processes. Use `pa` to see the reason.
 
+You can use `proa` to see only entries with analysis notes.
 You can use `prol` and `ptrol`, respectively, to see only last 10 entries.
 You can use `prot` to see only entries with active tampering.
 """
-def overview_handler(args, source, show_last=False, only_tampered=False):
+def overview_handler(args, source, show_last=False, only_tampered=False, only_with_analysis=False):
     #args = list(filter(None, args))
-    show_event = weber.config['overview.showevent'][0]
-    show_size = weber.config['overview.showsize'][0]
-    show_time = weber.config['overview.showtime'][0]
-    show_uri = weber.config['overview.showuri'][0]
+    show_event = weber.config['overview.show_event'][0]
+    show_size = weber.config['overview.show_size'][0]
+    show_time = weber.config['overview.show_time'][0]
+    show_uri = weber.config['overview.show_uri'][0]
     if args and re.match('^[estu]+$', args[0]): # some modifiers
         if 'e' in args[0]:
             show_event = True
@@ -781,20 +829,25 @@ def overview_handler(args, source, show_last=False, only_tampered=False):
         if 'u' in args[0]:
             show_uri = True
         args = args[1:]
-    return source.overview(args, show_event=show_event, show_size=show_size, show_time=show_time, show_uri=show_uri, show_last=show_last, only_tampered=only_tampered)
+    return source.overview(args, show_event=show_event, show_size=show_size, show_time=show_time, show_uri=show_uri, show_last=show_last, only_tampered=only_tampered, only_with_analysis=only_with_analysis)
 
-add_command(Command('pr [estu] [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=False)))
+add_command(Command('pr [estu] [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', pr_description, lambda *args: overview_handler(args, source=weber.rrdb)))
 
-add_command(Command('pro [estu] [<rrid>[:<rrid>]]', 'print request-response pairs', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=False)))
-add_command(Command('pt [estu] [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
-add_command(Command('ptr [estu] [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
-add_command(Command('ptro [estu] [<rrid>[:<rrid>]]', 'print templates overview', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=False, only_tampered=False)))
+add_command(Command('pro [estu] [<rrid>[:<rrid>]]', 'print request-response pairs', pr_description, lambda *args: overview_handler(args, source=weber.rrdb)))
+add_command(Command('pt [estu] [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: overview_handler(args, source=weber.tdb)))
+add_command(Command('ptr [estu] [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', pr_description, lambda *args: overview_handler(args, source=weber.tdb)))
+add_command(Command('ptro [estu] [<rrid>[:<rrid>]]', 'print templates overview', pr_description, lambda *args: overview_handler(args, source=weber.tdb)))
 
 # prol
-add_command(Command('prol [estu] [<rrid>[:<rrid>]]', 'print last request-response overview', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=True, only_tampered=False)))
-add_command(Command('ptrol [estu] [<rrid>[:<rrid>]]', 'print last template request-response overview', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=True, only_tampered=False)))
+add_command(Command('prol [estu] [<rrid>[:<rrid>]]', 'print last request-response overview', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=True)))
+add_command(Command('ptrol [estu] [<rrid>[:<rrid>]]', 'print last template request-response overview', pr_description, lambda *args: overview_handler(args, source=weber.tdb, show_last=True)))
+
 # prot
-add_command(Command('prot [estu] [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, show_last=False, only_tampered=True)))
+add_command(Command('prot [estu] [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, only_tampered=True)))
+
+# proa
+add_command(Command('proa [estu] [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, only_with_analysis=True)))
+
 
 # prX
 def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of desired requests/responses/both
@@ -807,13 +860,13 @@ def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of de
 
     # deal with requests
     if showrequest:
-        r = rr.request_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.request_downstream
+        r = rr.request_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.request_downstream
         result += r.lines(headers=showheaders, data=showdata) if not usehexdump else hexdump(r.bytes(headers=showheaders, data=showdata))
         if showresponse:
             result.append('')
     # deal with responses
     if showresponse:
-        r = rr.response_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.response_downstream
+        r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
         if r is None:
             result.append('Response not received yet...')
         else:
@@ -1129,13 +1182,13 @@ def wrx_function(rrid, rr, *args, **kwargs): # write headers/data/both of desire
     showdata = bool(kwargs['mask'] & 0x1)
     # deal with requests
     if showrequest:
-        r = rr.request_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.request_downstream
+        r = rr.request_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.request_downstream
         data += r.lines(headers=showheaders, data=showdata, as_string=False)
         if showresponse:
             data.append(b'')
     # deal with responses
     if showresponse:
-        r = rr.response_upstream if positive(weber.config['interaction.showupstream'][0]) else rr.response_downstream
+        r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
         if r is None:
             data.append(b'Response not received yet...')
         else:

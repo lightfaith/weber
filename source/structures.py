@@ -38,7 +38,7 @@ class RRDB():
         self.rrs[rrid] = rr
         return rrid
 
-    def get_desired_rrs(self, arg, showlast=False, onlytampered=False):
+    def get_desired_rrs(self, arg, showlast=False, onlytampered=False, withanalysis=False):
         # this method parses rrid specifier (e.g. 1,2,3-5,10)
         # returns OrderedDict of rrid, RR sorted by rrid and flag whether problem occured
         if len(self.rrs.keys()) == 0:
@@ -72,18 +72,18 @@ class RRDB():
         else:
             indices = list(range(minimum, maximum+1))[(-10 if showlast else 0):]
        
-        if positive(weber.config['interaction.showupstream'][0]):
-            keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request_upstream.tampering or (self.rrs[x].response_upstream is not None and self.rrs[x].response_upstream.tampering)]
+        if positive(weber.config['interaction.show_upstream'][0]):
+            keys = [x for x in self.rrs.keys() if (not onlytampered and (not withanalysis or self.rrs[x].analysis_notes)) or self.rrs[x].request_upstream.tampering or (self.rrs[x].response_upstream is not None and self.rrs[x].response_upstream.tampering)]
         else:
-            keys = [x for x in self.rrs.keys() if not onlytampered or self.rrs[x].request_downstream.tampering or (self.rrs[x].response_downstream is not None and self.rrs[x].response_downstream.tampering)]
+            keys = [x for x in self.rrs.keys() if (not onlytampered and (not withanalysis or self.rrs[x].analysis_notes)) or self.rrs[x].request_downstream.tampering or (self.rrs[x].response_downstream is not None and self.rrs[x].response_downstream.tampering)]
         return (OrderedDict([(i, self.rrs[i]) for i in sorted(indices) if i in keys]), noproblem)
 
     
-    def overview(self, args, header=True, show_event=False, show_size=False, show_time=False, show_uri=False, show_last=False, only_tampered=False):
+    def overview(self, args, header=True, show_event=False, show_size=False, show_time=False, show_uri=False, show_last=False, only_tampered=False, only_with_analysis=False):
         result = []
         arg = None if len(args)<1 else args[0]
         #eidlen = max([3]+[len(str(e)) for e,_ in weber.events.items()])
-        desired = self.get_desired_rrs(arg, showlast=show_last, onlytampered=only_tampered)
+        desired = self.get_desired_rrs(arg, showlast=show_last, onlytampered=only_tampered, withanalysis=only_with_analysis)
         if not desired:
             return []
         desired = desired[0] # forget the noproblem flag
@@ -128,12 +128,12 @@ class RRDB():
             row.append(('\033[07m%-4d\033[27m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
             #row.append(('\033[07m%-4d\033[00m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
             if show_uri:
-                row.append((rr.uri_upstream if weber.config['interaction.showupstream'][0] else rr.uri_downstream).get_value(path=False)) 
+                row.append((rr.uri_upstream if weber.config['interaction.show_upstream'][0] else rr.uri_downstream).get_value(path=False)) 
             row.append(rr.request_string(colored=True))
             row.append(rr.response_string(colored=True))
             if show_size:
                 try:
-                    row.append('%d B' % len((rr.response_upstream if weber.config['interaction.showupstream'][0] else rr.response_downstream).data))
+                    row.append('%d B' % len((rr.response_upstream if weber.config['interaction.show_upstream'][0] else rr.response_downstream).data))
                 except:
                     row.append('- B')
             table.append(row)
@@ -216,18 +216,22 @@ class RR():
 
     
     def request_string(self, colored=True):
-        req = self.request_upstream if weber.config['interaction.showupstream'][0] else self.request_downstream
-        res = self.response_upstream if weber.config['interaction.showupstream'][0] else self.response_downstream
+        req = self.request_upstream if weber.config['interaction.show_upstream'][0] else self.request_downstream
+        res = self.response_upstream if weber.config['interaction.show_upstream'][0] else self.response_downstream
         return self.Protocol.request_string(req, res, colored)
     
+
     def response_string(self, colored=True):
-        res = self.response_upstream if weber.config['interaction.showupstream'][0] else self.response_downstream
+        res = self.response_upstream if weber.config['interaction.show_upstream'][0] else self.response_downstream
         return self.Protocol.response_string(res, colored)
 
+
     def analyze(self): # intra-RR analysis
-        # for both upstream and downstream
-        for source, req, res, uri in (('upstream', self.request_upstream, self.response_upstream, self.uri_upstream), ('downstream', self.request_downstream, self.response_downstream, self.uri_downstream)):
-            log.debug_analysis(' Analyzing %s' % (source))
+        self.analysis_notes = []
+        ## for both upstream and downstream - WHY DOWNSTREAM?
+        #for source, req, res, uri in (('upstream', self.request_upstream, self.response_upstream, self.uri_upstream), ('downstream', self.request_downstream, self.response_downstream, self.uri_downstream)):
+        for source, req, res, uri in (('upstream', self.request_upstream, self.response_upstream, self.uri_upstream),):
+            log.debug_analysis(' Analyzing %s for RR #%d' % (source, self.rrid))
             # run all known tests
             for name, analysis_pack in weber.analysis.items():
                 log.debug_analysis('  using %s' % (name))
@@ -236,6 +240,9 @@ class RR():
                     continue
 
                 for testname, note, supported, conditions in analysis_pack['rr_tests']:
+                    # but skip ignored ones
+                    if testname in weber.config['analysis.ignored_tests'][0].split(';'):
+                        continue
                     log.debug_analysis('  Trying \'%s\'' % (testname))
                     if self.Protocol.scheme not in supported:
                         log.debug_analysis('   NOT supported for this protocol, skipping...')
@@ -251,7 +258,7 @@ class RR():
                         # and remember found issues
                         if match:
                             log.debug_analysis('    MATCH => %s: %s' % (note[0], note[1]))
-                            self.analysis_notes.append((source, *note))
+                            self.analysis_notes.append((source, testname, *note))
                     except Exception as e:
                         log.debug_analysis('!!! "%s" test failed for RR #%d (%s): %s' % (testname, self.rrid, source, str(e)))
                         traceback.print_exc()

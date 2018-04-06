@@ -10,10 +10,12 @@ Default configuration options
 config = OrderedDict()
 # analysis settings
 config['analysis.immediate'] = (True, bool) # should analysis be done immediately?
+config['analysis.ignored_tests'] = ('', str) # list of analysis test name to NOT perform
+
 # brute settings
 config['brute.placeholder'] = ('###', str) # placeholder start and end, e.g. ###0###
-config['brute.valueseparator'] =   (':', str)   # separator between values
-config['brute.setseparator'] =   ('\n', str)   # separator between value sets
+config['brute.value_separator'] =   (':', str)   # separator between values
+config['brute.set_separator'] =   ('\n', str)   # separator between value sets
 
 # debug settings
 config['debug.analysis'] =   (False, bool)   # stuff relevant to analysis
@@ -31,15 +33,15 @@ config['debug.tampering'] =  (False, bool)   # stuff relevant to tampering
 config['edit.command'] = ('vim %s', str)
 
 # how things will be presented to user
-config['interaction.showupstream'] = (True, bool) # what version of RR should be presented?
+config['interaction.show_upstream'] = (True, bool) # what version of RR should be presented?
 
 # overview settings
 config['overview.realtime'] =     (True, bool)  # show request/response communication on the fly
-config['overview.shortrequest'] = (False, bool) # reduce size of too long URLs
-config['overview.showevent'] =    (False, bool) # show event ID in overview
-config['overview.showsize'] =     (True, bool)  # show response size in overview
-config['overview.showtime'] =     (False, bool) # show forwarded time in overview # TODO also relative?
-config['overview.showuri'] =      (True, bool)  # show uri in overview
+config['overview.short_request'] = (False, bool) # reduce size of too long URLs
+config['overview.show_event'] =    (False, bool) # show event ID in overview
+config['overview.show_size'] =     (True, bool)  # show response size in overview
+config['overview.show_time'] =     (False, bool) # show forwarded time in overview # TODO also relative?
+config['overview.show_uri'] =      (True, bool)  # show uri in overview
 
 # proxy-relevant settings
 config['proxy.host'] =     ('localhost', str)

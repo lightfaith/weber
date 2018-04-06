@@ -18,14 +18,14 @@ basic_http = {
     # ----------------
     # Inter-RR tests
     #     ('apropos', 
-    #      ('Category', 'Message') in case all conditions match
+    #      ('Category', 'Message', certainity) in case all conditions match
     #      [list of supported protocols (SSL variants excluded)], 
     #      [list of ('comment', 'condition'))
     #                                ` lambda req,res,uri: True or False # whether the problem is found
     #     )
     'rr_tests': [
-        (   'Missing Content-Type', 
-            ('WARNING', 'Content-Type is not defined.'),
+        (   'NO_CONTENT-TYPE', 
+            ('WARNING', 'Content-Type is not defined.', True),
             ['http'], 
             [
                 ('response exists', lambda _,res,__: res),
@@ -33,8 +33,8 @@ basic_http = {
                 ('data or 2xx', lambda _,res,__: (len(res.data.strip())>0 or res.statuscode <300)),
             ]
         ),
-        (   'PHP returned', 
-            ('SECURITY', 'PHP code returned from server.'),
+        (   'PHP_CODE', 
+            ('SECURITY', 'PHP code returned from server.', False),
             ['http'], 
             [
                 ('response exists', lambda _,res,__: res), 
@@ -43,8 +43,8 @@ basic_http = {
                 ('php tag inside', lambda _,res,__: any(tag in res.data for tag in (b'<?php', b'<? ', b'<?\t', b'<?\n', b'<?\r'))),
             ]
         ),
-        (   'Cookie without \'HttpOnly\' attribute',
-            ('SECURITY', 'Cookie does not have \'HttpOnly\' attribute.'),
+        (   'COOKIE_NO_HTTPONLY',
+            ('SECURITY', 'Cookie does not have \'HttpOnly\' attribute.', True),
             ['http'], 
             [
                 ('response exists', lambda _,res,__: res),
@@ -52,49 +52,46 @@ basic_http = {
                 ('no httponly in set-cookie', lambda _,res,__: b'httponly' not in [attr.strip().lower() for attr in res.headers[b'Set-Cookie'].split(b';')]),
             ]
         ),
-        (   'Cookie without \'secure\' attribute', 
-            ('SECURITY', 'Cookie set over SSL but without \'secure\' attribute.'),
+        (   'COOKIE_NO_SECURE', 
+            ('SECURITY', 'Cookie set over SSL but without \'secure\' attribute.', True),
             ['http'], 
             [
                 ('response exists', lambda _,res,__: res),
                 ('set-cookie header', lambda _,res,__: b'Set-Cookie' in res.headers.keys()),
-                ('over SSL', lambda _,res,uri: uri.scheme in ('https')),
+                ('over SSL', lambda _,__,uri: uri.scheme in ('https',)),
                 ('no secure in set-cookie', lambda _,res,__: b'secure' not in [attr.strip().lower() for attr in res.headers.get(b'Set-Cookie').split(b';')]),
+            ]
+        ),
+        (   'HSTS_OVER_HTTP', 
+            ('SECURITY', 'HSTS header is sent over HTTP.', True),
+            ['http'], 
+            [
+                ('response exists', lambda _,res,__: res),
+                ('hsts header', lambda _,res,__: b'Strict-Transport-Security' in res.headers.keys()),
+                ('over HTTP', lambda _,__,uri: uri.scheme in ('http',)),
+            ]
+        ),
+        (   'NO_HSTS', 
+            ('SECURITY', 'HSTS header is not used.', True),
+            ['http'], 
+            [
+                ('response exists', lambda _,res,__: res),
+                ('over SSL', lambda _,__,uri: uri.scheme in ('https',)),
+                ('no hsts header', lambda _,res,__: b'Strict-Transport-Security' not in res.headers.keys()),
+            ]
+        ),
+        (   'X-POWERED-BY_HEADER', 
+            ('INFOLEAK', 'X-Powered-By header is included.', False),
+            ['http'], 
+            [
+                ('response exists', lambda _,res,__: res),
+                ('x-powered-by header', lambda _,res,__: b'X-Powered-By' in res.headers.keys()),
             ]
         ),
     ],
     # ----------------
     # 
 }
-""" # lambda as third argument
-    'rr_tests': [
-        ('Missing Content-Type', ['http'], lambda _,res,__:(('WARNING', 'Content-Type is not defined.') if all(is_true(comment, expression) for comment,expression in [
-            ('response exists', res),
-            ('content-type missing', not res.headers.get(b'Content-Type')),
-            ('data or 2xx', (len(res.data.strip())>0 or res.statuscode <300)),
-            ]) else None)),
-
-        ('PHP returned', ['http'], lambda _,res,__:(('SECURITY', 'PHP code returned from server.') if all(is_true(comment, expression) for comment,expression in [
-            ('response exists', res), 
-            ('textual content-type', is_content_type_text(res.headers.get(b'Content-Type'))),
-            ('data', res.data),
-            ('php tag inside', any(tag in res.data for tag in (b'<?php', b'<? ', b'<?\t', b'<?\n', b'<?\r'))),
-            ]) else None)),
-
-        ('Cookie without \'HttpOnly\' attribute', ['http'], lambda _,res,__:(('SECURITY', 'Cookie does not have \'HttpOnly\' attribute.') if all(is_true(comment, expression) for comment,expression in [
-            ('response exists', res),
-            ('set-cookie header', res.headers.get(b'Set-Cookie')),
-           #('no httponly in set-cookie', 'httponly' not in [attr.strip().lower() for attr in res.headers[b'Set-Cookie'].split(b';')]),
-            ]) else None)),
-
-        ('Cookie without \'secure\' attribute', ['http'], lambda _,res,uri:(('SECURITY', 'Cookie set over SSL but without \'secure\' attribute.') if all(is_true(comment, expression) for comment,expression in [
-            ('response exists', res),
-            ('set-cookie header', b'Set-Cookie' in res.headers.keys()),
-            ('over SSL', uri.scheme in ('https')),
-            ('no secure in set-cookie', b'secure' not in [attr.strip().lower() for attr in res.headers.get(b'Set-Cookie').split(b';')]),
-            ]) else None)),
-    ],
-    """
 
 weber.analysis['basic_http'] = basic_http
 # ========================================

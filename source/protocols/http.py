@@ -73,7 +73,7 @@ class HTTP():
 
             # shorten path if desired
             path = req.path.decode()
-            if weber.config['overview.shortrequest'][0] and len(path)>50:
+            if weber.config['overview.short_request'][0] and len(path)>50:
                 path = '...'+path[-47:]
 
             # return pretty string
@@ -109,12 +109,6 @@ class HTTP():
         except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
     
-
-    # analysis stuff
-    intra_tests = [
-        ('Missing Content-Type', lambda req,res:(('WARNING', 'Content-Type is not defined.') if res and not res.headers.get(b'Content-Type') else None)),
-        ('PHP returned', lambda req,res:(('SECURITY', 'PHP code returned from server.') if res and is_content_type_text(res.headers.get(b'Content-Type')) and res.find_tags(startends=[(b'<?', b'?>')], valueonly=False) else None)),
-    ]
 
 
 weber.protocols['http'] = HTTP
