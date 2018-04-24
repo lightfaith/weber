@@ -11,7 +11,7 @@ from select import select
 from source import weber
 from source import log
 from source.proxy import ProxyLib, ConnectionThread
-from source.structures import URI
+from source.structures import URI, Server
 from source.lib import *
 from source.fd_debug import *
 
@@ -243,6 +243,28 @@ class HTTPConnectionThread(ConnectionThread):
                 weber.forward_fail_uris.append(str(self.localuri))
                 break
             log.debug_flow('Response received from server.')
+            
+            # add RR to Server instance
+            remoteuri_nopath = self.remoteuri.clone()
+            remoteuri_nopath.path = '/'
+            matching_servers = [s for s in weber.servers if s.uri.get_value() == remoteuri_nopath.get_value()]
+            if not matching_servers:
+                log.debug_flow('Creating new Server instance: \'%s\'' % (remoteuri_nopath))
+                matching_servers.append(Server(remoteuri_nopath))
+                server = matching_servers[0]
+                weber.servers.append(server)
+                server.add_rr(weber.rrdb.rrs[self.rrid])
+            elif len(matching_servers) == 1:
+                log.debug_flow('Adding RR to already existing Server instance.')
+                server = matching_servers[0]
+                server.add_rr(weber.rrdb.rrs[self.rrid])
+            else:
+                log.err('Found multiple Server instance candidates.')
+                for server in weber.servers:
+                    log.err('  '+server.uri+'\n  '+str(server.rrs))
+            
+            # TODO parse cookies for Server
+
             ###############################################################################
 
             log.debug_parsing('\n'+str(response)+'\n'+'='*30)
@@ -293,7 +315,7 @@ class HTTPConnectionThread(ConnectionThread):
                 log.debug_flow('Changing response data links.')
                 # change incoming links, useless if from template
                 for starttag, endtag, attr in HTTP.link_tags:
-                    response.replace_links(starttag, endtag, attr)
+                    response.replace_links(starttag, endtag, attr, prepend=self.localuri.path.encode())
 
                 log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
 
@@ -656,7 +678,7 @@ class HTTPResponse():
             result += linkmatches
         return result
 
-    def replace_links(self, tagstart, tagend, attr):
+    def replace_links(self, tagstart, tagend, attr, prepend=b''):
         # this method searches desired tag attributes using find_html_attr() and replaces its content
         # result is directly written into self.data
         oldparts = [] # unchanged HTML chunks
@@ -672,7 +694,7 @@ class HTTPResponse():
         oldparts.append(self.data[loffset:])
 
         # get new values if desired
-        newparts = [b'%s="%s"' % (attr, (x[1] if not x[1].partition(b'://')[0] in (b'http', b'https') else weber.mapping.get_local(x[1]))) for x in linkmatches]
+        newparts = [b'%s="%s"' % (attr, (prepend+x[1] if not x[1].partition(b'://')[0] in (b'http', b'https') else weber.mapping.get_local(x[1]))) for x in linkmatches]
         # join oldparts and newparts
         result = filter(None, [x for x in itertools.chain.from_iterable(itertools.zip_longest(oldparts, newparts))])
         self.data = b''.join(result)

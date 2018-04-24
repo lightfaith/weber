@@ -166,7 +166,6 @@ class RRDB():
             result.append(format_line % tuple(arguments))
         return result
 
-
             
 
 weber.rrdb = RRDB()
@@ -263,6 +262,9 @@ class RR():
                         log.debug_analysis('!!! "%s" test failed for RR #%d (%s): %s' % (testname, self.rrid, source, str(e)))
                         traceback.print_exc()
     
+    def __repr__(self):
+        return 'RR(%d)' % self.rrid
+
 
 """
 Local-Remote URI mapping
@@ -521,3 +523,19 @@ class Event():
         self.rrids = set()
         self.type = ''
 
+
+class Server():
+    """
+    The Server class represents remote endpoint. It holds the URI, list of relevant RRs, cookies etc.
+    Only RRs really sent to/from the server are here.
+    """
+    def __init__(self, uri):
+        self.uri = uri
+        self.rrs = {}
+        self.structures = {}
+
+
+    def add_rr(self, rr):
+        self.rrs[rr.rrid] = rr
+
+    

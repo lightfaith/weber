@@ -188,11 +188,20 @@ add_command(Command('', '', help_description, lambda: []))
 TEST COMMANDS
 """
 def test_function(*_):
+    result = []
+    for server in weber.servers:
+        result.append(str(server.uri))
+        result.append(str(server.rrs))
+        result.append('')
+    return result
+add_command(Command('test', 'prints test message', '', test_function))
+
+def prompt_function(*_): # TODO for testing only!
     while True:
         print('> ', end='')
         exec(input())
     return []
-add_command(Command('test', 'prints test message', '', test_function))
+add_command(Command('prompt', 'gives python3 shell', '', prompt_function))
 
 
 """
