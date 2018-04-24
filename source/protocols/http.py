@@ -315,7 +315,7 @@ class HTTPConnectionThread(ConnectionThread):
                 log.debug_flow('Changing response data links.')
                 # change incoming links, useless if from template
                 for starttag, endtag, attr in HTTP.link_tags:
-                    response.replace_links(starttag, endtag, attr, prepend=self.localuri.path.encode())
+                        response.replace_links(starttag, endtag, attr, prepend=self.localuri.get_mapping_path().encode())
 
                 log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
 
@@ -694,6 +694,7 @@ class HTTPResponse():
         oldparts.append(self.data[loffset:])
 
         # get new values if desired
+        #connect_paths = lambda x,y: x+(b'/' if not x.endswith(b'/') and not y.startswith(b'/') else b'')+(y[1:] if x.endswith(b'/') and y.startswith(b'/') else y)
         newparts = [b'%s="%s"' % (attr, (prepend+x[1] if not x[1].partition(b'://')[0] in (b'http', b'https') else weber.mapping.get_local(x[1]))) for x in linkmatches]
         # join oldparts and newparts
         result = filter(None, [x for x in itertools.chain.from_iterable(itertools.zip_longest(oldparts, newparts))])

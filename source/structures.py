@@ -128,7 +128,10 @@ class RRDB():
             row.append(('\033[07m%-4d\033[27m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
             #row.append(('\033[07m%-4d\033[00m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
             if show_uri:
-                row.append((rr.uri_upstream if weber.config['interaction.show_upstream'][0] else rr.uri_downstream).get_value(path=False)) 
+                try:
+                    row.append((rr.uri_upstream if weber.config['interaction.show_upstream'][0] else rr.uri_downstream).get_value(path=False)) 
+                except:
+                    continue
             row.append(rr.request_string(colored=True))
             row.append(rr.response_string(colored=True))
             if show_size:
@@ -411,7 +414,13 @@ class URI():
             return '%s://%s:%s@%s:%d%s' % (self.scheme, self.user, self.password, self.domain, self.port, (self.path if path else ''))
         else:
             return '%s://%s:%d%s' % (self.scheme, self.domain, self.port, (self.path if path else ''))
-        
+    
+    def get_mapping_path(self):
+        if self.path.startswith('/WEBER-MAPPING/'):
+            return '/'.join(self.path.split('/')[:3])
+        else:
+            return ''
+
     def __str__(self):
         return 'URI(%s)' % (self.get_value()) 
 	
