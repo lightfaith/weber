@@ -268,10 +268,10 @@ def bl_function(*args):
     try:
         path = args[0]
         with open(path, 'rb') as f:
-            weber.brute = (path, [line.split(weber.config['brute.valueseparator'][0].encode()) for line in f.read().split(weber.config['brute.setseparator'][0].encode())])
+            weber.brute = (path, [line.split(weber.config['brute.value_separator'][0].encode()) for line in f.read().split(weber.config['brute.set_separator'][0].encode())])
         return []
     except Exception as e:
-        log.err('Cannot open file.')
+        log.err('Cannot open file (%s).' % (str(e)))
         return []
 add_command(Command('bl <path>', 'load file for brute', bl_description, bl_function))
 
@@ -812,7 +812,7 @@ You can see various columns:
     Response - Response essential data (status code and status for HTTP)
              - always shown
     Size     - size of response data
-             - shown if overview.show_event is set to True or 'e' is used as argument
+             - shown if overview.show_size is set to True or 's' is used as argument
 
 Entries are shown in real-time if overview.realtime is set to True.
 Request and responses with [T] prepended are tampered and must be forwarded manually. See `t` for more information.
