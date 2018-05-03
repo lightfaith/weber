@@ -80,6 +80,11 @@ class RRDB():
 
     
     def overview(self, args, header=True, show_event=False, show_size=False, show_time=False, show_uri=False, show_last=False, only_tampered=False, only_with_analysis=False):
+        show_event = show_event or weber.config['overview.show_event'][0]
+        show_time = show_time or weber.config['overview.show_time'][0]
+        show_uri = show_uri or weber.config['overview.show_uri'][0]
+        show_size = show_size or weber.config['overview.show_size'][0]
+
         result = []
         arg = None if len(args)<1 else args[0]
         #eidlen = max([3]+[len(str(e)) for e,_ in weber.events.items()])
@@ -124,7 +129,7 @@ class RRDB():
                 time_forwarded = rr.request_upstream.time_forwarded
                 row.append(time_forwarded.strftime('%H:%M:%S.%f')[:-3] if time_forwarded else '')
             if show_event:
-                row.append(rr.eid or '')
+                row.append(('%d' % rr.eid) if rr.eid else '')
             row.append(('\033[07m%-4d\033[27m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
             #row.append(('\033[07m%-4d\033[00m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
             if show_uri:
@@ -146,7 +151,12 @@ class RRDB():
         lengths = []
 
         for i in range(len(table[0])):
-            lengths.append(max([0] + [len(row[i]) for row in table]))
+            try:
+                lengths.append(max([0] + [len(row[i]) for row in table]))
+            except Exception as e: # TODO issue if `pr` with EID set
+                print(str(e))
+                print(table)
+                print()
             
         # add border
         if header:

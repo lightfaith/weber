@@ -824,19 +824,15 @@ You can use `prot` to see only entries with active tampering.
 """
 def overview_handler(args, source, show_last=False, only_tampered=False, only_with_analysis=False):
     #args = list(filter(None, args))
-    show_event = weber.config['overview.show_event'][0]
-    show_size = weber.config['overview.show_size'][0]
-    show_time = weber.config['overview.show_time'][0]
-    show_uri = weber.config['overview.show_uri'][0]
-    if args and re.match('^[estu]+$', args[0]): # some modifiers
-        if 'e' in args[0]:
-            show_event = True
-        if 's' in args[0]:
-            show_size = True
-        if 't' in args[0]:
-            show_time = True
-        if 'u' in args[0]:
-            show_uri = True
+    show_event = False
+    show_size = False
+    show_time = False
+    show_uri = False
+    if args and re.match('^[estu]+$', args[0]): # some modifiers (defaults are considered in overview() function)
+        show_event = 'e' in args[0]
+        show_size = 's' in args[0]
+        show_time = 't' in args[0]
+        show_uri = 'u' in args[0]
         args = args[1:]
     return source.overview(args, show_event=show_event, show_size=show_size, show_time=show_time, show_uri=show_uri, show_last=show_last, only_tampered=only_tampered, only_with_analysis=only_with_analysis)
 
