@@ -146,6 +146,7 @@ class HTTPConnectionThread(ConnectionThread):
                 request = self.receive_request(self.request_modifier)
             else:
                 request = self.template_rr.request_upstream.clone(self.tamper_request, self.request_modifier)
+                request.compute_content_length()
             
             if request is None: # socket closed? socket problem?
                 log.debug_parsing('Request is broken, ignoring...') # TODO comment, 
@@ -233,7 +234,11 @@ class HTTPConnectionThread(ConnectionThread):
             if self.stopper[0] in r:
                 # Weber is terminating
                 break
-            
+
+            # compute content-length - for POST only?
+            log.debug_flow('Attempting to re-compute Content-Length.')
+            request.compute_content_length()
+
             # forward request to server
             log.debug_flow('Forwarding request to server.')
             log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
@@ -471,6 +476,11 @@ class HTTPRequest():
                 self.parameters[k] = v
         # TRACE works natively
         # TODO more methods
+    
+    def compute_content_length(self):
+        if weber.config['http.recompute_request_length'][0] and self.data:
+            log.debug_parsing('Computing Content-Length...')
+            self.headers[b'Content-Length'] = b'%d' % (len(self.data))
 
 
 
@@ -620,10 +630,11 @@ class HTTPResponse():
         if self.forward_stopper:
             os.write(self.forward_stopper[1], b'1')
  
-    def compute_content_length(self):
+    def compute_content_length(self): # TODO also optional?
         #if b'Content-Length' not in self.headers.keys() and len(self.data)>0:
-        log.debug_parsing('Computing Content-Length...')
-        self.headers[b'Content-Length'] = b'%d' % (len(self.data))
+        if self.data: # TODO added; test it
+            log.debug_parsing('Computing Content-Length...')
+            self.headers[b'Content-Length'] = b'%d' % (len(self.data))
 
     def lines(self, headers=True, data=True, as_string=True):
         parts = []

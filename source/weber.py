@@ -32,6 +32,9 @@ config['debug.tampering'] =  (False, bool)   # stuff relevant to tampering
 # edit settings
 config['edit.command'] = ('vim %s', str)
 
+# http settings
+config['http.recompute_request_length'] = (True, bool) # whether request Content-Length should be recomputed before sending to server
+
 # how things will be presented to user
 config['interaction.show_upstream'] = (True, bool) # what version of RR should be presented?
 
@@ -53,11 +56,11 @@ config['proxy.threaded'] = (True, bool)
 config['proxy.default_protocol'] = ('http', str) 
 
 # spoof
-config['spoof.arguments'] = (False, bool) # should arguments be taken into consideration for spoofing
+config['spoof.arguments'] = (False, bool) # should arguments be taken into consideration for spoofing?
 
 # tamper
-config['tamper.requests'] =     (False, bool) # should all requests be tampered by default?
-config['tamper.responses'] =    (False, bool) # should all responses be tampered by default?
+config['tamper.requests'] =  (False, bool) # should all requests be tampered by default?
+config['tamper.responses'] = (False, bool) # should all responses be tampered by default?
 
 
 """
