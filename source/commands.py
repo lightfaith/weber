@@ -76,11 +76,12 @@ def run_command(fullcommand):
                 command_colored = '%s%s %s%s%s' % (cmd, more, log.COLOR_BROWN, args, log.COLOR_NONE)
                 apropos_colored = '%s%s%s' % (log.COLOR_DARK_GREEN, v.apropos, log.COLOR_NONE)
                 lines.append('    %-*s %s' % (length, command_colored, apropos_colored))
-        # show description
-        for k, v in weber.commands.items():
-            if k == command[:-1]:
-                lines.append('')
-                lines += ['    '+log.COLOR_DARK_GREEN+line+log.COLOR_NONE for line in v.description.splitlines()]
+        # show description if '??'
+        if command.endswith('??'):
+            for k, v in weber.commands.items():
+                if k == command[:-2]:
+                    lines.append('')
+                    lines += ['    '+log.COLOR_DARK_GREEN+line+log.COLOR_NONE for line in v.description.splitlines()]
     else:
         try:
             command, *args = command.split(' ')
