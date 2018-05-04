@@ -34,6 +34,9 @@ config['edit.command'] = ('vim %s', str)
 
 # http settings
 config['http.recompute_request_length'] = (True, bool) # whether request Content-Length should be recomputed before sending to server
+config['http.show_password'] = (False, bool) # should password fields be visible? # TODO implement
+config['http.show_hidden'] = (False, bool) # should hidden fields be visible? # TODO implement
+config['http.no_cache'] = (False, bool) # should caching be forcefully disabled?
 
 # how things will be presented to user
 config['interaction.show_upstream'] = (True, bool) # what version of RR should be presented?

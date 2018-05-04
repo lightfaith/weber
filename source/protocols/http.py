@@ -224,7 +224,14 @@ class HTTPConnectionThread(ConnectionThread):
                     brute_bytes = brute_bytes.replace(b'%s%d%s' % (placeholder, i, placeholder), self.brute_set[i])
                 request.parse(brute_bytes)
             """
-
+            # remove undesired headers
+            log.debug_flow('Attempting to remove cache headers.')
+            if weber.config['http.no_cache'][0]:
+                for undesired in (b'If-Modified-Since', b'If-None-Match'):
+                    try:
+                        del request.headers[undesired]
+                    except:
+                        pass
 
             # tamper request
             log.debug_flow('Attempting to tamper the request.')
@@ -277,6 +284,17 @@ class HTTPConnectionThread(ConnectionThread):
             # move response into RRDB
             response.sanitize()
             weber.rrdb.add_response(self.rrid, response, None, allow_analysis=False)
+            
+            # remove undesired headers
+            log.debug_flow('Attempting to remove cache headers.')
+            if weber.config['http.no_cache'][0]:
+                for undesired in (b'Expires',):
+                    try:
+                        del response.headers[undesired]
+                    except:
+                        pass
+                response.headers[b'Cache-Control'] = b'no-cache, no-store, must-revalidate'
+                response.headers[b'Pragma'] = b'no-cache'
 
             
             # tamper response
