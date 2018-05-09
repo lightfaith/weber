@@ -150,10 +150,24 @@ def run_command(fullcommand):
                     print(sublines)
                     if [x for x in sublines if not str(x).startswith('{grepignore}') and x.strip()]:
                         tmp_lines.append(sublines)
-        elif phase[modifier]: # TODO
+        elif phase[modifier]: # TODO line intervals
             # modifying
             print('MODIFYING WITH', part)
             phase[modifier] = False
+            # less? 
+            if part.endswith('L'):
+                less_lines = []
+                for line in lines:
+                    if type(line) == str:
+                        less_lines.append(nocolor(line.lstrip('{grepignore}')))
+                    elif type(line) == list:
+                        for subline in line:
+                            less_lines.append(nocolor(subline.lstrip('{grepignore}')))
+                with tempfile.NamedTemporaryFile() as f:
+                    f.write('\n'.join(less_lines).encode())
+                    f.flush()
+                    subprocess.call(['less', f.name])
+                return
 
         # use parsed lines for more parsing
         lines = tmp_lines
