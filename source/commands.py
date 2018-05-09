@@ -49,10 +49,8 @@ Function to run commands, apply filters etc.
 def run_command(fullcommand):
     modifier = weber.config['interaction.command_modifier'][0]
     log.debug_command('  Fullcmd: \'%s\'' % (fullcommand))
-    parts = re.split('(~~|~|\%s)' % (modifier), fullcommand)
+    parts = list(filter(None, re.split('(~~|~|\%s)' % (modifier), fullcommand)))
     command = parts[0]
-    print(parts)
-    log.debug_command('  Command: \'%s\'' % (command))
     phase = {'~': False, '~~': False, modifier: False}
     
     # help or command?
@@ -110,21 +108,21 @@ def run_command(fullcommand):
         if part in phase.keys():
             # another phase active? bad command...
             if any(phase.values()):
-                print('MORE PHASES ACTIVE!!')
+                log.err('Invalid command.')
                 return
             # no phase? set it
             phase[part] = True
             continue
         # no phase and no special character? bad command...
         elif not any(phase.values()):
-            print('NO PHASE AND NO SPECIAL CHARACTER!')
+            log.err('Invalid command (bad regex)!')
             return
         
 
         # deal with phases
         elif phase['~']:
             # normal grep
-            print('GREPPING WITH', part)
+            log.debug_command('  grep \'%s\'' % part)
             phase['~'] = False
             for line in lines:
                 if type(line) == str:
@@ -138,7 +136,7 @@ def run_command(fullcommand):
                         tmp_lines.append(sublines)
         elif phase['~~']:
             # regex grep
-            print('REGEX GREPPING WITH', part)
+            log.debug_command('  regex_grep \'%s\'' % part)
             phase['~~'] = False
             for line in lines:
                 if type(line) == str:
@@ -150,9 +148,9 @@ def run_command(fullcommand):
                     print(sublines)
                     if [x for x in sublines if not str(x).startswith('{grepignore}') and x.strip()]:
                         tmp_lines.append(sublines)
-        elif phase[modifier]: # TODO line intervals
+        elif phase[modifier]: # TODO line intervals and more features
             # modifying
-            print('MODIFYING WITH', part)
+            log.debug_command('  modification \'%s\'' % part)
             phase[modifier] = False
             # less? 
             if part.endswith('L'):
@@ -174,7 +172,7 @@ def run_command(fullcommand):
 
     # any phase remained? that's wrong
     if any(phase.values()):
-        print('ENDING WITH PHASE CHANGER!')
+        log.err('Invalid command.')
         return
     
     for line in lines:
@@ -185,89 +183,6 @@ def run_command(fullcommand):
                 log.tprint(subline.lstrip('{grepignore}'))
 
 
-
-
-
-def old_run_command(fullcommand):
-    log.debug_command('  Fullcmd: \'%s\'' % (fullcommand))
-
-    # grep: pra~Cookie          # grep for match
-    #       pra~~(Cookie|Date)  # grep for regex
-    command, _, grep = fullcommand.partition('~')
-    grep_regex = False
-    if grep.startswith('~'):
-        grep = grep[1:]
-        grep_regex = True
-
-    # only help?
-    if command.endswith('?'):
-        lines = []
-        for k, v in sorted(weber.commands.items(), key=lambda x:x[0]):
-            length = 40
-            if k == '': # empty command - just print long description
-                continue
-            
-            if k.startswith(command[:-1]) and len(k)-len(command[:-1])<=1:
-                # do colors
-                cmd, _, args = v.command.partition(' ')
-                # question mark after command?
-                more = ''
-                if len([x for x in weber.commands.keys() if x.startswith(cmd)])>1:
-                    length += len(log.COLOR_BROWN)+len(log.COLOR_NONE)
-                    more = log.COLOR_BROWN+'[?]'+log.COLOR_NONE
-                command_colored = '%s%s %s%s%s' % (cmd, more, log.COLOR_BROWN, args, log.COLOR_NONE)
-                apropos_colored = '%s%s%s' % (log.COLOR_DARK_GREEN, v.apropos, log.COLOR_NONE)
-                lines.append('    %-*s %s' % (length, command_colored, apropos_colored))
-        # show description if '??'
-        if command.endswith('??'):
-            for k, v in weber.commands.items():
-                if k == command[:-2]:
-                    lines.append('')
-                    lines += ['    '+log.COLOR_DARK_GREEN+line+log.COLOR_NONE for line in v.description.splitlines()]
-    else:
-        try:
-            command, *args = command.split(' ')
-            log.debug_command('  Command: \'%s\'' % (command))
-            log.debug_command('  Args:    %s' % (str(args)))
-            log.debug_command('  Grep:    %s (type: %s)' % (grep, 'regex' if grep_regex else 'normal'))
-            # run command
-            lines = weber.commands[command].run(*args)
-
-        except Exception as e:
-            log.err('Cannot execute command \''+command+'\': '+str(e)+'.')
-            log.err('See traceback:')
-            traceback.print_exc()
-            return
-    # Lines can be:
-    #     a list of strings:
-    #         every line matching grep expression or starting with '{grepignore}' will be printed
-    #     a list of lists:
-    #         every line of inner list matching grep expression or starting with '{grepignore}' will be printed if there is at least one grep matching line WITHOUT '{grepignore}'
-    #         Reason: prsh~Set-Cookie will print all Set-Cookie lines along with RRIDs, RRIDs without match are ignored
-    nocolor = lambda line: re.sub('\033\\[[0-9]+m', '', str(line))
-    try:
-        grepped = []
-        for line in lines:
-            if type(line) == str:
-                # add lines if starts with {grepignore} or matches grep 
-                if str(line).startswith('{grepignore}'):
-                    grepped.append(line[12:])
-                elif not grep_regex and grep in nocolor(line):
-                    grepped.append(line)
-                elif grep_regex and re.search(grep, nocolor(line.strip())):
-                    grepped.append(line)
-            elif type(line) == list:
-                # pick groups if at least one line starts with {grepignore} or matches grep
-                sublines = [l for l in line if str(l).startswith('{grepignore}') or (not grep_regex and grep in nocolor(l)) or (grep_regex and re.search(grep, nocolor(l.strip())))]
-                if len([x for x in sublines if not str(x).startswith('{grepignore}') and len(x.strip())>0])>0:
-                    grepped += [x[12:] if x.startswith('{grepignore}') else x for x in sublines]
-                
-    except Exception as e:
-        log.err('Cannot convert result into string:')
-        log.err('See traceback:')
-        traceback.print_exc()
-        return
-    log.tprint('\n'.join(grepped))
 
 
 """
@@ -453,6 +368,13 @@ def bra_function(_, rr, *__, **___):
     return []
 add_command(Command('bra [<rrid>[:<rrid>]]', 'brute from template rrids for all sets', bra_description, lambda *args: foreach_rrs(bra_function, *args, fromtemplate=True)))
 # TODO brd - brute rrid until difference
+
+brf_description = """ Note: No dictionary is needed.
+"""
+def brf_function(_, rr, *__, **___):
+    weber.proxy.add_connectionthread_from_template(rr, lambda data: data)
+    return []
+add_command(Command('brf [<rrid>[:<rrid>]]', 'forward template rrid without modification', brf_description, lambda *args: foreach_rrs(brf_function, *args, fromtemplate=True)))
 
 """
 COMPARE COMMANDS
