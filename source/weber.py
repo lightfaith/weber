@@ -38,8 +38,9 @@ config['http.show_password'] = (False, bool) # should password fields be visible
 config['http.show_hidden'] = (False, bool) # should hidden fields be visible? # TODO implement
 config['http.no_cache'] = (False, bool) # should caching be forcefully disabled?
 
-# how things will be presented to user
+# how Weber will interact with user
 config['interaction.show_upstream'] = (True, bool) # what version of RR should be presented?
+config['interaction.command_modifier'] = ('$', str) # which character would start special sequences (line intervals, less)
 
 # overview settings
 config['overview.realtime'] =     (True, bool)  # show request/response communication on the fly
