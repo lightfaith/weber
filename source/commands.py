@@ -916,7 +916,7 @@ add_command(Command('ptrol [estu] [<rrid>[:<rrid>]]', 'print last template reque
 add_command(Command('prot [estu] [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, only_tampered=True)))
 
 # proa
-add_command(Command('proa [estu] [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, only_with_analysis=True)))
+add_command(Command('proa [estu] [<rrid>[:<rrid>]]', 'print request-response pairs with analysis notes', pr_description, lambda *args: overview_handler(args, source=weber.rrdb, only_with_analysis=True)))
 
 
 # prX
