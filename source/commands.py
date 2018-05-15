@@ -131,7 +131,6 @@ def run_command(fullcommand):
                 elif type(line) == list:
                     # pick groups if at least one line starts with {grepignore} or matches grep
                     sublines = [l for l in line if str(l).startswith('{grepignore}') or part in nocolor(l)]
-                    print(sublines)
                     if [x for x in sublines if not str(x).startswith('{grepignore}') and x.strip()]:
                         tmp_lines.append(sublines)
         elif phase['~~']:
@@ -145,7 +144,6 @@ def run_command(fullcommand):
                 elif type(line) == list:
                     # pick groups if at least one line starts with {grepignore} or matches grep
                     sublines = [l for l in line if str(l).startswith('{grepignore}') or re.search(part, nocolor(l.strip()))]
-                    print(sublines)
                     if [x for x in sublines if not str(x).startswith('{grepignore}') and x.strip()]:
                         tmp_lines.append(sublines)
         elif phase[modifier]: # TODO line intervals and more features
@@ -157,10 +155,10 @@ def run_command(fullcommand):
                 less_lines = []
                 for line in lines:
                     if type(line) == str:
-                        less_lines.append(nocolor(line.lstrip('{grepignore}')))
+                        less_lines.append(nocolor(re.sub('^\\{grepignore\\}', '', line)))
                     elif type(line) == list:
                         for subline in line:
-                            less_lines.append(nocolor(subline.lstrip('{grepignore}')))
+                            less_lines.append(nocolor(re.sub('^\\{grepignore\\}', '', subline)))
                 with tempfile.NamedTemporaryFile() as f:
                     f.write('\n'.join(less_lines).encode())
                     f.flush()
@@ -177,10 +175,10 @@ def run_command(fullcommand):
     
     for line in lines:
         if type(line) == str:
-            log.tprint(line.lstrip('{grepignore}'))
+            log.tprint(re.sub('^\\{grepignore\\}', '', subline))
         elif type(line) == list:
             for subline in line:
-                log.tprint(subline.lstrip('{grepignore}'))
+                log.tprint(re.sub('^\\{grepignore\\}', '', subline))
 
 
 
@@ -208,14 +206,16 @@ def foreach_rrs(function, *args, fromtemplate=False, **kwargs):
         log.err('See traceback:')
         traceback.print_exc()
         desired_rrs = []
+
     for rrid, rr in desired_rrs:
         tmpresult = []
         tmpresult.append('{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
         kwargs['rr_count'] = len(desired_rrs)
+
         tmpresult += function(rrid, rr, *args[:arg_interval], **kwargs)
         #tmpresult += function(rrid, rr, *args[1:], **kwargs)
         tmpresult.append('')
-        if len(tmpresult)>1:
+        if len(list(filter(None, tmpresult)))>1:
             result.append(tmpresult)
         #print(result)
     return result
@@ -794,9 +794,9 @@ def pcs_function(_, rr, *__, **___):
     try:
         r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
         cookies = r.headers[b'Set-Cookie'].split(b';')
-        attrs = dict([(tuple(c.split(b'=')+[b''])[:2]) for c in cookies])
-        maxlen = max([0]+[len(k.decode().strip()) for k in attrs.keys()])
-        return ['%*s%s' % (maxlen, k.decode().strip(), (': '+v.decode() if len(v)>0 else '')) for k,v in attrs.items()]
+        attrs = dict([(tuple(c.strip().split(b'=')+[b''])[:2]) for c in cookies])
+        maxlen = max([0]+[len(k.decode()) for k in attrs.keys()])
+        return ['%*s%s' % (maxlen, k.decode(), (': '+v.decode() if len(v)>0 else '')) for k,v in attrs.items()]
     except:
         #traceback.print_exc()
         return []
