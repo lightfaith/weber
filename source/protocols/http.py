@@ -196,12 +196,18 @@ class HTTPConnectionThread(ConnectionThread):
             # change outgoing links (useless if from template)
             if self.template_rr is None:
                 log.debug_flow('Changing outgoing links.')
+                log.debug_flow('Getting remote URI from local.')
                 self.remoteuri = weber.mapping.get_remote(self.localuri)
                 if self.remoteuri is None:
                     log.err('Cannot forward - local URI is not mapped. Terminating thread...')
                     weber.forward_fail_uris.append(str(self.localuri))
                     break
-                upstream_referer = weber.mapping.get_remote(downstream_referer)
+                # TODO referer not mandatory
+                log.debug_flow('Getting Referer remote URI from local.')
+                try:
+                    upstream_referer = weber.mapping.get_remote(downstream_referer)
+                except:
+                    log.debug_flow('Referer not altered.')
 
                 request.path = self.remoteuri.path.encode()
                 request.parse_method()
