@@ -175,7 +175,9 @@ def run_command(fullcommand):
     
     for line in lines:
         if type(line) == str:
-            log.tprint(re.sub('^\\{grepignore\\}', '', subline))
+            log.tprint(re.sub('^\\{grepignore\\}', '', line))
+        elif type(line) == bytes:
+            log.tprint(re.sub('^\\{grepignore\\}', '', line.decode()))
         elif type(line) == list:
             for subline in line:
                 log.tprint(re.sub('^\\{grepignore\\}', '', subline))

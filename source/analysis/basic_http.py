@@ -88,6 +88,15 @@ basic_http = {
                 ('x-powered-by header', lambda _,res,__: b'X-Powered-By' in res.headers.keys()),
             ]
         ),
+        (   'AUTHORIZATION_OVER_HTTP', 
+            ('SECURITY', 'Authorization is desired over HTTP connection.', True),
+            ['http'], 
+            [
+                ('response exists', lambda _,res,__: res),
+                ('401 code', lambda _,res,__: res.statuscode == 401),
+                ('over HTTP', lambda _,__,uri: uri.scheme in ('http',)),
+            ]
+        ),
     ],
     # ----------------
     # 
