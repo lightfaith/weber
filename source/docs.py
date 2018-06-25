@@ -17,7 +17,24 @@ from source.fd_debug import *
 
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
 doc = {}
-doc['help'] = """First, generate some traffic through the Weber proxy. After that, use `pr` command to get an overview.
+doc['help'] = """Welcome! This is Weber Framework, an open-source protocol proxy. With Weber you can see the traffic you are creating, modify it and more!
+
+Currently, Weber will forward to {remote} anything sent to {local}:{port} (plaintext) or {local}:{sslport} (encrypted). Use your browser, client or CLI tool to generate some traffic. You should see some lines popping out in Weber. 
+That is realtime traffic overview and it indicates Weber is serving as a proxy. Use `pr` command to show the overview manually.
+
+You may be interested in the content of each request or response. This can be shown with `prq` and `prs` commands, respectively. Depending on the protocol being proxied, you can also print headers (`prh`) or data (`prd`). 
+
+There is a number of options Weber can be configured with. You can use 'weber.conf' file or `o` and `os` commands to view and alter them.
+
+Weber has many features. To list basic commands, their syntax and short description, use '?' symbol. For more specific commands, write part of the command and then append the '?' symbol. For example, writing `prq?` show commands relevant to Printing ReQuests. Not all of them are shown, though, some of them needs longer part of the command to be shown.
+
+To read more about commands, append two '??' symbols.
+
+Sometimes result can be huge. Use '~' symbol to show lines with matching keyword. For example, `prqh~Cookie` will show only request headers which have something to do with Cookie. If you need more complex patterns, use '~~' for regex matching. For example `prsh~~(200 OK|404 Not Found)`.
+
+Append `{modifier}L` to show the result in less. If you want to use different symbol than '{modifier}', consider changing the 'interaction.command_modifier' option.
+
+HAVE FUN.
 """
 
 # analysis
@@ -118,7 +135,7 @@ You can see various columns:
              - shown if overview.show_uri is set to True or 'u' is used as argument
     Request  - Request essential data (method and path for HTTP)
              - always shown
-             - path can be ellipsized if overview.shortrequest is set to True
+             - path can be ellipsized if overview.short_request is set to True
     Response - Response essential data (status code and status for HTTP)
              - always shown
     Size     - size of response data

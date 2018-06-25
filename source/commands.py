@@ -56,8 +56,12 @@ def run_command(fullcommand):
     phase = {'~': False, '~~': False, modifier: False}
     
     # test if it is documented
-    if not weber.commands[command.rstrip('?')].description.strip():
-        log.warn('The command has no documentation.')
+    try:
+        if not weber.commands[command.rstrip('?')].description.strip():
+            log.warn('The command has no documentation.')
+    except:
+        # command does not exist, but it will be dealt in a while
+        pass 
     # help or command?
     if command.endswith('?'):
         lines = []
@@ -246,6 +250,7 @@ def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
 
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
 add_command(Command('', '', 'help', lambda: []))
+add_command(Command('help', '', 'help', lambda *_: [line for line in doc['help'].format(remote=list(weber.mapping.l_r.items())[0][1].domain, local=weber.config['proxy.host'][0], port=weber.config['proxy.port'][0], sslport=weber.config['proxy.sslport'][0], modifier=weber.config['interaction.command_modifier'][0]).splitlines()]))
 
 """
 TEST COMMANDS
