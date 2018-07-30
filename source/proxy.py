@@ -150,7 +150,7 @@ class Proxy(threading.Thread):
 
                     log.debug_socket('Connection accepted from \'%s:%d\':' % client)
                     # what process is contacting us?
-                    netstat = subprocess.Popen('netstat -tpn'.split(), stdout=subprocess.PIPE)
+                    netstat = subprocess.Popen('netstat -tpn'.split(), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                     o, _ = netstat.communicate()
                     for line in [line for line in o.splitlines() if list(filter(None, line.decode().split(' ')))[3] == '%s:%d' % (client)]:
                         log.debug_socket(line.decode())
