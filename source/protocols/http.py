@@ -208,6 +208,7 @@ class HTTPConnectionThread(ConnectionThread):
                     upstream_referer = weber.mapping.get_remote(downstream_referer)
                 except:
                     log.debug_flow('Referer not altered.')
+                    upstream_referer = None
 
                 request.path = self.remoteuri.path.encode()
                 request.parse_method()
