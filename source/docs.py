@@ -42,20 +42,43 @@ doc['ap'] = """"""
 doc['ar'] = """"""
 
 # brute
-doc['b'] = """"""
-doc['bl'] = """"""
+doc['b'] = """Commands starting with 'b' are designed to send template RRs to the remote server. This allows:
+- manual resending,
+- bruteforcing.
 
-doc['bfi'] = """"""
-doc['br'] = """"""
-doc['bra'] = """"""
-doc['brf'] = """Note: No dictionary is needed.
+Use `b` or `pwb` command to show currently loaded dictionary. Dictionary is loaded with `bl` command.
+"""
+doc['bl'] = """The `bl` command imports specified file as bruteforce dictionary. The following format is expected:
+
+index{separator}htm{separator}...
+index{separator}php{separator}...
+...
+
+The set (line) may have arbitrary number of values in one set. Separator is specified in brute.value_separator. Alternatively, brute.set_separator option can specify different set separator than a newline character. Arbitrary number of sets can be specified.
+
+It is recommended to use `b` or `pwb` command after loading a dictionary to see whether the dictionary has been loaded properly.
+"""
+
+doc['bfi'] = """""" # TODO
+doc['br'] = """After a dictionary is loaded with `bl` command, you can use `bra` command to use it for brutefoce test. Placeholders {placeholder}n{placeholder} in chosen template RRs are replaced with set values on the fly and forwarded to the remote server. The 'n' specifies index of the value.
+
+Placeholder is specified in brute.placeholder option."""
+doc['brf'] = """Template requests can be forwarded once with `brf` commands. Unlike other `br` commands, no placeholders are modified, and therefore no dictionary loading is required.
 """
 
 # compare
-doc['c'] = """"""
-doc['cr'] = """"""
-doc['crX'] = """"""
-doc['cru'] = """"""
+doc['c'] = """Commands starting with 'c' serve for data comparison. Currently, requests or responses (or their parts) can be compared, see documentation for `cr` for more information."""
+doc['crX'] = """Commands starting with `cr` serve for request and response comparison. 
+
+The syntax is usually <command> <modifier> <rrid1> <rrid2>.
+The <modifier> is one of (1, 2, c, d, D) symbols. This determines the diff format:
+- 1 - show lines unique for first RR,
+- 2 - show lines unique for second RR,
+- c - show lines present in both RRs,
+- d - show lines that differ (+ and - signs are prepended to show what lines are added and removed, respectively),
+- D - show all lines, mark different lines with + and - signs (like c and d modifiers together).
+"""
+doc['cru'] = """The `cru` command shows lines that are changed by Weber when links are translated. This is for debug purposes."""
 
 # event
 doc['e'] = """Events are used to group relevant request-response pairs together. Use `e` to print them! 
@@ -76,16 +99,17 @@ doc['et'] = """Type can be assigned for events using `et` command. This can be u
 """ # TODO what is tested for special types?
 
 # modify
-doc['m'] = """
+doc['m'] = """Commands starting with 'm' serve for data modification. 
+
+Currently, requests and responses can be modified. Check documentation on `mr` command for detailed information.
 """
-doc['mt'] = """
-"""
-doc['mr'] = """Received requests and responses can be modified using your favourite text editor with `mrq` and `mrs`, respectively. Modifying multiple RRs is not supported (use spoofs instead). 
+doc['mr'] = """Received requests and responses can be modified using your favourite text editor with `mrq` and `mrs`, respectively. Template counterparts are modified with `mtrq` and `mtrs` commands, respectively. This is useful when data waiting to transmit must be modified or when preparing new requests for sending from Weber without endpoint client.
+
 Favourite editor command can be configured under edit.command option.
-"""
-doc['mrq'] = """
-"""
-doc['mrs'] = """
+
+Modifying multiple RRs at once is not supported (use spoofs instead). 
+
+WARNING: If appending a header to requests/responses with empty data part, make sure the new header is added BEFORE the \\x0d\\x0a separator! The best way to insert a new header is to go to the end of previous header, press Enter and specify new header. You can use hexdump to check your changes with `prqx`, `prsx`, `ptrqx` and `ptrsx` commands.
 """
 
 # options
@@ -100,12 +124,12 @@ doc['os'] = """Active Weber configuration can be changed using the `os` command.
 
 # print
 doc['par'] = """
-"""
+""" # TODO
 doc['pc'] = """Cookies for specific requests are printed with `pc` command. To see Set-Cookie responses, use `pcs` command.
 """
 doc['pcs'] = """Set-Cookie headers can be searched with `pcs` command.
 """
-doc['ph'] = """
+doc['ph'] = """Commands starting with 'ph' serve for extracting HTML-related information from the communication.
 """
 doc['phc'] = """HTML comments can be searched with `phc` command.
 """
@@ -122,7 +146,7 @@ doc['phs'] = """You can do interval search with `phs` command. Note that for cer
 
 doc['pp'] = """Parameters of selected requests are printed with `pp` command.
 """
-doc['pr'] = """Use `pr` or `pro` commands to get an overview of all captured request-response pairs, or `pt`, `ptr`, `ptro` for template overview. There are optional parameters 'e', 's', 't', 'u'. You can additionaly specify RRIDs of entries to show, separated by commas and hyphens (e.g. 1,2,4-7).
+doc['pr'] = """Use `pr` or `pro` commands to get an overview of all captured request-response pairs, or `pt`, `ptr`, `ptro`, respectively, for template overview. There are optional parameters 'e', 's', 't', 'u'. You can additionaly specify RRIDs of entries to show, separated by commas and hyphens (e.g. 1,2,4-7).
 
 You can see various columns:
     Time     - Time of request being forwarded to the remote server
@@ -151,7 +175,7 @@ You can use `prot` to see only entries with active tampering.
 """
 
 doc['prX'] = """Commands starting with `pr` are used to show request and/or response headers and/or data.
-"""
+""" # TODO 
 
 doc['pws'] = """Spoofing feature allows you to alter the requested content on the fly:
 - by specifying the file which should be used instead the real response (`sf`)

@@ -337,7 +337,7 @@ BRUTE COMMANDS
 # b
 def b_function(*args):
     if weber.brute:
-        return ['    %s  [%s, ...]' % (weber.brute[0], str(weber.brute[1][0]))]
+        return ['    %s:  %d values  [%s, ...] ' % (weber.brute[0], len(weber.brute), str(weber.brute[1][0]))]
     else:
         log.err('No brute loaded, see `bl`.')
         return []
@@ -353,7 +353,7 @@ def bl_function(*args):
     except Exception as e:
         log.err('Cannot open file (%s).' % (str(e)))
         return []
-add_command(Command('bl <path>', 'load file for brute', 'bl', bl_function))
+add_command(Command('bl <path>', 'load file for brute', ('bl', lambda: {'separator': weber.config['brute.value_separator'][0]}), bl_function))
 
 # bfi
 def bfi_function(_, rr, *__, **___):
@@ -364,7 +364,7 @@ add_command(Command('bfi [<rrid>[:<rrid>]]', 'brute fault injection from templat
 
 # br
 # NOTE only one bruter at a time can be used
-add_command(Command('br', 'brute from template rrid', 'br', lambda *_: []))
+add_command(Command('br', 'brute from template rrid', ('br', lambda: {'placeholder': weber.config['brute.placeholder'][0]}), lambda *_: []))
 
 # bra 
 def bra_modifier(data, brute_set):
@@ -382,7 +382,7 @@ def bra_function(_, rr, *__, **___):
     for brute_set in [x for x in weber.brute[1] if len(x) == max_setlen]:
         weber.proxy.add_connectionthread_from_template(rr, lambda data: bra_modifier(data, brute_set))
     return []
-add_command(Command('bra [<rrid>[:<rrid>]]', 'brute from template rrids for all sets', 'bra', lambda *args: foreach_rrs(bra_function, *args, fromtemplate=True)))
+add_command(Command('bra [<rrid>[:<rrid>]]', 'brute from template rrids for all sets', 'br', lambda *args: foreach_rrs(bra_function, *args, fromtemplate=True)))
 # TODO brd - brute rrid until difference
 
 def brf_function(_, rr, *__, **___):
@@ -397,7 +397,7 @@ COMPARE COMMANDS
 add_command(Command('c', 'compare', 'c', lambda *_: []))
 
 # cr
-add_command(Command('cr', 'compare requests/responses', 'cr', lambda *_: []))
+add_command(Command('cr', 'compare requests/responses', 'crX', lambda *_: []))
 
 #def crX_function(rrid1, rrid2, flag, function, **kwargs):
 def crX_function(*args, **kwargs):
@@ -407,7 +407,7 @@ def crX_function(*args, **kwargs):
     #        2 - lines only present in second
     #        c - common lines
     #        d - different lines only
-    #        D - standard diff
+    #        D - all lines, mark different
     
     result = []
     # parse args
@@ -594,7 +594,8 @@ add_command(Command('et <eid> <type>', 'define type for an event', 'et', et_func
 MODIFY COMMANDS
 """
 add_command(Command('m', 'modify', 'm', lambda *_: []))
-add_command(Command('mt', 'modify template', 'mt', lambda *_: []))
+add_command(Command('mt', 'modify template', 'mr', lambda *_: []))
+add_command(Command('mtr', 'modify template request/response', 'mr', lambda *_: []))
 add_command(Command('mr', 'modify request/response', 'mr', lambda *_: []))
 def mr_function(*args, fromtemplate=False):
     # parse command arguments
@@ -665,10 +666,10 @@ def mr_function(*args, fromtemplate=False):
         weber.config[k] = v
     return []
         
-add_command(Command('mrq <rrid>', 'modify request', 'mrq', lambda *args: mr_function('request', *args)))
-add_command(Command('mrs <rrid>', 'modify response', 'mrs', lambda *args: mr_function('response', *args)))
-add_command(Command('mtrq <rrid>', 'modify template request', 'mrq', lambda *args: mr_function('request', *args, fromtemplate=True)))
-add_command(Command('mtrs <rrid>', 'modify template response', 'mrs', lambda *args: mr_function('response', *args, fromtemplate=True)))
+add_command(Command('mrq <rrid>', 'modify request', 'mr', lambda *args: mr_function('request', *args)))
+add_command(Command('mrs <rrid>', 'modify response', 'mr', lambda *args: mr_function('response', *args)))
+add_command(Command('mtrq <rrid>', 'modify template request', 'mr', lambda *args: mr_function('request', *args, fromtemplate=True)))
+add_command(Command('mtrs <rrid>', 'modify template response', 'mr', lambda *args: mr_function('response', *args, fromtemplate=True)))
 
 
 
