@@ -19,7 +19,7 @@ from source.fd_debug import *
 doc = {}
 doc['help'] = """Welcome! This is Weber Framework, an open-source protocol proxy. With Weber you can see the traffic you are creating, modify it and more!
 
-Currently, Weber will forward to {remote} anything sent to {local}:{port} (plaintext) or {local}:{sslport} (encrypted). Use your browser, client or CLI tool to generate some traffic. You should see some lines popping out in Weber. 
+Currently, Weber will forward to '{remote}' anything sent to '{local}:{port}' (plaintext) or '{local}:{sslport}' (encrypted). Use your browser, client or CLI tool to generate some traffic. You should see some lines popping out in Weber. 
 That is realtime traffic overview and it indicates Weber is serving as a proxy. Use `pr` command to show the overview manually.
 
 You may be interested in the content of each request or response. This can be shown with `prq` and `prs` commands, respectively. Depending on the protocol being proxied, you can also print headers (`prh`) or data (`prd`). 
