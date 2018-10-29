@@ -37,7 +37,6 @@ class Command():
         try:
             return doc.get(self.doc_tag).format(**self.description_format())
         except:
-            traceback.print_exc()
             return ''
 
     def run(self, *args):
@@ -307,19 +306,20 @@ def ap_function(*args):
                 result.append('        %s: %s' % (testname, info[1]))
     return result
 
+add_command(Command('a', 'analysis', 'a', lambda *_: []))
 add_command(Command('ap', 'print analysis packs (alias for `pap`)', 'ap', ap_function))
 add_command(Command('pap', 'print analysis packs', 'ap', ap_function))
 
 # ape, apd
-def ap_function(*args, enable):
+def apX_function(*args, enable):
     try:
         weber.analysis[args[0]]['enabled'] = enable
     except:
         log.err('Invalid analysis pack name.')
     return []
 
-add_command(Command('ape <pack>', 'enable analysis pack', 'ap', lambda *args: ap_function(*args, enable=True)))
-add_command(Command('apd <pack>', 'disable analysis pack', 'ap', lambda *args: ap_function(*args, enable=False)))
+add_command(Command('ape <pack>', 'enable analysis pack', 'ap', lambda *args: apX_function(*args, enable=True)))
+add_command(Command('apd <pack>', 'disable analysis pack', 'ap', lambda *args: apX_function(*args, enable=False)))
 
 # ar
 def ar_function(_, rr, *__, **___):
@@ -826,7 +826,7 @@ def overview_handler(args, source, show_last=False, only_tampered=False, only_wi
 
 add_command(Command('pr [estu] [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', 'pr', lambda *args: overview_handler(args, source=weber.rrdb)))
 
-add_command(Command('pro [estu] [<rrid>[:<rrid>]]', 'print request-response pairs', 'pr', lambda *args: overview_handler(args, source=weber.rrdb)))
+add_command(Command('pro [estu] [<rrid>[:<rrid>]]', 'print request-response overview', 'pr', lambda *args: overview_handler(args, source=weber.rrdb)))
 add_command(Command('pt [estu] [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', 'pr', lambda *args: overview_handler(args, source=weber.tdb)))
 add_command(Command('ptr [estu] [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', 'pr', lambda *args: overview_handler(args, source=weber.tdb)))
 add_command(Command('ptro [estu] [<rrid>[:<rrid>]]', 'print templates overview', 'pr', lambda *args: overview_handler(args, source=weber.tdb)))
@@ -960,11 +960,12 @@ Spoofing
 """
 # s
 add_command(Command('s', 'spoofing (alias for `pws`)', 'pws', pws_function))
-add_command(Command('sf', 'print "spoof file" settings', 'pwsf', pwsf_function))
-add_command(Command('sr', 'print "spoof regex" settings', 'pwsr', pwsr_function))
+add_command(Command('sf', 'print "spoof file" settings', 'sf', pwsf_function))
+add_command(Command('sr', 'print "spoof regex" settings', 'sr', pwsr_function))
 
 # sfa
 def sfa_function(*args):
+    args = list(filter(None, args))
     try:
         uri = URI(args[0])
     except:
@@ -974,11 +975,12 @@ def sfa_function(*args):
         with open(args[1], 'rb'):
             pass
     except:
+        traceback.print_exc()
         log.err('Cannot read file.')
         return []
     weber.spoof_files[uri.get_value()] = args[1]
     return []
-add_command(Command('sfa <uri> <file>', 'add/modify file spoof', 'sfa', sfa_function))
+add_command(Command('sfa <uri> <file>', 'add/modify file spoof', 'sf', sfa_function))
 
 # sfd
 def sfd_function(*args):
@@ -987,7 +989,7 @@ def sfd_function(*args):
     except:
         log.err('Invalid spoof URI.')
     return []
-add_command(Command('sfd <uri>', 'delete file spoof', 'sfd', sfd_function))
+add_command(Command('sfd <uri>', 'delete file spoof', 'sf', sfd_function))
 
 # sra # TODO desired also for requests?
 def sra_function(*args):
@@ -1021,7 +1023,7 @@ add_command(Command('srd <old>', 'delete regex spoof', 'srd', srd_function))
 TAMPER COMMANDS
 """
 add_command(Command('t', 'tamper', 't', lambda *_: []))
-add_command(Command('tr', 'tamper requests/responses', 'tr', lambda *_: []))
+add_command(Command('tr', 'tamper requests/responses', 't', lambda *_: []))
 
 # trf
 def trf_function(_, rr, *__, **___):
@@ -1143,25 +1145,25 @@ def wrx_function(rrid, rr, *args, **kwargs): # write headers/data/both of desire
         print(e)
     return []
 
-add_command(Command('wra <file> [<rrid>[:<rrid>]]', 'write requests and responses', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, mask=0xf)))
-add_command(Command('wrh <file> [<rrid>[:<rrid>]]', 'write request and response headers', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, mask=0xe)))
-add_command(Command('wrd <file> [<rrid>[:<rrid>]]', 'write request and response data', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, mask=0xd)))
-add_command(Command('wrq <file> [<rrid>[:<rrid>]]', 'write requests verbose', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, mask=0xb)))
-add_command(Command('wrqh <file> [<rrid>[:<rrid>]]', 'write request headers', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, mask=0xa)))
-add_command(Command('wrqd <file> [<rrid>[:<rrid>]]', 'write request data', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, mask=0x9)))
-add_command(Command('wrs <file> [<rrid>[:<rrid>]]', 'write responses verbose', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, mask=0x7)))
-add_command(Command('wrsh <file> [<rrid>[:<rrid>]]', 'write response headers', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, mask=0x6)))
-add_command(Command('wrsd <file> [<rrid>[:<rrid>]]', 'write response data', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, mask=0x5)))
+add_command(Command('wra <file> [<rrid>[:<rrid>]]', 'write requests and responses', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0xf)))
+add_command(Command('wrh <file> [<rrid>[:<rrid>]]', 'write request and response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0xe)))
+add_command(Command('wrd <file> [<rrid>[:<rrid>]]', 'write request and response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0xd)))
+add_command(Command('wrq <file> [<rrid>[:<rrid>]]', 'write requests verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0xb)))
+add_command(Command('wrqh <file> [<rrid>[:<rrid>]]', 'write request headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0xa)))
+add_command(Command('wrqd <file> [<rrid>[:<rrid>]]', 'write request data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0x9)))
+add_command(Command('wrs <file> [<rrid>[:<rrid>]]', 'write responses verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0x7)))
+add_command(Command('wrsh <file> [<rrid>[:<rrid>]]', 'write response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0x6)))
+add_command(Command('wrsd <file> [<rrid>[:<rrid>]]', 'write response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0x5)))
 
-add_command(Command('wtra <file> [<rrid>[:<rrid>]]', 'write template requests and responses', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xf)))
-add_command(Command('wtrh <file> [<rrid>[:<rrid>]]', 'write template request and response headers', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xe)))
-add_command(Command('wtrd <file> [<rrid>[:<rrid>]]', 'write template request and response data', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xd)))
-add_command(Command('wtrq <file> [<rrid>[:<rrid>]]', 'write template requests verbose', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xb)))
-add_command(Command('wtrqh <file> [<rrid>[:<rrid>]]', 'write template request headers', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xa)))
-add_command(Command('wtrqd <file> [<rrid>[:<rrid>]]', 'write template request data', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x9)))
-add_command(Command('wtrs <file> [<rrid>[:<rrid>]]', 'write template responses verbose', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x7)))
-add_command(Command('wtrsh <file> [<rrid>[:<rrid>]]', 'write template response headers', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x6)))
-add_command(Command('wtrsd <file> [<rrid>[:<rrid>]]', 'write template response data', 'wrX', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x5)))
+add_command(Command('wtra <file> [<rrid>[:<rrid>]]', 'write template requests and responses', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xf)))
+add_command(Command('wtrh <file> [<rrid>[:<rrid>]]', 'write template request and response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xe)))
+add_command(Command('wtrd <file> [<rrid>[:<rrid>]]', 'write template request and response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xd)))
+add_command(Command('wtrq <file> [<rrid>[:<rrid>]]', 'write template requests verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xb)))
+add_command(Command('wtrqh <file> [<rrid>[:<rrid>]]', 'write template request headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xa)))
+add_command(Command('wtrqd <file> [<rrid>[:<rrid>]]', 'write template request data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x9)))
+add_command(Command('wtrs <file> [<rrid>[:<rrid>]]', 'write template responses verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x7)))
+add_command(Command('wtrsh <file> [<rrid>[:<rrid>]]', 'write template response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x6)))
+add_command(Command('wtrsd <file> [<rrid>[:<rrid>]]', 'write template response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x5)))
 
 
 

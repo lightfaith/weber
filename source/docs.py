@@ -38,8 +38,13 @@ HAVE FUN.
 """
 
 # analysis
-doc['ap'] = """"""
-doc['ar'] = """"""
+doc['a'] = """Weber supports automatic testing of common security weaknesses. Enabled tests can be printed with `ap` command.
+
+Currently, request-response tests are supported. If a problem is detected for a RR pair, its ID is emphasized in RR overview (shown with `pro` command). Detailed test results are shown with `par` command. The RR analysis is automatically performed after the response is received if analysis.immediate option is set. You can run analysis manually with `ar` command as well.
+"""
+
+doc['ap'] = """Use `ap` command to show what analysis packages are enabled and what tests will be performed."""
+doc['ar'] = """The `ar` command runs analysis on chosen RR pairs. If a security weakness is found, the user is informed."""
 
 # brute
 doc['b'] = """Commands starting with 'b' are designed to send template RRs to the remote server. This allows:
@@ -54,7 +59,7 @@ index{separator}htm{separator}...
 index{separator}php{separator}...
 ...
 
-The set (line) may have arbitrary number of values in one set. Separator is specified in brute.value_separator. Alternatively, brute.set_separator option can specify different set separator than a newline character. Arbitrary number of sets can be specified.
+The set (line) may contain arbitrary number of values. Separator is specified in brute.value_separator option. Alternatively, brute.set_separator option can specify different set separator than a newline character. Arbitrary number of sets can be specified.
 
 It is recommended to use `b` or `pwb` command after loading a dictionary to see whether the dictionary has been loaded properly.
 """
@@ -123,7 +128,7 @@ doc['os'] = """Active Weber configuration can be changed using the `os` command.
 """
 
 # print
-doc['par'] = """
+doc['par'] = """The `par` command print analysis result for individual RR pairs. See the documentation for `a` command for more information.
 """ # TODO
 doc['pc'] = """Cookies for specific requests are printed with `pc` command. To see Set-Cookie responses, use `pcs` command.
 """
@@ -135,7 +140,7 @@ doc['phc'] = """HTML comments can be searched with `phc` command.
 """
 doc['phf'] = """Forms present on given page are shown with `pf` command.
 """
-doc['phl'] = """Links from all known tags are printed with `phl` command. To see their context, use `phlc` command.
+doc['phl'] = """Links from all known tags are printed with `phl` command. To see their context as well, use `phlc` command.
 """
 doc['phlc'] = """Links from all known tags together with their context are printed with `phlc` command.
 """
@@ -167,70 +172,87 @@ You can see various columns:
 
 Entries are shown in real-time if overview.realtime is set to True.
 Request and responses with [T] prepended are tampered and must be forwarded manually. See `t` for more information.
-Entries with emphasized RRID were marked as interesting by analysis processes. Use `pa` to see the reason.
+Entries with emphasized RRID were marked as interesting by analysis processes. Use `par` to see the reason.
 
 You can use `proa` to see only entries with analysis notes.
 You can use `prol` and `ptrol`, respectively, to see only last 10 entries.
 You can use `prot` to see only entries with active tampering.
 """
 
-doc['prX'] = """Commands starting with `pr` are used to show request and/or response headers and/or data.
-""" # TODO 
+doc['prX'] = """Commands starting with `pr` are used to show request and/or response headers and/or data in more detail. Use `pra` to print everything.
+
+If the commands ends with an 'x', the result is printed as hexdump. This is usefull for checking for special characters.
+"""
 
 doc['pws'] = """Spoofing feature allows you to alter the requested content on the fly:
-- by specifying the file which should be used instead the real response (`sf`)
-- by modifying the response with regular expressions (`sr`) 
+- by specifying the file which should be used instead the real response (`sf`),
+- by modifying the response with regular expressions (`sr`).
+
+Use `s` or `pws` command to show current spoofing settings.
 """
-doc['pwsf'] = """
+
+doc['pwsf'] = """If file spoofing has been configured with `sfa` command, you can print the mapping with `pwsf` command.
 """
-doc['pwsr'] = """
+doc['pwsr'] = """If regex spoofing has been configured with `sra` command, you can print the mapping with `pwsr` command.
 """
 
 # quit
 
 # spoofing
-doc['sfa'] = """
- (note that the request is sent to remote server to get valid HTML headers.
-""" # TODO
-doc['sfd'] = """
+doc['sf'] = """File can be spoofed with `sfa` command. After that, when Weber detects a request for that file, it quietly replaces the content with local file of your choosing. This is especially useful when you are testing a page and you need a modified version of Javascript code to see crucial control information.
+
+Example: 
+   sfa https://www.cia.gov/++theme++contextual.agencytheme/images/logo.png /tmp/anonymous.png
+
+Note: The request is sent to remote server anyway to get valid HTML headers.
+
+The `sfd` command is used to delete a file spoofing entry.
 """
-doc['sra'] = """
-    First character is the delimiter.
+
+doc['sra'] = """The `sra` command is used to define regular expressions which are used on received responses. The first character is the delimiter.
     Examples:
         sra /http/https/
         sra /\/etc\/hostz/\/etc\/hosts/
         sra |/etc/hostz|/etc/hosts|
-""" # TODO
-doc['srd'] = """
-Unlike `sra`, the parameter is not escaped.
-""" # TODO
+"""
+doc['srd'] = """ The `srd` command is used to remove a regex spoofing entry. Unlike `sra`, the parameter is not escaped.
+""" 
 
 # tamper
-doc['t'] = """
+doc['t'] = """One of the most essential features of a proxy is to pause the transmission of data between the client and the server. Those data can be reviewed and/or modified before actual transmission.
+
+Default behaviour is to forward everything immediately. This can be toggled by setting tamper.requests and tamper.responses options, or, more conveniently, using `trqa` and `trsa` commands. If `trq` and `trs` commands are used instead, only first N requests/responses (default = 1) are tampered.
+
+Forward tampered requests and responses with `trqf`, `trsf` or `trf` commands.
+
+For data modification, check `m` commands. For bulk data modification with regular expression, check `sr` commands.
 """
-doc['tr'] = """
+
+doc['trf'] = """Use `trf` command to forward all tampered requests and responses.
 """
-doc['trf'] = """
+doc['trq'] = """Use `trq` command to tamper next N requests. Default value is 1.
 """
-doc['trq'] = """
+doc['trqa'] = """Toggle tamper.requests value with the `trqa` command.
 """
-doc['trqa'] = """Toggles tamper.requests value.
+doc['trs'] = """Use `trs` command to tamper next N responses. Default value is 1.
 """
-doc['trs'] = """
+doc['trsa'] = """Toggle tamper.responses value with the `trsa` command.
 """
-doc['trsa'] = """Toggles tamper.responses value.
+doc['trqf'] = """Use `trqf` command to forward all tampered requests. Tampered responses are not forwarded.
 """
-doc['trqf'] = """
-"""
-doc['trsf'] = """
+doc['trsf'] = """Use `trsf` command to forward all tampered responses. Tampered requests are not forwarded.
 """
 
 # write
-doc['w'] = """
+doc['w'] = """Commands starting with `w` are designed to write gathered information into files. 
+
+Currently, request and response writing is supported. See documentation for `wr` command for more information.
 """
-doc['wr'] = """
-"""
-doc['wrX'] = """
+doc['wr'] = """You can use `wr` commands to store gathered requests and/or responses. This is useful for web crawling or when a file is to be modified and spoofed later with `sfa` command.
+
+If multiple RR ids are specified, The '_<rrid>' string is appended to the given filename to distinct between them.
+
+To store exact response data, use `wrsd` command.
 """
 
 
