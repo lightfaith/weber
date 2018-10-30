@@ -15,6 +15,7 @@ config['analysis.ignored_tests'] = ('', str) # list of analysis test name to NOT
 # brute settings
 config['brute.placeholder'] = ('###', str) # placeholder start and end, e.g. ###0###
 config['brute.value_separator'] =   (':', str)   # separator between values
+config['brute.rps'] =   (20, int)   # maximum requests per second
 config['brute.set_separator'] =   ('\n', str)   # separator between value sets
 
 # debug settings
@@ -107,7 +108,8 @@ Spoof dictionaries (URI in str format  ->  path to file)
                    (old string -> new string)
 """
 spoof_files = {}
-spoof_regexs = {}
+spoof_request_regexs = {}
+spoof_response_regexs = {}
 
 """
 (path, list of lists (values for bruteforcing))

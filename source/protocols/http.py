@@ -440,7 +440,8 @@ class HTTPRequest():
         # parse given bytes (from socket, editor, file, ...)
         self.original = data
         lines = data.splitlines()
-        self.method, self.path, self.version = tuple(lines[0].split(b' '))
+        line0 = ProxyLib.spoof_regex(lines[0], weber.spoof_request_regexs.items())
+        self.method, self.path, self.version = tuple(line0.split(b' '))
         fd_add_comment(self.forward_stopper, 'Request (%s %s) forward stopper' % (self.method, self.path))
         self.parameters = {}
         
@@ -449,12 +450,13 @@ class HTTPRequest():
         for line in lines[1:-1]:
             if not line:
                 continue
+            line = ProxyLib.spoof_regex(line, weber.spoof_request_regexs.items())
             k, _, v = line.partition(b':')
             # TODO duplicit keys? warn
             self.headers[k] = v.strip()
            
         if len(lines[-1]) > 0:
-            self.data = lines[-1]
+            self.data = ProxyLib.spoof_regex(lines[-1], weber.spoof_request_regexs.items())
 
         self.parse_method()
         self.integrity = True
@@ -564,18 +566,18 @@ class HTTPResponse():
         if not self.should_tamper:
             self.forward()
     
-    @staticmethod
+    """@staticmethod
     def spoof_regex(data):
         for old, new in weber.spoof_regexs.items():
             data = re.sub(old.encode(), new.encode(), data)
         return data
-
+    """
     def parse(self, data):
         # parse given bytes (from socket, editor, file, ...)
         self.original = data
         lines = data.split(b'\r\n')
 
-        line0 = ProxyLib.spoof_regex(lines[0])
+        line0 = ProxyLib.spoof_regex(lines[0], weber.spoof_response_regexs.items())
 
         self.version = line0.partition(b' ')[0]
         try:
@@ -591,7 +593,7 @@ class HTTPResponse():
         # load first set of headers (hopefully only one)
         line_index = 1
         for line_index in range(1, len(lines)):
-            line = ProxyLib.spoof_regex(lines[line_index])
+            line = ProxyLib.spoof_regex(lines[line_index], weber.spoof_response_regexs.items())
             if len(line) == 0:
                 break
             k, _, v = line.partition(b':')
@@ -624,7 +626,7 @@ class HTTPResponse():
                         break
                     # chunk spans multiple lines...
                     tmpchunk += b'\r\n'
-                self.data += ProxyLib.spoof_regex(tmpchunk)
+                self.data += ProxyLib.spoof_regex(tmpchunk, weber.spoof_response_regexs.items())
         except Exception as e:
             line_index = data_line_index # restore the value
             log.debug_chunks('unchunking failed:')
@@ -632,7 +634,7 @@ class HTTPResponse():
             #traceback.print_exc()
             log.debug_chunks('treating as non-chunked...')
             # treat as normal data
-            self.data = ProxyLib.spoof_regex(b'\r\n'.join(lines[line_index:]))
+            self.data = ProxyLib.spoof_regex(b'\r\n'.join(lines[line_index:]), weber.spoof_response_regexs.items())
             # TODO test for matching Content-Type (HTTP Response-Splitting etc.)
         
     

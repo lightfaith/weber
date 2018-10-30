@@ -337,7 +337,7 @@ BRUTE COMMANDS
 # b
 def b_function(*args):
     if weber.brute:
-        return ['    %s:  %d values  [%s, ...] ' % (weber.brute[0], len(weber.brute), str(weber.brute[1][0]))]
+        return ['    %s:  %d values  [%s, ...] ' % (weber.brute[0], len(weber.brute[1]), str(weber.brute[1][0]))]
     else:
         log.err('No brute loaded, see `bl`.')
         return []
@@ -379,8 +379,14 @@ def bra_function(_, rr, *__, **___):
         log.err('No brute loaded, see `bl`.')
         return []
     max_setlen = max(len(x) for x in weber.brute[1])
+    try:
+        sleep = 1/int(weber.config['brute.rps'][0])
+    except:
+        sleep = None
     for brute_set in [x for x in weber.brute[1] if len(x) == max_setlen]:
         weber.proxy.add_connectionthread_from_template(rr, lambda data: bra_modifier(data, brute_set))
+        if sleep:
+            time.sleep(sleep)
     return []
 add_command(Command('bra [<rrid>[:<rrid>]]', 'brute from template rrids for all sets', 'br', lambda *args: foreach_rrs(bra_function, *args, fromtemplate=True)))
 # TODO brd - brute rrid until difference
@@ -719,7 +725,7 @@ add_command(Command('os <key> <value>', 'change Weber configuration', 'os', os_f
 """
 PRINT COMMANDS
 """
-add_command(Command('p', 'print', '', lambda *_: []))
+add_command(Command('p', 'print', 'p', lambda *_: []))
 
 # par
 def par_function(_, rr, *__, **___):
@@ -907,7 +913,7 @@ add_command(Command('ptrshx [<rrid>[:<rrid>]]', 'print template response headers
 add_command(Command('ptrsdx [<rrid>[:<rrid>]]', 'print template response data', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x5, hexdump=True)))
 
 # pw 
-add_command(Command('pw', 'print weber-related information', '', lambda *_: []))
+add_command(Command('pw', 'print weber-related information', 'pw', lambda *_: []))
 
 # pwb
 add_command(Command('pwb', 'print brute lists', 'b', b_function))
@@ -916,22 +922,37 @@ add_command(Command('pwb', 'print brute lists', 'b', b_function))
 def pwm_function(*args):
     k_len = max([len(str(k)) for k, _ in weber.mapping.l_r.items()])
     return ['    %*s <--> %s' % (k_len, k, v) for k, v in weber.mapping.l_r.items()]    
-add_command(Command('pwm', 'print URI mapping', '', pwm_function))
+add_command(Command('pwm', 'print URI mapping', 'pwm', pwm_function))
 
 # pwo
 add_command(Command('pwo', 'print weber configuration', 'o', o_function))
 
 # pws
+def get_spoof_regexs(requests=True, responses=True):
+    result = []
+    if requests:
+        result +=  ['    %s -> %s' % (k, v) for k,v in weber.spoof_request_regexs.items()]
+    if responses:
+        result +=  ['    %s -> %s' % (k, v) for k,v in weber.spoof_response_regexs.items()]
+    return result
+
 def pws_function(*args):
     result = []
     files = ['    %s' % (x) for x in weber.commands['pwsf'].run()]
     if files:
         result.append('    Files:')
         result += files
-    regexs = ['    %s' % (x) for x in weber.commands['pwsr'].run()]
-    if regexs:
-        result.append('    Regular expressions:')
-        result += regexs
+
+    request_regexs = ['    %s' % (x) for x in get_spoof_regexs(responses=False)]
+    if request_regexs:
+        result.append('    Regular expressions for requests:')
+        result += request_regexs
+    
+    response_regexs = ['    %s' % (x) for x in get_spoof_regexs(requests=False)]
+    if response_regexs:
+        result.append('    Regular expressions for responses:')
+        result += response_regexs
+
     return result
 add_command(Command('pws', 'print spoof settings', 'pws', pws_function))
 
@@ -941,17 +962,17 @@ def pwsf_function(*args):
 add_command(Command('pwsf', 'print "spoof file" settings', 'pwsf', pwsf_function))
 
 # pwsr
-def pwsr_function(*args):
-    return ['    %s -> %s' % (k, v) for k,v in weber.spoof_regexs.items()]
-add_command(Command('pwsr', 'print "spoof regex" settings', 'pwsr', pwsr_function))
+add_command(Command('pwsr', 'print "spoof regex" settings', 'pwsr', pws_function))
+add_command(Command('pwsrq', 'print "spoof request regex" settings', 'pwsr', lambda *_: get_spoof_regexs(responses=False)))
+add_command(Command('srs', 'print "spoof response regex" settings', 'pwsr', lambda *_: get_spoof_regexs(requests=False)))
 
 # pwt
-add_command(Command('pwt', 'print alive threads', '', lambda *_: ['    %s' % ('?' if t.remoteuri is None else t.remoteuri) for t in weber.proxy.threads]))
+add_command(Command('pwt', 'print alive threads', 'pwt', lambda *_: ['    %s' % ('?' if t.remoteuri is None else t.remoteuri) for t in weber.proxy.threads]))
 
 """
 Quit
 """
-add_command(Command('q', 'quit', '', lambda *_: [])) # solved in weber
+add_command(Command('q', 'quit', 'q', lambda *_: [])) # solved in weber
 
 
 
@@ -961,7 +982,9 @@ Spoofing
 # s
 add_command(Command('s', 'spoofing (alias for `pws`)', 'pws', pws_function))
 add_command(Command('sf', 'print "spoof file" settings', 'sf', pwsf_function))
-add_command(Command('sr', 'print "spoof regex" settings', 'sr', pwsr_function))
+add_command(Command('sr', 'print "spoof regex" settings', 'sr', lambda *_: get_spoof_regexs()))
+add_command(Command('srq', 'print "spoof request regex" settings (alias for `pwsrq`)', 'sr', lambda *_: get_spoof_regexs(responses=False)))
+add_command(Command('srs', 'print "spoof response regex" settings (alias for `pwsrs`)', 'sr', lambda *_: get_spoof_regexs(requests=False)))
 
 # sfa
 def sfa_function(*args):
@@ -992,29 +1015,41 @@ def sfd_function(*args):
 add_command(Command('sfd <uri>', 'delete file spoof', 'sf', sfd_function))
 
 # sra # TODO desired also for requests?
-def sra_function(*args):
+def srXa_function(*args, spoof_dict=None):
     try:
         regex = ' '.join(args)
     except:
         log.err('Missing regular expression.')
         return []
-    parts = tuple(split_escaped(regex[1:-1], regex[0]))
+    try:
+        parts = tuple(split_escaped(regex[1:-1], regex[0]))
+    except:
+        log.err('Invalid regular expression.')
+        return []
     if len(parts) != 2:
         log.err('Invalid regular expression.')
         return []
-    weber.spoof_regexs[parts[0]] = parts[1]
+    try:
+        spoof_dict[parts[0]] = parts[1]
+    except:
+        log.err('Invalid regex dictionary.')
+
     return []
 
-add_command(Command('sra /old/new/', 'add/modify regex spoof', 'sra', sra_function))
+add_command(Command('srqa /old/new/', 'add/modify regex spoof for requests', 'srXa', lambda *args: srXa_function(*args, spoof_dict=weber.spoof_request_regexs)))
+add_command(Command('srsa /old/new/', 'add/modify regex spoof for responses', 'srXa', lambda *args: srXa_function(*args, spoof_dict=weber.spoof_response_regexs)))
 
 # srd
-def srd_function(*args):
+def srXd_function(*args, spoof_dict=None):
     try:
-        del weber.spoof_regexs[args[0]]
+        del spoof_dict[args[0]]
+    except TypeError:
+        log.err('Invalid regex dictionary.')
     except:
         log.err('Invalid spoof value.')
     return []
-add_command(Command('srd <old>', 'delete regex spoof', 'srd', srd_function))
+add_command(Command('srqd <old>', 'delete request regex spoof', 'srXd', lambda *args: srXd_function(*args, spoof_dict=weber.spoof_request_regexs)))
+add_command(Command('srsd <old>', 'delete response regex spoof', 'srXd', lambda *args: srXd_function(*args, spoof_dict=weber.spoof_response_regexs)))
 
 
 

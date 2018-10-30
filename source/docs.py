@@ -67,7 +67,10 @@ It is recommended to use `b` or `pwb` command after loading a dictionary to see 
 doc['bfi'] = """""" # TODO
 doc['br'] = """After a dictionary is loaded with `bl` command, you can use `bra` command to use it for brutefoce test. Placeholders {placeholder}n{placeholder} in chosen template RRs are replaced with set values on the fly and forwarded to the remote server. The 'n' specifies index of the value.
 
-Placeholder is specified in brute.placeholder option."""
+Placeholder is specified in brute.placeholder option.
+
+Throttling is adjusted with brute.rps option. It is maximum number of requests per second.
+"""
 doc['brf'] = """Template requests can be forwarded once with `brf` commands. Unlike other `br` commands, no placeholders are modified, and therefore no dictionary loading is required.
 """
 
@@ -128,6 +131,8 @@ doc['os'] = """Active Weber configuration can be changed using the `os` command.
 """
 
 # print
+doc['p'] = """Commands starting with `p` can be used to print various information. Use documentation for each command.
+"""
 doc['par'] = """The `par` command print analysis result for individual RR pairs. See the documentation for `a` command for more information.
 """ # TODO
 doc['pc'] = """Cookies for specific requests are printed with `pc` command. To see Set-Cookie responses, use `pcs` command.
@@ -184,6 +189,15 @@ doc['prX'] = """Commands starting with `pr` are used to show request and/or resp
 If the commands ends with an 'x', the result is printed as hexdump. This is usefull for checking for special characters.
 """
 
+doc['pw'] = """Commands starting with `pw` are designed to show Weber-related info. Sometimes, they have shorter aliases with regards to the functionality (e.g. `pwo` -> `o`).
+
+"""
+
+doc['pwm'] = """The `pwm` command shows local -> remote URI mapping. The translation is done tranparently by Weber.
+"""
+doc['pwt'] = """For debugging purposes, you can show alive Weber threads with `pwt` command.
+"""
+
 doc['pws'] = """Spoofing feature allows you to alter the requested content on the fly:
 - by specifying the file which should be used instead the real response (`sf`),
 - by modifying the response with regular expressions (`sr`).
@@ -193,10 +207,11 @@ Use `s` or `pws` command to show current spoofing settings.
 
 doc['pwsf'] = """If file spoofing has been configured with `sfa` command, you can print the mapping with `pwsf` command.
 """
-doc['pwsr'] = """If regex spoofing has been configured with `sra` command, you can print the mapping with `pwsr` command.
+doc['pwsr'] = """If regex spoofing has been configured with `srqa` or `srsa` command, you can print the mapping with `pwsr`, `pwsrq` or `pwsrs` commands, or their aliases (`sr`, `srq`, `srs`, respectively).
 """
 
 # quit
+doc['q'] = """Quit. What do you expect?"""
 
 # spoofing
 doc['sf'] = """File can be spoofed with `sfa` command. After that, when Weber detects a request for that file, it quietly replaces the content with local file of your choosing. This is especially useful when you are testing a page and you need a modified version of Javascript code to see crucial control information.
@@ -209,13 +224,16 @@ Note: The request is sent to remote server anyway to get valid HTML headers.
 The `sfd` command is used to delete a file spoofing entry.
 """
 
-doc['sra'] = """The `sra` command is used to define regular expressions which are used on received responses. The first character is the delimiter.
-    Examples:
-        sra /http/https/
-        sra /\/etc\/hostz/\/etc\/hosts/
-        sra |/etc/hostz|/etc/hosts|
+doc['sr'] = """ Commands starting with `sr` are used to define regular expressions which are used on received requests or responses. For adding a new rule, use `srqa` (requests) or `srsa` (responses) command. To delete a rule, use `srqd` (requests) or `srsd` (responses) command.
+
 """
-doc['srd'] = """ The `srd` command is used to remove a regex spoofing entry. Unlike `sra`, the parameter is not escaped.
+doc['srXa'] = """The `srqa` and `srsa` commands are used to define regular expressions which are used on received requests or responses, respectively. The first character is the delimiter.
+    Examples:
+        srsa /http/https/
+        srsa /\/etc\/hostz/\/etc\/hosts/
+        srsa |/etc/hostz|/etc/hosts|
+"""
+doc['srXd'] = """ The `srqd` and `srsd` commands are used to remove a regex spoofing entry. Unlike `srqa` and `srsa`, the parameter is not escaped.
 """ 
 
 # tamper

@@ -33,8 +33,8 @@ class ProxyLib():
 
 
     @staticmethod
-    def spoof_regex(data):
-        for old, new in weber.spoof_regexs.items():
+    def spoof_regex(data, translations):
+        for old, new in translations:
             data = re.sub(old.encode(), new.encode(), data)
         return data
 
