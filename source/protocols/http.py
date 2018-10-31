@@ -202,7 +202,7 @@ class HTTPConnectionThread(ConnectionThread):
                     log.err('Cannot forward - local URI is not mapped. Terminating thread...')
                     weber.forward_fail_uris.append(str(self.localuri))
                     break
-                # TODO referer not mandatory
+                # referer (not mandatory)
                 log.debug_flow('Getting Referer remote URI from local.')
                 try:
                     upstream_referer = weber.mapping.get_remote(downstream_referer)
@@ -341,6 +341,20 @@ class HTTPConnectionThread(ConnectionThread):
                         pass
                     # no permanent redirection # TODO for which 3xx's?
                     response.statuscode = 302
+                # domain in Set-Cookie?
+                if response.headers.get(b'Set-Cookie'):
+                    cookie_parameters = [x.strip() for x in response.headers[b'Set-Cookie'].split(b';')]
+                    for i in range(len(cookie_parameters)):
+                        key, _, value = cookie_parameters[i].partition(b'=')
+                        if key.lower() == b'domain' and value:
+                            log.debug_flow('Altering Set-Cookie domain value.')
+                            # is this wildcard cookie?
+                            prepend = b'.' if value.startswith(b'.') else b''
+
+                            newlocal = prepend + weber.mapping.get_local(value.lstrip(b'.')).domain.encode()
+                            cookie_parameters[i] = b'%s=%s' % (key, newlocal)
+                    response.headers[b'Set-Cookie'] = b'; '.join(cookie_parameters)
+
 
                 log.debug_flow('Changing response data links.')
                 # change incoming links, useless if from template

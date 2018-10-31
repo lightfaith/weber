@@ -179,10 +179,18 @@ def run_command(fullcommand):
                     elif type(line) == list:
                         for subline in line:
                             less_lines.append(nocolor(re.sub('^\\{grepignore\\}', '', subline)))
+                # suppress debugs and realtime overview
+                oldconfig = {k:weber.config[k] for k in weber.config.keys() if k.startswith('debug.') or k == 'overview.realtime'}
+                for k, _ in oldconfig.items():
+                    weber.config[k] = (False, weber.config[k][1])
+                # run less
                 with tempfile.NamedTemporaryFile() as f:
                     f.write('\n'.join(less_lines).encode())
                     f.flush()
                     subprocess.call(['less', f.name])
+                # restore debug and realtime overview settings
+                for k, v in oldconfig.items():
+                    weber.config[k] = v
                 return
 
         # use parsed lines for more parsing
