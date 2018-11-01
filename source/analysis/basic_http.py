@@ -88,6 +88,38 @@ basic_http = {
                 ('x-powered-by header', lambda _,res,__: b'X-Powered-By' in res.headers.keys()),
             ]
         ),
+        (   'X-ASPNET-VERSION_HEADER', 
+            ('INFOLEAK', 'X-AspNet-Version or X-AspNetMvc-Version header is included.', False),
+            ['http'], 
+            [
+                ('response exists', lambda _,res,__: res),
+                ('x-aspnet-version header', lambda _,res,__: b'X-AspNet-Version' in res.headers.keys() or b'X-AspNetMvc-Version' in res.headers.keys()),
+            ]
+        ),
+        (   'SERVER_HEADER', 
+            ('INFOLEAK', 'Server header is included.', False),
+            ['http'], 
+            [
+                ('response exists', lambda _,res,__: res),
+                ('server header', lambda _,res,__: b'Server' in res.headers.keys()),
+            ]
+        ),
+        (   'REFERRER-POLICY_MISSING', 
+            ('INFOLEAK', 'Referrer-Policy header is not included.', False),
+            ['http'], 
+            [
+                ('response exists', lambda _,res,__: res),
+                ('no referrer-policy header', lambda _,res,__: b'Referrer-Policy' not in res.headers.keys()),
+            ]
+        ),
+        (   'REFERRER-POLICY_UNSAFE', 
+            ('INFOLEAK', 'Referrer-Policy is set to \'unsafe-url\'.', False),
+            ['http'], 
+            [
+                ('response exists', lambda _,res,__: res),
+                ('referrer-policy: unsafe-url', lambda _,res,__: res.headers.get(b'Referrer-Policy') == b'unsafe-url'),
+            ]
+        ),
         (   'AUTHORIZATION_OVER_HTTP', 
             ('SECURITY', 'Authorization is desired over HTTP connection.', True),
             ['http'], 
