@@ -454,19 +454,21 @@ class HTTPRequest():
     def parse(self, data):
         # parse given bytes (from socket, editor, file, ...)
         self.original = data
+        self.headers = OrderedDict()
+        self.data = b''
+        
         lines = data.splitlines()
         line0 = ProxyLib.spoof_regex(lines[0], weber.spoof_request_regexs.items())
         try:
             self.method, self.path, self.version = tuple(line0.split(b' '))
         except:
             log.err('Invalid first header.') # TODO but keep as single string and use it
+            self.method = self.path = self.version = b' '
             self.integrity = False
             return 
         fd_add_comment(self.forward_stopper, 'Request (%s %s) forward stopper' % (self.method, self.path))
         self.parameters = {}
         
-        self.headers = OrderedDict()
-        self.data = b''
         for line in lines[1:-1]:
             if not line:
                 continue
