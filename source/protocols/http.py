@@ -456,7 +456,12 @@ class HTTPRequest():
         self.original = data
         lines = data.splitlines()
         line0 = ProxyLib.spoof_regex(lines[0], weber.spoof_request_regexs.items())
-        self.method, self.path, self.version = tuple(line0.split(b' '))
+        try:
+            self.method, self.path, self.version = tuple(line0.split(b' '))
+        except:
+            log.err('Invalid first header.') # TODO but keep as single string and use it
+            self.integrity = False
+            return 
         fd_add_comment(self.forward_stopper, 'Request (%s %s) forward stopper' % (self.method, self.path))
         self.parameters = {}
         
