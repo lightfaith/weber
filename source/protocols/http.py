@@ -41,8 +41,8 @@ class HTTP():
         return HTTPConnectionThread(conn, local_port, rrid, tamper_request, tamper_response, template_rr, request_modifier)
 
     @staticmethod
-    def create_request(data, should_tamper, request_modifier=None):
-        return HTTPRequest(data, should_tamper, request_modifier)
+    def create_request(data, should_tamper, no_stopper=False, request_modifier=None):
+        return HTTPRequest(data, should_tamper, no_stopper, request_modifier)
     
     @staticmethod
     def create_response(data, should_tamper, no_stopper=False):
@@ -145,7 +145,7 @@ class HTTPConnectionThread(ConnectionThread):
             if self.template_rr is None:
                 request = self.receive_request(self.request_modifier)
             else:
-                request = self.template_rr.request_upstream.clone(self.tamper_request, self.request_modifier)
+                request = self.template_rr.request_upstream.clone(self.tamper_request, no_stopper=False, request_modifier=self.request_modifier)
                 request.compute_content_length()
             
             if request is None: # socket closed? socket problem?
@@ -420,10 +420,11 @@ class HTTPRequest():
     """
     HTTP Request class
     """
-    def __init__(self, data, should_tamper, request_modifier=None):
+    def __init__(self, data, should_tamper, no_stopper=False, request_modifier=None):
         """
             data = request data (bytes)
             should_tamper = should the request be tampered? (bool)
+            no_stopper = should stopper IPC be created (e.g. no for cloning for downstream)
             request_modifier = function to alter request bytes before parsing
         """
         self.integrity = False
@@ -435,8 +436,8 @@ class HTTPRequest():
 
         # set up tampering mechanism
         self.should_tamper = should_tamper
-        #self.forward_stopper = None if no_stopper else os.pipe()
-        self.forward_stopper = os.pipe()
+        self.forward_stopper = None if no_stopper else os.pipe()
+        #self.forward_stopper = os.pipe()
         self.tampering = self.should_tamper
         
         self.onlypath = '' 
@@ -487,8 +488,8 @@ class HTTPRequest():
         self.headers.pop(b'If_Range', None)
 
 
-    def clone(self, should_tamper=False, request_modifier=None):
-        return HTTP.create_request(self.bytes(), should_tamper, request_modifier)
+    def clone(self, should_tamper=False, no_stopper=True, request_modifier=None):
+        return HTTP.create_request(self.bytes(), should_tamper, no_stopper, request_modifier)
 
     def forward(self):
         self.tampering = False

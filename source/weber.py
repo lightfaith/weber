@@ -14,7 +14,7 @@ config['analysis.ignored_tests'] = ('', str) # list of analysis test name to NOT
 
 # brute settings
 config['brute.placeholder'] = ('###', str) # placeholder start and end, e.g. ###0###
-config['brute.value_separator'] =   (':', str)   # separator between values
+config['brute.value_separator'] =   (';', str)   # separator between values
 config['brute.rps'] =   (20, int)   # maximum requests per second
 config['brute.set_separator'] =   ('\n', str)   # separator between value sets
 

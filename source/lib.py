@@ -2,7 +2,7 @@
 """
 General-purpose stuff is defined here.
 """
-import os, sys, signal, io, time
+import os, sys, signal, io, time, pdb
 from gzip import GzipFile
 from source import weber
 from source import log

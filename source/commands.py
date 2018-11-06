@@ -381,7 +381,7 @@ def bra_modifier(data, brute_set):
         data = data.replace(b'%s%d%s' % (placeholder, i, placeholder), brute_set[i])
     return data
     
-def bra_function(_, rr, *__, **___):
+def bra_function(rrid, rr, *__, **___):
     # run with values
     if weber.brute is None: 
         log.err('No brute loaded, see `bl`.')
@@ -634,8 +634,8 @@ def mr_function(*args, fromtemplate=False):
 
         if not r.tampering and not fromtemplate:
             # create template from RR
-            log.info('Creating template from RR #%d...' % (rrid))
-            tid = weber.tdb.add_rr(weber.rrdb.rrs[rrid].clone())
+            tid = weber.tdb.add_rr(weber.rrdb.rrs[rrid].clone(), update_rr_rrid=True)
+            log.info('Creating template #%d from RR #%d...' % (tid, rrid))
             source = weber.tdb.rrs[tid]
             if args[0] == 'request':
                 r = source.request_upstream

@@ -33,8 +33,11 @@ class RRDB():
     def add_response(self, rrid, response_upstream, response_downstream, allow_analysis=True):
         self.rrs[rrid].add_response(response_upstream, response_downstream, allow_analysis)
     
-    def add_rr(self, rr):
+    def add_rr(self, rr, update_rr_rrid=False):
+        # used when creating a template => rrid in rr will probably be updated
         rrid = self.get_new_rrid()
+        if update_rr_rrid:
+            rr.rrid = rrid
         self.rrs[rrid] = rr
         return rrid
 
@@ -47,6 +50,7 @@ class RRDB():
         minimum = 1
         maximum = max(self.rrs.keys())
         noproblem = True
+        #pdb.set_trace()
         if arg is not None:
             for desired in arg.split(','):
                 start = minimum
@@ -54,28 +58,30 @@ class RRDB():
                 
                 if '-' in desired:
                     _start, _, _end = desired.partition('-')
+                    if _start.isdigit():
+                        start = min([max([start, int(_start)]), end])
+                    else:
+                        noproblem = False
+                    if _end.isdigit():
+                        end = max([min([end, int(_end)]), start])
+                    else:
+                        noproblem = False
+                    if start > end:
+                        tmp = start
+                        start = end
+                        end = tmp
+                    indices += list(range(start, end+1))
                 else:
-                    _start = _end = desired
-                if _start.isdigit():
-                    start = max([start, int(_start)])
-                else:
-                    noproblem = False
-                if _end.isdigit():
-                    end = min([end, int(_end)])
-                else:
-                    noproblem = False
-                if start > end:
-                    tmp = start
-                    start = end
-                    end = tmp
-                indices += list(range(start, end+1))
+                    if desired.isdigit():
+                        indices.append(int(desired))
         else:
             indices = list(range(minimum, maximum+1))[(-10 if showlast else 0):]
-       
+        #print('indices', indices)       
         if positive(weber.config['interaction.show_upstream'][0]):
             keys = [x for x in self.rrs.keys() if (not onlytampered and (not withanalysis or self.rrs[x].analysis_notes)) or self.rrs[x].request_upstream.tampering or (self.rrs[x].response_upstream is not None and self.rrs[x].response_upstream.tampering)]
         else:
             keys = [x for x in self.rrs.keys() if (not onlytampered and (not withanalysis or self.rrs[x].analysis_notes)) or self.rrs[x].request_downstream.tampering or (self.rrs[x].response_downstream is not None and self.rrs[x].response_downstream.tampering)]
+        #print('keys:', keys)
         return (OrderedDict([(i, self.rrs[i]) for i in sorted(indices) if i in keys]), noproblem)
 
     
