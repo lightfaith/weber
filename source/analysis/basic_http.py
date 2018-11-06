@@ -97,11 +97,12 @@ basic_http = {
             ]
         ),
         (   'SERVER_HEADER', 
-            ('INFOLEAK', 'Server header is included.', False),
+            ('INFOLEAK', 'Server header is included and not minimal.', False),
             ['http'], 
             [
                 ('response exists', lambda _,res,__: res),
                 ('server header', lambda _,res,__: b'Server' in res.headers.keys()),
+                ('server header not minimal', lambda _,res,__: not re.match(b'^[A-Za-z0-9]*$', res.headers[b'Server'])),
             ]
         ),
         (   'REFERRER-POLICY_MISSING', 
