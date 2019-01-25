@@ -273,5 +273,8 @@ If multiple RR ids are specified, The '_<rrid>' string is appended to the given 
 To store exact response data, use `wrsd` command.
 """
 
+doc['ww'] = """If you need to store your Weber session for later use, take advantage of the`ww` command. This dumps essential Weber structures into a file in binary format. The dump can be later restored with --restore argument.
 
+Example: ./weber --restore dump.web
+"""
 

@@ -1209,4 +1209,47 @@ add_command(Command('wtrsh <file> [<rrid>[:<rrid>]]', 'write template response h
 add_command(Command('wtrsd <file> [<rrid>[:<rrid>]]', 'write template response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x5)))
 
 
+# ww
+def ww_function(*args):
+    try:
+        dump_file = args[0]
+    except:
+        log.err('No output file specified.')
+        return []
+    import pickle
+    # TODO with dump_lock?
+    
+    if [rr for db in [weber.rrdb, weber.tdb] for _,rr in db.rrs.items() if rr.request_upstream.tampering or rr.response_upstream.tampering]:
+        log.err('Cannot dump session if tampering is in progress.')
+        return []
+    
+    log.info('Dumping session into \'%s\'...' % dump_file)
+    weber.rrdb.lock = None
+    weber.tdb.lock = None
+    weber.mapping.lock = None
+    data = (
+        weber.proxy.init_target, 
+        weber.config,
+        #weber.protocols,
+        #weber.commands,
+        weber.rrdb,
+        weber.tdb,
+        weber.mapping,
+        weber.events,
+        weber.spoof_files,
+        weber.spoof_request_regexs,
+        weber.spoof_response_regexs,
+        weber.brute,
+        weber.forward_fail_uris,
+        #weber.analysis,
+        weber.servers,
+    )
+    with open(dump_file, 'wb') as f:
+        pickle.dump(data, f)
+        
+    weber.rrdb.setup_lock()
+    weber.tdb.setup_lock()
+    weber.mapping.setup_lock()
+    return []
+add_command(Command('ww <file>', 'dump Weber session into file', 'ww', ww_function))
 

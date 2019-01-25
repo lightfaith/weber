@@ -16,9 +16,14 @@ from source.lib import exit_program
 
 # get first target
 try:
+    dump_file = None
     init_target = sys.argv[1]
+    if init_target == '--restore':
+        dump_file = sys.argv[2]
+        log.info('Restoring saved session \'%s\'...' % dump_file)
 except:
-    log.err('Usage: %s example.com' % (sys.argv[0]))
+    log.err('Usage: %s example.com\n           %s --restore dump.web' % (sys.argv[0], 
+                                                                         sys.argv[0]))
     exit_program(-1, None)
 
 
@@ -26,8 +31,26 @@ except:
 log.newline()
 log.info(weber.motd[random.randint(0, len(weber.motd)-1)])
 
-# start proxy
-weber.proxy = Proxy(init_target)
+# restore dump if necessary and start proxy
+if dump_file:
+    import pickle
+    with open(dump_file, 'rb') as f:
+        loaded_data = pickle.load(f)
+        init_target = loaded_data[0]
+        weber.proxy = Proxy(init_target)
+        
+        weber.config, weber.rrdb, weber.tdb, weber.mapping, weber.events, weber.spoof_files, weber.spoof_request_regexs, weber.spoof_response_regexs, weber.brute, weber.forward_fail_uris, weber.servers = loaded_data[1:]
+        
+        #weber.protocols,
+        #weber.commands,
+        #weber.analysis,
+        weber.rrdb.setup_lock()
+        weber.tdb.setup_lock()
+        weber.mapping.setup_lock()
+
+
+else: # run new proxy
+    weber.proxy = Proxy(init_target)
 weber.proxy.start()
 
 while True:

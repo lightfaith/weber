@@ -20,6 +20,11 @@ class RRDB():
     def __init__(self):
         self.rrid = 0 # last rrid
         self.rrs = OrderedDict() # rrid:RR()
+        self.lock = None
+        
+        self.setup_lock()
+
+    def setup_lock(self):
         self.lock = threading.Lock()
     
     def get_new_rrid(self): # generated in Proxy(), so it is thread-safe
@@ -294,8 +299,13 @@ class Mapping():
         self.r_l = OrderedDict() # remote->local
         self.map = {}            # bytes->URI
         self.counter = 1
-        self.lock = threading.Lock()
+        self.lock = None
         self.Protocol = None
+        
+        self.setup_lock()
+
+    def setup_lock(self):
+        self.lock = threading.Lock()
 
     def add_init(self, remote): # add first known local
         # learn protocol from scheme or port
