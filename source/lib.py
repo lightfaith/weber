@@ -2,7 +2,7 @@
 """
 General-purpose stuff is defined here.
 """
-import os, sys, signal, io, time, pdb
+import os, sys, signal, io, time, pdb, traceback
 from gzip import GzipFile
 from source import weber
 from source import log
@@ -243,4 +243,24 @@ def hexdump(data):
     return result
 
     
+def create_folders_from_uri(root, uri):
+    uri_path = uri.get_value().replace(':', '_').replace('//', '__')
+    # only folder? create fake index.html
+    if uri_path.endswith('/'):
+        uri_path += 'index.html'
+
+    file_path = os.path.join(root, uri_path)
+    log.debug_flow('  File will be %s.' % file_path)
+    try:
+        os.makedirs(file_path[:file_path.rfind('/')], exist_ok=True)
+    except:
+        traceback.print_exc()
+        log.err('Cannot create folder structure.')
+    return file_path
+
+
+
+
+
+# --
 

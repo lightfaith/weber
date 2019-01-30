@@ -18,6 +18,9 @@ config['brute.value_separator'] =   (';', str)   # separator between values
 config['brute.rps'] =   (20, int)   # maximum requests per second
 config['brute.set_separator'] =   ('\n', str)   # separator between value sets
 
+# crawl settings
+config['crawl.save_path'] = ('', str) # where to store received files
+
 # debug settings
 config['debug.analysis'] =   (False, bool)   # stuff relevant to analysis
 config['debug.command'] =    (False, bool)   # stuff relevant to user commands
@@ -40,6 +43,7 @@ config['http.show_hidden'] = (False, bool) # should hidden fields be visible? # 
 config['http.no_cache'] = (False, bool) # should caching be forcefully disabled?
 config['http.drop_request_headers'] = ('', str) # which headers (separated by spaces) should be dropped?
 config['http.drop_response_headers'] = ('Content-Security-Policy Expect-CT', str) # which headers (separated by spaces) should be dropped?
+
 # how Weber will interact with user
 config['interaction.show_upstream'] = (True, bool) # what version of RR should be presented?
 config['interaction.command_modifier'] = ('$', str) # which character would start special sequences (line intervals, less)

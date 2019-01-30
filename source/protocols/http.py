@@ -331,7 +331,17 @@ class HTTPConnectionThread(ConnectionThread):
                 response.headers[b'Cache-Control'] = b'no-cache, no-store, must-revalidate'
                 response.headers[b'Pragma'] = b'no-cache'
 
-            
+            # store response data if desired
+            if weber.config['crawl.save_path'][0]:
+                if response.statuscode >= 200 and response.statuscode < 300:
+                    # TODO what about custom error pages? but probably not...
+                    # TODO test content-length and 0 -> directory? 
+                    log.debug_flow('Saving response data into file.')
+                    file_path = create_folders_from_uri(weber.config['crawl.save_path'][0], self.remoteuri)
+                    with open(file_path, 'wb') as f:
+                        f.write(b'\n'.join(response.lines(headers=False, as_string=False)))
+
+
             # tamper response
             log.debug_flow('Attempting to tamper the response.')
             if response.tampering and positive(weber.config['overview.realtime'][0]):

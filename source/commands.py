@@ -1151,6 +1151,21 @@ WRITE COMMANDS
 """
 # w
 add_command(Command('w', 'write', 'w', lambda *_: []))
+
+
+# wf 
+def wf_function(*args):
+    csp = weber.config['crawl.save_path']
+    try:
+        weber.config['crawl.save_path'] = (args[0], csp[1])
+        log.info('Downloaded data will be saved at %s.' % args[0])
+    except:
+        weber.config['crawl.save_path'][0] = ('', csp[1])
+        log.info('Response data will not be autosaved.')
+    return []
+add_command(Command('wf [<path>]', 'auto-save response content in given location', 'wf', wf_function))
+
+
 # wr
 add_command(Command('wr', 'write requests/responses into file', 'wr', lambda *_: []))
 
@@ -1209,6 +1224,8 @@ add_command(Command('wtrqd <file> [<rrid>[:<rrid>]]', 'write template request da
 add_command(Command('wtrs <file> [<rrid>[:<rrid>]]', 'write template responses verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0x7)))
 add_command(Command('wtrsh <file> [<rrid>[:<rrid>]]', 'write template response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0x6)))
 add_command(Command('wtrsd <file> [<rrid>[:<rrid>]]', 'write template response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0x5)))
+
+
 
 
 # ww
