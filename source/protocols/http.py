@@ -224,7 +224,7 @@ class HTTPConnectionThread(ConnectionThread):
                 if cookie_header:
                     log.debug_flow('Stripping Mapping IDs from Cookies.')
                     try:
-                        request.headers[b'Cookie'] = b'; '.join(cookie[cookie.index(b'_', 2)+1:] for cookie in cookie_header.split(b'; ') if cookie.startswith(b'_%d_' % weber.mapping.get_mapping_id(self.localuri)))
+                        request.headers[b'Cookie'] = b'; '.join(cookie[cookie.find(b'_', 1)+1:] for cookie in cookie_header.split(b'; ') if cookie.startswith(b'_%d_' % weber.mapping.get_mapping_id(self.localuri)))
                     except:
                         traceback.print_exc()
                         print(cookie_header)
@@ -376,6 +376,11 @@ class HTTPConnectionThread(ConnectionThread):
                     # prepend mapping ID to the first cookie parameter - the name
                     log.debug_flow('Prepending Mapping ID to new Cookie.')
                     cookie_parameters[0] = b'_%d_' % (weber.mapping.get_mapping_id(self.localuri)) + cookie_parameters[0]
+                    # prepare Set-Cookie path if needed (WEBER-MAPPING in place)
+                    enforce_cookie_path = None
+                    if self.localuri.path.startswith('/WEBER-MAPPING/'):
+                        enforce_cookie_path = self.localuri.path[:self.localuri.path.find('/', 15)].encode()
+
                     for i in range(len(cookie_parameters)):
                         key, _, value = cookie_parameters[i].partition(b'=')
                         # domain in Set-Cookie?
@@ -383,9 +388,17 @@ class HTTPConnectionThread(ConnectionThread):
                             log.debug_flow('Altering Set-Cookie domain value.')
                             # is this wildcard cookie?
                             prepend = b'.' if value.startswith(b'.') else b''
-
                             newlocal = prepend + weber.mapping.get_local(value.lstrip(b'.')).domain.encode()
                             cookie_parameters[i] = b'%s=%s' % (key, newlocal)
+                        elif key.lower() == b'path' and enforce_cookie_path:
+                            cookie_parameters[i] = b'%s=%s' % (key, enforce_cookie_path + value)
+                            enforce_cookie_path = None
+                    
+                    # enforce cookie path if not specified and WEBER-MAPPING
+                    if enforce_cookie_path:
+                        log.debug_parsing('Adding cookie path.')
+                        cookie_parameters.append(b'path=%s/' % enforce_cookie_path)
+
                     response.headers[b'Set-Cookie'] = b'; '.join(cookie_parameters)
 
 
