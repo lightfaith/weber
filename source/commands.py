@@ -611,7 +611,7 @@ add_command(Command('m', 'modify', 'm', lambda *_: []))
 add_command(Command('mt', 'modify template', 'mr', lambda *_: []))
 add_command(Command('mtr', 'modify template request/response', 'mr', lambda *_: []))
 add_command(Command('mr', 'modify request/response', 'mr', lambda *_: []))
-def mr_function(*args, fromtemplate=False):
+def mr_function(*args, fromtemplate=False, force_template_creation=False):
     # parse command arguments
     try:
         tid = None
@@ -632,7 +632,7 @@ def mr_function(*args, fromtemplate=False):
             log.err('Invalid type.')
             return []
 
-        if not r.tampering and not fromtemplate:
+        if (not r.tampering and not fromtemplate) or force_template_creation:
             # create template from RR
             tid = weber.tdb.add_rr(weber.rrdb.rrs[rrid].clone(), update_rr_rrid=True)
             log.info('Creating template #%d from RR #%d...' % (tid, rrid))
@@ -664,7 +664,7 @@ def mr_function(*args, fromtemplate=False):
         changes = f.read()
 
     # write if changed
-    if changes != r.bytes():
+    if changes != r.bytes() or force_template_creation:
         if args[0] == 'request':
             source.request_upstream.parse(changes)
         elif args[0] == 'response':
@@ -682,6 +682,8 @@ def mr_function(*args, fromtemplate=False):
         
 add_command(Command('mrq <rrid>', 'modify request', 'mr', lambda *args: mr_function('request', *args)))
 add_command(Command('mrs <rrid>', 'modify response', 'mr', lambda *args: mr_function('response', *args)))
+add_command(Command('mrq! <rrid>', 'create template from request and modify', 'mr', lambda *args: mr_function('request', *args, force_template_creation=True)))
+add_command(Command('mrs! <rrid>', 'create template from response and modify', 'mr', lambda *args: mr_function('response', *args, force_template_creation=True)))
 add_command(Command('mtrq <rrid>', 'modify template request', 'mr', lambda *args: mr_function('request', *args, fromtemplate=True)))
 add_command(Command('mtrs <rrid>', 'modify template response', 'mr', lambda *args: mr_function('response', *args, fromtemplate=True)))
 
@@ -1198,15 +1200,15 @@ add_command(Command('wrs <file> [<rrid>[:<rrid>]]', 'write responses verbose', '
 add_command(Command('wrsh <file> [<rrid>[:<rrid>]]', 'write response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0x6)))
 add_command(Command('wrsd <file> [<rrid>[:<rrid>]]', 'write response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0x5)))
 
-add_command(Command('wtra <file> [<rrid>[:<rrid>]]', 'write template requests and responses', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xf)))
-add_command(Command('wtrh <file> [<rrid>[:<rrid>]]', 'write template request and response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xe)))
-add_command(Command('wtrd <file> [<rrid>[:<rrid>]]', 'write template request and response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xd)))
-add_command(Command('wtrq <file> [<rrid>[:<rrid>]]', 'write template requests verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xb)))
-add_command(Command('wtrqh <file> [<rrid>[:<rrid>]]', 'write template request headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0xa)))
-add_command(Command('wtrqd <file> [<rrid>[:<rrid>]]', 'write template request data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x9)))
-add_command(Command('wtrs <file> [<rrid>[:<rrid>]]', 'write template responses verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x7)))
-add_command(Command('wtrsh <file> [<rrid>[:<rrid>]]', 'write template response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x6)))
-add_command(Command('wtrsd <file> [<rrid>[:<rrid>]]', 'write template response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=False, mask=0x5)))
+add_command(Command('wtra <file> [<rrid>[:<rrid>]]', 'write template requests and responses', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0xf)))
+add_command(Command('wtrh <file> [<rrid>[:<rrid>]]', 'write template request and response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0xe)))
+add_command(Command('wtrd <file> [<rrid>[:<rrid>]]', 'write template request and response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0xd)))
+add_command(Command('wtrq <file> [<rrid>[:<rrid>]]', 'write template requests verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0xb)))
+add_command(Command('wtrqh <file> [<rrid>[:<rrid>]]', 'write template request headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0xa)))
+add_command(Command('wtrqd <file> [<rrid>[:<rrid>]]', 'write template request data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0x9)))
+add_command(Command('wtrs <file> [<rrid>[:<rrid>]]', 'write template responses verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0x7)))
+add_command(Command('wtrsh <file> [<rrid>[:<rrid>]]', 'write template response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0x6)))
+add_command(Command('wtrsd <file> [<rrid>[:<rrid>]]', 'write template response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0x5)))
 
 
 # ww

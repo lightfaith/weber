@@ -111,7 +111,7 @@ doc['m'] = """Commands starting with 'm' serve for data modification.
 
 Currently, requests and responses can be modified. Check documentation on `mr` command for detailed information.
 """
-doc['mr'] = """Received requests and responses can be modified using your favourite text editor with `mrq` and `mrs`, respectively. Template counterparts are modified with `mtrq` and `mtrs` commands, respectively. This is useful when data waiting to transmit must be modified or when preparing new requests for sending from Weber without endpoint client.
+doc['mr'] = """Received requests and responses can be modified using your favourite text editor with `mrq` and `mrs`, respectively. Template counterparts are modified with `mtrq` and `mtrs` commands, respectively. This is useful when data waiting to transmit must be modified or when preparing new requests for sending from Weber without endpoint client. If you want to force template creation even when tampering or without data change, use `mrq!` or `mrs!` commands, respectively.
 
 Favourite editor command can be configured under edit.command option.
 
