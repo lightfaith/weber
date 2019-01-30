@@ -202,6 +202,8 @@ class HTTPConnectionThread(ConnectionThread):
                     log.err('Cannot forward - local URI \'%s\'is not mapped. Terminating thread...' % self.localuri)
                     weber.forward_fail_uris.append(str(self.localuri))
                     break
+
+
                 # referer (not mandatory)
                 log.debug_flow('Getting Referer remote URI from local.')
                 try:
@@ -216,6 +218,16 @@ class HTTPConnectionThread(ConnectionThread):
                 if upstream_referer:
                     request.headers[b'Referer'] = upstream_referer.get_value().encode()
                 log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
+
+                # use only cookies for given domain, strip mapping ID
+                cookie_header = request.headers.get(b'Cookie')
+                if cookie_header:
+                    log.debug_flow('Stripping Mapping IDs from Cookies.')
+                    try:
+                        request.headers[b'Cookie'] = b'; '.join(cookie[cookie.index(b'_', 2)+1:] for cookie in cookie_header.split(b'; ') if cookie.startswith(b'_%d_' % weber.mapping.get_mapping_id(self.localuri)))
+                    except:
+                        traceback.print_exc()
+                        print(cookie_header)
             else:
                 self.remoteuri = self.localuri.clone() # as we are working with upstream rr already
             
@@ -232,8 +244,16 @@ class HTTPConnectionThread(ConnectionThread):
                 request.parse(brute_bytes)
             """
             # remove undesired headers
-            log.debug_flow('Attempting to remove cache headers.')
+            log.debug_flow('Attempting to remove undesired headers.')
+            for undesired in weber.config['http.drop_request_headers'][0].encode().split(b' '):
+                try:
+                    del request.headers[undesired]
+                except:
+                    pass
+            
+            # remove cache headers if not desired
             if weber.config['http.no_cache'][0]:
+                log.debug_flow('Attempting to remove cache headers.')
                 for undesired in (b'If-Modified-Since', b'If-None-Match'):
                     try:
                         del request.headers[undesired]
@@ -293,8 +313,16 @@ class HTTPConnectionThread(ConnectionThread):
             weber.rrdb.add_response(self.rrid, response, None, allow_analysis=False)
             
             # remove undesired headers
-            log.debug_flow('Attempting to remove cache headers.')
+            log.debug_flow('Attempting to remove undesired headers.')
+            for undesired in weber.config['http.drop_response_headers'][0].encode().split(b' '):
+                try:
+                    del response.headers[undesired]
+                except:
+                    pass
+
+            # remove cache headers if not desired
             if weber.config['http.no_cache'][0]:
+                log.debug_flow('Attempting to remove cache headers.')
                 for undesired in (b'Expires',):
                     try:
                         del response.headers[undesired]
@@ -341,11 +369,16 @@ class HTTPConnectionThread(ConnectionThread):
                         pass
                     # no permanent redirection # TODO for which 3xx's?
                     response.statuscode = 302
-                # domain in Set-Cookie?
+                # Set-Cookie?
                 if response.headers.get(b'Set-Cookie'):
                     cookie_parameters = [x.strip() for x in response.headers[b'Set-Cookie'].split(b';')]
+                    
+                    # prepend mapping ID to the first cookie parameter - the name
+                    log.debug_flow('Prepending Mapping ID to new Cookie.')
+                    cookie_parameters[0] = b'_%d_' % (weber.mapping.get_mapping_id(self.localuri)) + cookie_parameters[0]
                     for i in range(len(cookie_parameters)):
                         key, _, value = cookie_parameters[i].partition(b'=')
+                        # domain in Set-Cookie?
                         if key.lower() == b'domain' and value:
                             log.debug_flow('Altering Set-Cookie domain value.')
                             # is this wildcard cookie?
@@ -475,7 +508,7 @@ class HTTPRequest():
             line = ProxyLib.spoof_regex(line, weber.spoof_request_regexs.items())
             k, _, v = line.partition(b':')
             # TODO duplicit keys? warn
-            self.headers[k] = v.strip()
+            self.headers[k.title()] = v.strip()
            
         if len(lines[-1]) > 0:
             self.data = ProxyLib.spoof_regex(lines[-1], weber.spoof_request_regexs.items())
@@ -619,7 +652,7 @@ class HTTPResponse():
             if len(line) == 0:
                 break
             k, _, v = line.partition(b':')
-            self.headers[k] = v.strip()
+            self.headers[k.title()] = v.strip()
         
         line_index += 1
 

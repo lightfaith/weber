@@ -332,7 +332,23 @@ class Mapping():
         self.r_l[r] = l
         return (l, r)
 
-    
+    def get_mapping_id(self, local):
+        log.debug_mapping('Getting mapping ID for %s' % local.get_value())
+        root_uri = local.clone()
+        if root_uri.path.startswith('/WEBER-MAPPING/'):
+            root_uri.path = '/'.join(local.path.split('/')[:3]+[''])
+        else:
+            root_uri.path = '/'
+        log.debug_mapping('  which is %s' % root_uri.get_value())
+
+        try:
+            mapping_id = list(self.l_r.keys()).index(self.map[root_uri.__bytes__()])
+        except:
+            log.err('get_mapping_id failed!')
+            mapping_id = -1
+        log.debug_mapping('  which has index %d' % mapping_id)
+        return mapping_id
+
     def get_local(self, remote):
         if remote is None:
             return None

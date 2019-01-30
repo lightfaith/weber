@@ -38,7 +38,8 @@ config['http.recompute_request_length'] = (True, bool) # whether request Content
 config['http.show_password'] = (False, bool) # should password fields be visible? # TODO implement
 config['http.show_hidden'] = (False, bool) # should hidden fields be visible? # TODO implement
 config['http.no_cache'] = (False, bool) # should caching be forcefully disabled?
-
+config['http.drop_request_headers'] = ('', str) # which headers (separated by spaces) should be dropped?
+config['http.drop_response_headers'] = ('Content-Security-Policy Expect-CT', str) # which headers (separated by spaces) should be dropped?
 # how Weber will interact with user
 config['interaction.show_upstream'] = (True, bool) # what version of RR should be presented?
 config['interaction.command_modifier'] = ('$', str) # which character would start special sequences (line intervals, less)
