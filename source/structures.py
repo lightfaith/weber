@@ -2,7 +2,11 @@
 """
 Various structures are defined here.
 """
-import threading, traceback, re, os, itertools
+import itertools
+import os
+import re
+import threading
+import traceback
 from collections import OrderedDict
 
 from source import weber
@@ -11,6 +15,208 @@ from source.lib import *
 from source.protocols import protocols
 from source.analysis import analysis
 from source.fd_debug import *
+
+
+class Server():
+    """Server object holds information about remote target.
+    
+    Attributes:
+
+    """
+
+    @staticmethod
+    def get_uri(uri : str):
+        """Translates uri (str) into uri (obj:URI), strips everything 
+        irrelevant for a Server instance.
+
+        This method is used to test whether a Server with a same name
+        already exists without the need to create a new instance. 
+
+        Args:
+            uri (str): URI of the target, path will be stripped
+        
+        Returns:
+            uri (obj:URI): Parsed URI
+        """
+        result = URI(uri)
+        result.path = '/'
+        return result
+
+
+    def __init__(self, uri):
+        """Creates instance of the Server.
+        Args:
+            cookies ():
+            certificate ():
+            ssl (bool): 
+            uri (str): URI of the target, path will be stripped
+        """
+        
+        self.cookies = OrderedDict()
+        self.certificate = None
+        self.uri = Server.get_uri(uri)
+        self.ssl = self.uri.scheme.endswith('s')
+
+
+
+class URI():
+    """Single URI instance.
+
+    Attributes:
+        scheme ():
+        user ():
+        password ():
+        domain ()
+        port ():
+        path ():
+    """
+    '''
+    @staticmethod
+    def build_str(domain, port, path=b'/', Protocol=None, scheme=None, user=None, password=None):
+        if isinstance(domain, str):
+            domain = domain.encode()
+        if not port:
+            port = weber.config['proxy.port'][0]
+        port = int(port)
+        if scheme is None:
+            if port == weber.config['proxy.port'][0]:
+                scheme = Protocol.scheme.encode() if Protocol else weber.config['proxy.default_protocol'][0].encode()
+            elif port == weber.config['proxy.sslport'][0]:
+                scheme = Protocol.ssl_scheme.encode() if Protocol else weber.protocols[weber.config['proxy.default_protocol'][0]].encode()
+        if scheme is None:
+            log.err('Cannot build_str() - unknown port.')
+            return ''
+        if user is None and password is None:
+            return (b'%s://%s:%d%s' % (scheme, domain, port, path)).decode()
+        elif user is not None and password is not None:
+            return (b'%s://%s:%s@%s:%d%s' % (scheme, domain, port, path)).decode()
+        else:
+            log.err('Cannot build_str() - user or pass not defined.')
+            return ''
+    '''     
+
+    def __init__(self, uri, scheme=None):
+        self.scheme, self.user, self.password, self.domain, self.port, \
+        self.path, self.Protocol = URI.parse(uri)
+        '''if scheme is not None:
+            self.scheme = scheme
+        '''
+
+    def clone(self):
+        return URI(self.__bytes__())
+
+    def get_value(self, path=True):
+        if len(self.user)>0 and len(self.password)>0:
+            return '%s://%s:%s@%s:%d%s' % (self.scheme, self.user, self.password, self.domain, self.port, (self.path if path else ''))
+        else:
+            return '%s://%s:%d%s' % (self.scheme, self.domain, self.port, (self.path if path else ''))
+    
+    def get_mapping_path(self):
+        if self.path.startswith('/WEBER-MAPPING/'):
+            return '/'.join(self.path.split('/')[:3])
+        else:
+            return ''
+
+    def __str__(self):
+        return 'URI(%s)' % (self.get_value()) 
+	
+    def __bytes__(self):
+        return self.get_value().encode()
+
+    def __repr__(self):
+        return self.__str__()
+
+    @staticmethod
+    def port_is_explicit(uri):
+        # returns whether port is specified or not
+        if type(uri) == bytes:
+            uri = uri.decode()
+        if '://' in uri:
+            _, _, noscheme = uri.partition('://')
+        if '@' in noscheme:
+            _, _, domainport = noscheme.partition('@')
+        if ':' in domainport:
+            _, _, port = domainport.partition(':')
+        return port.isdigit()
+
+
+    @staticmethod
+    def parse(uri):
+        # splits https://admin:pasword@example.com:4443/x/y.html into scheme, user, pass, domain, port and path
+        if isinstance(uri, URI):
+            uri = uri.get_value()
+        elif type(uri) == bytes:
+            uri = uri.decode()
+
+        log.debug_protocol('Parsing URI \'%s\'' % (uri))
+        Protocol = None
+
+        # get scheme
+        if '://' in uri:
+            scheme, _, noscheme = uri.partition('://')
+            for _, protocol in weber.protocols.items():
+                if scheme in (protocol.scheme, protocol.ssl_scheme):
+                    log.debug_protocol('  Found protocol by scheme: %s -> %s' % (scheme, protocol.scheme))
+                    Protocol = protocol
+        else:
+            scheme = None
+            #scheme = Protocol.scheme # unknown, decide from port
+            noscheme = uri
+
+        # get domainport and path
+        domainport, _, path = noscheme.partition('/')
+
+        # users?
+        if '@' in domainport:
+            creds, _, domainport = domainport.partition('@')
+            user, _, password = creds.partition(':')
+        else:
+            user = ''
+            password = ''
+
+        # domain, port
+        if ':' in domainport:
+            domain, _, port = domainport.partition(':')
+            if port.isdigit():
+                port = int(port)
+                if not Protocol:
+                    for _, protocol in weber.protocols.items():
+                        if int(port) in (protocol.port, protocol.ssl_port):
+                            log.debug_protocol('  Found protocol by port: %s -> %s' % (port, protocol.scheme))
+                            Protocol = protocol
+            else:
+                if Protocol:
+                    if scheme == Protocol.scheme:
+                        port = Protocol.port
+                    elif scheme == Protocol.ssl_scheme:
+                        port = Protocol.ssl_port
+                log.debug_protocol('  Using protocol to get port: %s -> %d' % (protocol.scheme, port))
+        else:
+            domain = domainport
+            if not Protocol: # use default value
+                log.debug_protocol('  Setting default protocol: %s' % (weber.config['proxy.default_protocol'][0]))
+                Protocol = weber.protocols.get(weber.config['proxy.default_protocol'][0])
+            if not Protocol: # bad config
+                log.err('Unknown default protocol \'%s\'' % (weber.config['proxy.default_protocol'][0]))
+                return tuple()
+            
+            port = Protocol.ssl_port if scheme == Protocol.ssl_scheme else Protocol.port
+            
+            #port = Protocol.ssl_port if scheme == Protocol.ssl_scheme else Protocol.port # default
+        
+        if not scheme:
+            for Protocol in weber.protocols.values():
+                if port == Protocol.port:
+                    scheme = Protocol.scheme
+                    break
+                elif port == Protocol.ssl_port:
+                    scheme = Protocol.ssl_scheme
+                    break
+
+        if not scheme:
+            log.err('Cannot get scheme for \'%s\'' % (uri))
+            return tuple()
+        return (scheme, user, password, domain, int(port), '/'+path, Protocol)
 
 
 """
@@ -414,155 +620,6 @@ class Mapping():
 
 
 weber.mapping = Mapping()
-
-"""
-Single URI
-"""
-class URI():
-    @staticmethod
-    def build_str(domain, port, path=b'/', Protocol=None, scheme=None, user=None, password=None):
-        if isinstance(domain, str):
-            domain = domain.encode()
-        if not port:
-            port = weber.config['proxy.port'][0]
-        port = int(port)
-        if scheme is None:
-            if port == weber.config['proxy.port'][0]:
-                scheme = Protocol.scheme.encode() if Protocol else weber.config['proxy.default_protocol'][0].encode()
-            elif port == weber.config['proxy.sslport'][0]:
-                scheme = Protocol.ssl_scheme.encode() if Protocol else weber.protocols[weber.config['proxy.default_protocol'][0]].encode()
-        if scheme is None:
-            log.err('Cannot build_str() - unknown port.')
-            return ''
-        if user is None and password is None:
-            return (b'%s://%s:%d%s' % (scheme, domain, port, path)).decode()
-        elif user is not None and password is not None:
-            return (b'%s://%s:%s@%s:%d%s' % (scheme, domain, port, path)).decode()
-        else:
-            log.err('Cannot build_str() - user or pass not defined.')
-            return ''
-            
-
-    def __init__(self, uri, scheme=None):
-        self.scheme, self.user, self.password, self.domain, self.port, self.path, self.Protocol = URI.parse(uri)
-        if scheme is not None:
-            self.scheme = scheme
-
-    def clone(self):
-        return URI(self.__bytes__())
-
-    def get_value(self, path=True):
-        if len(self.user)>0 and len(self.password)>0:
-            return '%s://%s:%s@%s:%d%s' % (self.scheme, self.user, self.password, self.domain, self.port, (self.path if path else ''))
-        else:
-            return '%s://%s:%d%s' % (self.scheme, self.domain, self.port, (self.path if path else ''))
-    
-    def get_mapping_path(self):
-        if self.path.startswith('/WEBER-MAPPING/'):
-            return '/'.join(self.path.split('/')[:3])
-        else:
-            return ''
-
-    def __str__(self):
-        return 'URI(%s)' % (self.get_value()) 
-	
-    def __bytes__(self):
-        return self.get_value().encode()
-
-    def __repr__(self):
-        return self.__str__()
-
-    @staticmethod
-    def port_is_explicit(uri):
-        # returns whether port is specified or not
-        if type(uri) == bytes:
-            uri = uri.decode()
-        if '://' in uri:
-            _, _, noscheme = uri.partition('://')
-        if '@' in noscheme:
-            _, _, domainport = noscheme.partition('@')
-        if ':' in domainport:
-            _, _, port = domainport.partition(':')
-        return port.isdigit()
-
-
-    @staticmethod
-    def parse(uri):
-        # splits https://admin:pasword@example.com:4443/x/y.html into scheme, user, pass, domain, port and path
-        if isinstance(uri, URI):
-            uri = uri.get_value()
-        elif type(uri) == bytes:
-            uri = uri.decode()
-
-        log.debug_protocol('Parsing URI \'%s\'' % (uri))
-        Protocol = None
-
-        # get scheme
-        if '://' in uri:
-            scheme, _, noscheme = uri.partition('://')
-            for _, protocol in weber.protocols.items():
-                if scheme in (protocol.scheme, protocol.ssl_scheme):
-                    log.debug_protocol('  Found protocol by scheme: %s -> %s' % (scheme, protocol.scheme))
-                    Protocol = protocol
-        else:
-            scheme = None
-            #scheme = Protocol.scheme # unknown, decide from port
-            noscheme = uri
-
-        # get domainport and path
-        domainport, _, path = noscheme.partition('/')
-
-        # users?
-        if '@' in domainport:
-            creds, _, domainport = domainport.partition('@')
-            user, _, password = creds.partition(':')
-        else:
-            user = ''
-            password = ''
-
-        # domain, port
-        if ':' in domainport:
-            domain, _, port = domainport.partition(':')
-            if port.isdigit():
-                port = int(port)
-                if not Protocol:
-                    for _, protocol in weber.protocols.items():
-                        if int(port) in (protocol.port, protocol.ssl_port):
-                            log.debug_protocol('  Found protocol by port: %s -> %s' % (port, protocol.scheme))
-                            Protocol = protocol
-            else:
-                if Protocol:
-                    if scheme == Protocol.scheme:
-                        port = Protocol.port
-                    elif scheme == Protocol.ssl_scheme:
-                        port = Protocol.ssl_port
-                log.debug_protocol('  Using protocol to get port: %s -> %d' % (protocol.scheme, port))
-        else:
-            domain = domainport
-            if not Protocol: # use default value
-                log.debug_protocol('  Setting default protocol: %s' % (weber.config['proxy.default_protocol'][0]))
-                Protocol = weber.protocols.get(weber.config['proxy.default_protocol'][0])
-            if not Protocol: # bad config
-                log.err('Unknown default protocol \'%s\'' % (weber.config['proxy.default_protocol'][0]))
-                return tuple()
-            
-            port = Protocol.ssl_port if scheme == Protocol.ssl_scheme else Protocol.port
-            
-            #port = Protocol.ssl_port if scheme == Protocol.ssl_scheme else Protocol.port # default
-        
-        if not scheme:
-            for Protocol in weber.protocols.values():
-                if port == Protocol.port:
-                    scheme = Protocol.scheme
-                    break
-                elif port == Protocol.ssl_port:
-                    scheme = Protocol.ssl_scheme
-                    break
-
-        if not scheme:
-            log.err('Cannot get scheme for \'%s\'' % (uri))
-            return tuple()
-        return (scheme, user, password, domain, int(port), '/'+path, Protocol)
 
 
 """

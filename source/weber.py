@@ -3,11 +3,52 @@
 Global structures are defined here.
 """
 from collections import OrderedDict
+from source.lib import positive
 
 """
 Default configuration options
 """
 config = OrderedDict()
+
+class Option():
+    """
+
+    """
+    def __init__(self, default_value, data_type):
+        self.__data_type = data_type
+        self.value = default_value
+
+    @property
+    def value(self):
+        return self.__value
+
+    @value.setter
+    def value(self, v):
+        if self.__data_type is bool:
+            self.__value = positive(v)
+        else:
+            try:
+                self.__value = self.__data_type(v)
+            except:
+                log.err('Option error - cannot cast \'%s\' to %s' % 
+                        (v, self.__data_type))
+
+
+# debug settings
+config['debug.analysis'] =   Option(True, bool)   # stuff relevant to analysis
+config['debug.chunks'] =     Option(True, bool)   # stuff relevant to Transfer-Encoding: chunked parsing
+config['debug.command'] =    Option(True, bool)   # stuff relevant to user commands
+config['debug.config'] =     Option(True, bool)   # stuff relevant to configuration
+config['debug.flow'] =       Option(True, bool)   # stuff relevant to program flow
+config['debug.mapping'] =    Option(True, bool)   # stuff relevant to local-remote URL mapping
+config['debug.parsing'] =    Option(True, bool)   # stuff relevant to request/response parsing
+config['debug.protocol'] =   Option(True, bool)   # stuff relevant to protocol decisioning
+config['debug.socket'] =     Option(True, bool)   # stuff relevant to socket communication
+config['debug.tampering'] =  Option(True, bool)   # stuff relevant to tampering
+
+config['proxy.threaded'] = Option(True, bool)
+
+'''
 # analysis settings
 config['analysis.immediate'] = (True, bool) # should analysis be done immediately?
 config['analysis.ignored_tests'] = ('', str) # list of analysis test name to NOT perform
@@ -21,17 +62,6 @@ config['brute.set_separator'] =   ('\n', str)   # separator between value sets
 # crawl settings
 config['crawl.save_path'] = ('', str) # where to store received files
 
-# debug settings
-config['debug.analysis'] =   (False, bool)   # stuff relevant to analysis
-config['debug.command'] =    (False, bool)   # stuff relevant to user commands
-config['debug.config'] =     (False, bool)   # stuff relevant to configuration
-config['debug.chunks'] =     (False, bool)   # stuff relevant to Transfer-Encoding: chunked parsing
-config['debug.flow'] =       (False, bool)   # stuff relevant to program flow
-config['debug.mapping'] =    (False, bool)   # stuff relevant to local-remote URL mapping
-config['debug.parsing'] =    (False, bool)   # stuff relevant to request/response parsing
-config['debug.protocol'] =   (False, bool)   # stuff relevant to protocol decisioning
-config['debug.socket'] =     (False, bool)   # stuff relevant to socket communication
-config['debug.tampering'] =  (False, bool)   # stuff relevant to tampering
 
 # edit settings
 config['edit.command'] = ('vim %s', str)
@@ -62,7 +92,6 @@ config['proxy.port'] =     (8555, int)
 config['proxy.sslport'] =  (8556, int)
 config['proxy.sslcert'] =  ('cert.pem', str)
 config['proxy.sslkey'] =   ('key.pem', str)
-config['proxy.threaded'] = (True, bool)
 config['proxy.default_protocol'] = ('http', str) 
 
 # spoof
@@ -71,6 +100,7 @@ config['spoof.arguments'] = (False, bool) # should arguments be taken into consi
 # tamper
 config['tamper.requests'] =  (False, bool) # should all requests be tampered by default?
 config['tamper.responses'] = (False, bool) # should all responses be tampered by default?
+'''
 
 
 """
@@ -163,5 +193,4 @@ motd = [
     'Weber tip of the day: Use \'q\' to quit the program.',
     'Weber tip of the day: Use \'pr\' to print overview of all received requests.',
 ]
-
 

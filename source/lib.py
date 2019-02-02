@@ -4,7 +4,7 @@ General-purpose stuff is defined here.
 """
 import os, sys, signal, io, time, pdb, traceback
 from gzip import GzipFile
-from source import weber
+#from source import weber
 from source import log
 
 def positive(x):
@@ -38,6 +38,7 @@ def exit_program(signal, frame):
     log.info('Killing all the threads...')
 
     # stop the scheduler (will stop all threads)
+    from source import weber
     weber.proxy.stop()
     #counter = 0
     while weber.proxy.is_alive():
@@ -52,20 +53,32 @@ def exit_program(signal, frame):
 signal.signal(signal.SIGINT, exit_program)
 
 def reload_config():
+    """
+    
+    """
+    from source import weber
+    """read lines from conf file"""
     log.info('Loading config file...')
-    # read lines from conf file
-    with open(os.path.join(os.path.dirname(sys.argv[0]), 'weber.conf'), 'r') as f:
+    with open(os.path.join(os.path.dirname(sys.argv[0]), 'weber.conf'), 
+              'r') as f:
         for line in f.readlines():
             line = line.strip()
-            # skip empty and comments
+            """skip empty lines and comments"""
             if len(line) == 0 or line.startswith('#'):
                 continue
-            # get keys and values
+            """get keys and values"""
             k, _, v = line.partition('=')
             log.debug_config('  line: \'%s\'' % (line))
             k = k.strip()
             v = v.strip()
-            # cast to correct type and save into weber.config
+            """save values"""
+            if k in weber.config:
+                """existing value, use property to save it"""
+                weber.config[k].value = v
+            else:
+                """proprietary value, add new as str"""
+                weber.config['@'+k] = weber.Option(v, str)
+            '''    
             if k in weber.config.keys():
                 if weber.config[k][1] in (bool, int, float):
                     if weber.config[k][1] == bool:
@@ -73,6 +86,7 @@ def reload_config():
                     weber.config[k] = (weber.config[k][1](v), weber.config[k][1])
                 else:
                     weber.config[k] = (v, str)
+            '''
             log.info('  %s = %s' % (k, v))
             log.debug_config('  parsed: %s = %s (%s)' % (k, v, str(type(v))))
 

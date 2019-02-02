@@ -41,8 +41,10 @@ class HTTP():
         return HTTPConnectionThread(conn, local_port, rrid, tamper_request, tamper_response, template_rr, request_modifier)
 
     @staticmethod
-    def create_request(data, should_tamper, no_stopper=False, request_modifier=None):
-        return HTTPRequest(data, should_tamper, no_stopper, request_modifier)
+    #def create_request(data, should_tamper, no_stopper=False, request_modifier=None):
+    #    return HTTPRequest(data, should_tamper, no_stopper, request_modifier)
+    def create_request(data):
+        return HTTPRequest(data)
     
     @staticmethod
     def create_response(data, should_tamper, no_stopper=False):
@@ -476,7 +478,8 @@ class HTTPRequest():
     """
     HTTP Request class
     """
-    def __init__(self, data, should_tamper, no_stopper=False, request_modifier=None):
+    #def __init__(self, data, should_tamper, no_stopper=False, request_modifier=None):
+    def __init__(self, data):
         """
             data = request data (bytes)
             should_tamper = should the request be tampered? (bool)
@@ -487,24 +490,24 @@ class HTTPRequest():
         if not data:
             return
         
-        if request_modifier:
-            data = request_modifier(data)
+        #if request_modifier:
+        #    data = request_modifier(data)
 
         # set up tampering mechanism
-        self.should_tamper = should_tamper
-        self.forward_stopper = None if no_stopper else os.pipe()
+        #self.should_tamper = should_tamper
+        #self.forward_stopper = None if no_stopper else os.pipe()
         #self.forward_stopper = os.pipe()
-        self.tampering = self.should_tamper
+        #self.tampering = self.should_tamper
         
-        self.onlypath = '' 
-        self.time_forwarded = None
+        #self.onlypath = '' 
+        #self.time_forwarded = None
 
         # parse data
         self.parse(data)
 
         # allow forwarding immediately?
-        if not self.should_tamper:
-            self.forward()
+        #if not self.should_tamper:
+        #    self.forward()
 
 
     def parse(self, data):
@@ -522,7 +525,7 @@ class HTTPRequest():
             self.method = self.path = self.version = b' '
             self.integrity = False
             return 
-        fd_add_comment(self.forward_stopper, 'Request (%s %s) forward stopper' % (self.method, self.path))
+        #fd_add_comment(self.forward_stopper, 'Request (%s %s) forward stopper' % (self.method, self.path))
         self.parameters = {}
         
         for line in lines[1:-1]:

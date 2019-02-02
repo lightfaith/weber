@@ -105,43 +105,43 @@ def question(string='', new_line=True, stdout=True):
 Debug functions
 """
 def debug_command(string=''):
-    if positive(config['debug.command'][0]):
+    if positive(config['debug.command'].value):
         show_marked('cmd.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_config(string=''):
-    if positive(config['debug.config'][0]):
+    if positive(config['debug.config'].value):
         show_marked('cnf.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_mapping(string=''):
-    if positive(config['debug.mapping'][0]):
+    if positive(config['debug.mapping'].value):
         show_marked('map.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_parsing(string=''):
-    if positive(config['debug.parsing'][0]):
+    if positive(config['debug.parsing'].value):
         show_marked('prs.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_socket(string=''):
-    if positive(config['debug.socket'][0]):
+    if positive(config['debug.socket'].value):
         show_marked('sck.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_chunks(string=''):
-    if positive(config['debug.chunks'][0]):
+    if positive(config['debug.chunks'].value):
         show_marked('cnk.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_tampering(string=''):
-    if positive(config['debug.tampering'][0]):
+    if positive(config['debug.tampering'].value):
         show_marked('tpr.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_analysis(string=''):
-    if positive(config['debug.analysis'][0]):
+    if positive(config['debug.analysis'].value):
         show_marked('anl.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_protocol(string=''):
-    if positive(config['debug.protocol'][0]):
+    if positive(config['debug.protocol'].value):
         show_marked('prt.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 def debug_flow(string=''):
-    if positive(config['debug.flow'][0]):
+    if positive(config['debug.flow'].value):
         show_marked('flw.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
 

@@ -3,7 +3,10 @@
 Weber
 """
 
-import sys, readline, re, random
+import random
+import re
+import readline
+import sys
 from source import log
 from source import lib
 
@@ -14,6 +17,8 @@ from source import commands
 from source.proxy import *
 from source.lib import exit_program
 
+
+'''
 # get first target
 try:
     dump_file = None
@@ -22,35 +27,69 @@ try:
         dump_file = sys.argv[2]
         log.info('Restoring saved session \'%s\'...' % dump_file)
 except:
-    log.err('Usage: %s example.com\n           %s --restore dump.web' % (sys.argv[0], 
                                                                          sys.argv[0]))
     exit_program(-1, None)
+'''
+"""
+Argument parsing
+"""
+arguments = {
+    'listen_host': '127.0.0.1',
+    'listen_port': 8080,
+    'restore_file': None,
+
+} # TODO also from config
+try:
+    arg_start = 1
+    while arg_start < len(sys.argv):
+        actual_arg = sys.argv[arg_start]
+        if actual_arg == '-h':
+            """Different listen host"""
+            arguments['listen_host'] = sys.argv[arg_start + 1]
+            arg_start += 2
+        if actual_arg == '-p':
+            """Different listen port"""
+            arguments['listen_port'] = int(sys.argv[arg_start + 1])
+            arg_start += 2
+        elif actual_arg == '--restore':
+            """Restore saved session"""
+            arguments['restore_file'] = sys.argv[arg_start + 1]
+            arg_start += 2
+        else:
+            """UNKNOWN; continue"""
+            arg_start += 1
+except:
+    log.err('\n'.join([
+        'Usage: {0} [-h <LISTENHOST>] [-p <LISTENPORT>]', 
+        '       {0} --restore dump.web',
+    ]).format(sys.argv[0]))
+print(arguments)
 
 
 # motd
 log.newline()
 log.info(weber.motd[random.randint(0, len(weber.motd)-1)])
 
-# restore dump if necessary and start proxy
-if dump_file:
+# restore dump if necessary and start proxy # TODO after proxy startup?
+if arguments['restore_file']:
+    # TODO not tested
     import pickle
-    with open(dump_file, 'rb') as f:
+    with open(arguments['restore_file'], 'rb') as f:
         loaded_data = pickle.load(f)
         init_target = loaded_data[0]
-        weber.proxy = Proxy(init_target)
+        weber.proxy = Proxy(arguments['listen_port'])
         
-        weber.config, weber.rrdb, weber.tdb, weber.mapping, weber.events, weber.spoof_files, weber.spoof_request_regexs, weber.spoof_response_regexs, weber.brute, weber.forward_fail_uris, weber.servers = loaded_data[1:]
+        #weber.config, weber.rrdb, weber.tdb, weber.mapping, weber.events, weber.spoof_files, weber.spoof_request_regexs, weber.spoof_response_regexs, weber.brute, weber.forward_fail_uris, weber.servers = loaded_data[1:]
         
-        #weber.protocols,
-        #weber.commands,
-        #weber.analysis,
-        weber.rrdb.setup_lock()
-        weber.tdb.setup_lock()
-        weber.mapping.setup_lock()
-
-
-else: # run new proxy
-    weber.proxy = Proxy(init_target)
+        ##weber.protocols,
+        ##weber.commands,
+        ##weber.analysis,
+        #weber.rrdb.setup_lock()
+        #weber.tdb.setup_lock()
+        #weber.mapping.setup_lock()
+else: 
+    """run new proxy"""
+    weber.proxy = Proxy(arguments['listen_host'], arguments['listen_port'])
 weber.proxy.start()
 
 while True:

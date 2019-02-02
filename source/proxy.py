@@ -2,7 +2,15 @@
 """
 Proxy methods are defined here.
 """
-import os, socket, time, ssl, subprocess, traceback, errno, threading, re
+import errno
+import os
+import re
+import socket
+import ssl
+import subprocess
+import threading
+import time
+import traceback
 from select import select
 
 from source import weber
@@ -10,11 +18,17 @@ from source import log
 #from source.structures import Request, Response, URI
 from source.lib import *
 from source.fd_debug import *
-
+from source.protocols import protocols
 
 class ProxyLib():
+    """
+
+    """
     @staticmethod
     def recvall(conn):
+        """
+
+        """
         timeout = None # for the first recv
         chunks = []
         while True:
@@ -31,15 +45,107 @@ class ProxyLib():
                 break
         return b''.join(chunks)
 
-
     @staticmethod
     def spoof_regex(data, translations):
+        """
+
+        """
         for old, new in translations:
             data = re.sub(old.encode(), new.encode(), data)
         return data
 
 
 class Proxy(threading.Thread):
+    """
+
+    """
+    def __init__(self, listen_host, listen_port):
+        """
+
+        """
+        threading.Thread.__init__(self)
+        self.listen_host = listen_host
+        self.listen_port = listen_port
+        self.stopper = os.pipe()
+        self.terminate = False
+        self.threads = []
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(
+                                          socket.SOL_SOCKET, 
+                                          socket.SO_REUSEADDR, 
+                                          1)
+        try:
+            self.socket.bind((self.listen_host, self.listen_port))
+        except Exception as e:
+            log.err('Cannot bind: %s' % (str(e)))
+            return
+        log.debug_flow('Proxy created.')
+
+    def stop(self):
+        """
+
+        """
+        self.terminate = True
+        os.write(self.stopper[1], b'1')
+        log.debug_flow('Proxy ordered to terminate.')
+
+    def run(self):
+        """
+
+        """
+        log.debug_flow('Proxy started.')
+        try:
+            self.socket.listen(1)
+        except Exception as e:
+            log.err('Cannot listen:', str(e))
+            return
+
+        """main proxy loop"""
+        while True:
+            r, _, _ = select([self.socket, self.stopper[0]], [], [])
+            if self.terminate:
+                """termination request? send signal to all threads"""
+                for t in self.threads:
+                    t.stop()
+                time.sleep(0.1)
+            else:
+                """new connection, accept it"""
+                try:
+                    conn, client = self.socket.accept()
+                    log.debug_socket('Connection accepted from \'%s:%d\'' 
+                                     % client)
+                    log.debug_flow('Proxy creating new ConnectionThread.')
+                    """run new thread with accepted socket"""
+                    t = ConnectionThread(conn)
+                    t.start()
+                    """add thread to array OR wait for it"""
+                    if weber.config['proxy.threaded'].value:
+                        self.threads.append(t)
+                    else:
+                        t.join()
+                except socket.timeout:
+                    pass
+                except:
+                    log.err('Proxy error.')
+                    traceback.print_exc()
+            """clean terminated threads"""
+            threads_todel = [t for t in self.threads if not t.isAlive()]
+            for t in threads_todel:
+                t.join()
+                self.threads.remove(t)
+            """terminate and all threads joined?"""
+            if self.terminate and not self.threads:
+                self.socket.shutdown(socket.SHUT_RDWR)
+                break
+        """end of main proxy loop"""
+        log.debug_flow('Proxy stopped.')
+
+
+
+
+        
+    
+    '''
     def __init__(self, init_target=''):
         threading.Thread.__init__(self)
         self.init_target = init_target
@@ -190,10 +296,153 @@ class Proxy(threading.Thread):
                 self.ssl_server_socket.shutdown(socket.SHUT_RDWR)
                 break
         log.debug_flow('Proxy stopped.')
+    '''
 
 
+class ConnectionThread(threading.Thread):
+    """
+
+    """
+    def __init__(self, conn, from_weber=False):
+        """
+
+        """
+        threading.Thread.__init__(self)
+        self.conn = conn
+        self.server = None
+        self.from_weber = from_weber
+        self.request = None
+        self.response = None
+        self.rrid = None
+        self.terminate = False
+        #self.stopper = os.pipe()
+        self.ssl = False
+        self.protocol = weber.protocols['http']
+
+    def add_request(self, request):
+        """Adds request bytes manually.
+
+        If the Request-Response pair is a copy, use known Request data.
+        
+        Args:
+            request (): 
+        """
+        self.request = request
+
+    def stop(self):
+        """
+
+        """
+        self.terminate = True
+        #if self.stopper:
+        #    os.write(self.stopper[1], b'1')
+
+    def run(self):
+        """
+
+        """
+        
+        keepalive = False if self.from_weber else True
+
+        while keepalive:
+            if self.terminate: break
+            """read request from socket if needed"""
+            if not self.from_weber:
+                request_raw = ProxyLib.recvall(self.conn)
+                #if not self.request.integrity:
+                #    log.debug_socket('Request integrity failure.')
+                #    self.conn.close()
+                #else:
+                if True:
+                    log.debug_socket('Request received.')
+            
+            if self.terminate: break
+            """convert to protocol-specific object"""
+            print(request_raw)
+            self.request = self.protocol.create_request(request_raw)
+            print(self.request)
+            self.rrid = weber.rrdb.get_new_rrid()
+
+            """provide Weber page with CA if path == /weber"""
+            if self.request.path == b'/weber':
+                self.send_response(b'HTTP/1.1 200 OK\r\n\r\nWeber page WORKS!')
+                # TODO return CA and stuff
+                break
+
+            # TEST SSL # WORKS!!!!!!
+            if self.request.path == b'seznam.cz:443':
+                self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
+                self.conn = ssl.wrap_socket(
+                        self.conn, 
+                        certfile='ssl/pki/issued/seznam.cz.crt',
+                        keyfile='ssl/pki/private/seznam.cz.key',
+                        do_handshake_on_connect=True,
+                        server_side=True,
+                        )
+                print(ProxyLib.recvall(self.conn))
+                self.send_response(b'HTTP/1.1 200 OK\r\n\r\nWeber page WORKS!')
+                # TODO return CA and stuff
+                break
+
+            """respond to CONNECT methods, create server"""
+            """or parse http request and create server"""
+            # TODO
+
+            if self.terminate: break
+            self.request.pre_tamper()
+            """tamper/forward request"""
+            # TODO stopper
+            if self.can_forward_request:
+                self.continue_forwarding()
+            if self.terminate: break
+            """tamper/forward response"""
+            # TODO stopper
+            if self.can_forward_response:
+                self.continue_sending_response()
 
 
+    def continue_forwarding(self):
+        """
+
+        """
+        self.request.post_tamper()
+        self.server.get_rps_approval() # sleep for RPS limiting
+        if self.terminate: return
+        response_raw = self.forward(self.server.uri, self.request.bytes())
+        if self.terminate: return
+        self.response = self.protocol.create_response(response_raw)
+        self.response.pre_tamper()
+
+
+    def continue_sending_response(self):
+        """
+
+        """
+        self.response.post_tamper()
+        if self.terminate: return
+        self.send_response(response.bytes())
+
+
+    def send_response(self, data):
+        """
+        Uses self.conn socket to send data back to browser.
+
+        Args:
+            data (bytes): data to send
+        """
+        """stop if originating from Weber"""
+        if self.from_weber:
+            return
+
+        if data:
+            log.debug_socket('Forwarding response (%d B).' % len(data))
+            self.conn.send(data)
+            log.debug_socket('Response sent.')
+        else:
+            log.debug_parsing('Response is weird.')
+        
+
+'''
 class ConnectionThread(threading.Thread):
     def __init__(self, conn, local_port, rrid, tamper_request, tamper_response, template_rr=None, request_modifier=None, Protocol=None):
         # conn - socket to browser, None if from template
@@ -306,15 +555,4 @@ class ConnectionThread(threading.Thread):
             return None
 
     
-    def send_response(self, response):
-        if not self.Protocol:
-            return None
-        if response is not None:
-            log.debug_socket('Forwarding response (%d B).' % len(response.data))
-            self.conn.send(response.bytes())
-
-            log.debug_socket('Response sent.')
-        else:
-            log.debug_parsing('Response is weird.')
- 
-
+ '''
