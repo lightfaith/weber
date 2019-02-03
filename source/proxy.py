@@ -15,7 +15,7 @@ from select import select
 
 from source import weber
 from source import log
-#from source.structures import Request, Response, URI
+from source.structures import Server, URI, RR
 from source.lib import *
 from source.fd_debug import *
 from source.protocols import protocols
@@ -358,9 +358,7 @@ class ConnectionThread(threading.Thread):
             
             if self.terminate: break
             """convert to protocol-specific object"""
-            print(request_raw)
             self.request = self.protocol.create_request(request_raw)
-            print(self.request)
             self.rrid = weber.rrdb.get_new_rrid()
 
             """provide Weber page with CA if path == /weber"""
@@ -369,6 +367,7 @@ class ConnectionThread(threading.Thread):
                 # TODO return CA and stuff
                 break
 
+            '''
             # TEST SSL # WORKS!!!!!!
             if self.request.path == b'seznam.cz:443':
                 self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
@@ -383,10 +382,39 @@ class ConnectionThread(threading.Thread):
                 self.send_response(b'HTTP/1.1 200 OK\r\n\r\nWeber page WORKS!')
                 # TODO return CA and stuff
                 break
+            '''
 
             """respond to CONNECT methods, create server"""
             """or parse http request and create server"""
-            # TODO
+            if self.server is None:
+                server_uri = URI(self.request.path).tostring(path=False)
+                if server_uri in weber.servers.keys():
+                    """already have this server, use it"""
+                    self.server = weber.servers[server_uri]
+                else:
+                    """create new server"""
+                    log.debug_flow('Creating new server instance \'%s\'.' % 
+                                   server_uri)
+                    self.server = Server(server_uri)
+                    weber.servers[server_uri] = self.server
+                """confirm if it was CONNECT"""
+                if self.request.method == b'CONNECT':
+                    log.debug_flow('Accepting CONNECTion.')
+                    self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
+                """upgrade if SSL"""
+                if self.server.ssl:
+                    self.conn = ssl.wrap_socket(
+                            self.conn, 
+                            certfile=self.server.certificate_path,
+                            keyfile=self.server.certificate_key_path,
+                            do_handshake_on_connect=True,
+                            server_side=True,
+                            )
+                continue
+                    
+            # TODO test; del
+            self.send_response(b'HTTP/1.1 200 OK\r\nContent-Length: 17\r\n\r\nWeber page WORKS!')
+            continue
 
             if self.terminate: break
             self.request.pre_tamper()

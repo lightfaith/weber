@@ -13,9 +13,10 @@ except:
 cert = ssl.get_server_certificate((domain, port))
 
 x509 = load_certificate(FILETYPE_PEM, cert)
-components = {k.decode(): v.decode() 
-              for k,v in x509.get_subject().get_components()}
-for component in ['C', 'ST', 'L', 'O', 'CN']:
-    print(components.get(component) or '')
+#components = {k.decode(): v.decode() 
+#              for k,v in x509.get_subject().get_components()}
+#for component in ['C', 'ST', 'L', 'O', 'CN']:
+#    print(components.get(component) or '')
+print(x509)
 
 

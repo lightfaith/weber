@@ -165,9 +165,9 @@ Dictionary of analysis modules, filled in source/analysis/*
 analysis = {}
 
 """
-List of Server() objects holding info about RRs, cookies etc.
+Dictionary of Server() objects holding info about RRs, cookies etc.
 """
-servers = []
+servers = OrderedDict()
 
 """
 MOTDs

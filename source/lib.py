@@ -2,7 +2,15 @@
 """
 General-purpose stuff is defined here.
 """
-import os, sys, signal, io, time, pdb, traceback
+import io
+import os
+import pdb
+import signal
+import subprocess
+import sys
+import time
+import traceback
+
 from gzip import GzipFile
 #from source import weber
 from source import log
@@ -274,7 +282,11 @@ def create_folders_from_uri(root, uri):
 
 
 
-
+def run_command(command):
+    p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+    (out, err) = p.communicate()
+    return (p.returncode, out, err)
 
 # --
 

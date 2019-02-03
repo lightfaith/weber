@@ -1,6 +1,6 @@
 # For use with Easy-RSA 3.1 and OpenSSL or LibreSSL
 
-RANDFILE		= /media/veracrypt1/owncloud/python/weber/ssl/pki/.rnd
+RANDFILE		= /home/primo/owncloud/python/weber/ssl/pki/.rnd
 
 ####################################################################
 [ ca ]
@@ -9,17 +9,17 @@ default_ca	= CA_default		# The default ca section
 ####################################################################
 [ CA_default ]
 
-dir		= /media/veracrypt1/owncloud/python/weber/ssl/pki	# Where everything is kept
-certs		= /media/veracrypt1/owncloud/python/weber/ssl/pki			# Where the issued certs are kept
-crl_dir		= /media/veracrypt1/owncloud/python/weber/ssl/pki			# Where the issued crl are kept
-database	= /media/veracrypt1/owncloud/python/weber/ssl/pki/index.txt	# database index file.
-new_certs_dir	= /media/veracrypt1/owncloud/python/weber/ssl/pki/certs_by_serial	# default place for new certs.
+dir		= /home/primo/owncloud/python/weber/ssl/pki	# Where everything is kept
+certs		= /home/primo/owncloud/python/weber/ssl/pki			# Where the issued certs are kept
+crl_dir		= /home/primo/owncloud/python/weber/ssl/pki			# Where the issued crl are kept
+database	= /home/primo/owncloud/python/weber/ssl/pki/index.txt	# database index file.
+new_certs_dir	= /home/primo/owncloud/python/weber/ssl/pki/certs_by_serial	# default place for new certs.
 
-certificate	= /media/veracrypt1/owncloud/python/weber/ssl/pki/ca.crt	 	# The CA certificate
-serial		= /media/veracrypt1/owncloud/python/weber/ssl/pki/serial 		# The current serial number
-crl		= /media/veracrypt1/owncloud/python/weber/ssl/pki/crl.pem 		# The current CRL
-private_key	= /media/veracrypt1/owncloud/python/weber/ssl/pki/private/ca.key	# The private key
-RANDFILE	= /media/veracrypt1/owncloud/python/weber/ssl/pki/.rand		# private random number file
+certificate	= /home/primo/owncloud/python/weber/ssl/pki/ca.crt	 	# The CA certificate
+serial		= /home/primo/owncloud/python/weber/ssl/pki/serial 		# The current serial number
+crl		= /home/primo/owncloud/python/weber/ssl/pki/crl.pem 		# The current CRL
+private_key	= /home/primo/owncloud/python/weber/ssl/pki/private/ca.key	# The private key
+RANDFILE	= /home/primo/owncloud/python/weber/ssl/pki/.rand		# private random number file
 
 x509_extensions	= basic_exts		# The extentions to add to the cert
 

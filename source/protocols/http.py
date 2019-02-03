@@ -503,6 +503,8 @@ class HTTPRequest():
         #self.time_forwarded = None
 
         # parse data
+        self.method = b''
+        # TODO other defaults
         self.parse(data)
 
         # allow forwarding immediately?

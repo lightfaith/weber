@@ -51,11 +51,53 @@ class Server():
             ssl (bool): 
             uri (str): URI of the target, path will be stripped
         """
-        
         self.cookies = OrderedDict()
-        self.certificate = None
+        self.certificate_path = None
+        self.certificate_key_path = None
+        self.real_certificate = None
         self.uri = Server.get_uri(uri)
-        self.ssl = self.uri.scheme.endswith('s')
+        self.ssl = self.uri.scheme.endswith('s') # TODO whitelist? Cause IS-IS
+        
+        """get certificate if ssl"""
+        if self.ssl:
+            """generate fake one"""
+            domain = self.uri.domain
+            self.certificate_path = 'ssl/pki/issued/%s.crt' % domain
+            self.certificate_key_path = 'ssl/pki/private/%s.key' % domain
+            """already exists?"""
+            try:
+                with open(self.certificate_path, 'r') as f:
+                    pass
+            except:
+                log.debug_flow('Generating fake certfificate for \'%s\'' % 
+                               domain)
+                returncode, o, e = run_command('./create_certificate.sh %s' % 
+                                               domain)
+                if returncode != 0:
+                    log.err('Certificate creation failed:')
+                    print(o)
+                    print(e)
+
+            """download real one"""
+            import ssl
+            from OpenSSL.crypto import FILETYPE_PEM, load_certificate
+            x509 = load_certificate(FILETYPE_PEM, ssl.get_server_certificate(
+                        (self.uri.domain, self.uri.port)))
+            # TODO parse and store important stuff in self.certificate
+            #print('subject', x509.get_subject())
+            #for i in range(x509.get_extension_count()):
+            #    print('extension', x509.get_extension(i))
+            #print('issuer', x509.get_issuer())
+            #print('nb', x509.get_notBefore())
+            #print('na', x509.get_notAfter())
+            #print('pubkey', x509.get_pubkey())
+            #print('sn', x509.get_serial_number())
+            #print('sigalgo', x509.get_signature_algorithm())
+            #print('expi', x509.has_expired())
+
+
+            
+
 
 
 
@@ -104,24 +146,50 @@ class URI():
 
     def clone(self):
         return URI(self.__bytes__())
+    
+    def tostring(self, scheme=True, credentials=True, domain=True, 
+                 port=True, path=True):
+        """
 
+        """
+        args = []
+        format_strings = []
+        """prepare all desired parts"""
+        for allowed, value, format_string in (
+                (scheme, self.scheme, '%s://'),
+                (credentials and self.user and self.password, 
+                 '%s:%s' % (self.user, self.password), 
+                 '%s@'),
+                (domain, self.domain, '%s'),
+                (port, self.port, ':%d'),
+                (path, self.path, '%s'),
+            ):
+            if allowed:
+                args.append(value)
+                format_strings.append(format_string)
+        """return prepared stuff"""
+        return (''.join(format_strings)) % tuple(args)
+
+    '''        
     def get_value(self, path=True):
         if len(self.user)>0 and len(self.password)>0:
             return '%s://%s:%s@%s:%d%s' % (self.scheme, self.user, self.password, self.domain, self.port, (self.path if path else ''))
         else:
             return '%s://%s:%d%s' % (self.scheme, self.domain, self.port, (self.path if path else ''))
-    
+    '''
+    '''
     def get_mapping_path(self):
         if self.path.startswith('/WEBER-MAPPING/'):
             return '/'.join(self.path.split('/')[:3])
         else:
             return ''
+    '''
 
     def __str__(self):
-        return 'URI(%s)' % (self.get_value()) 
+        return 'URI(%s)' % (self.tostring()) 
 	
     def __bytes__(self):
-        return self.get_value().encode()
+        return self.tostring().encode()
 
     def __repr__(self):
         return self.__str__()
@@ -139,12 +207,15 @@ class URI():
             _, _, port = domainport.partition(':')
         return port.isdigit()
 
-
     @staticmethod
     def parse(uri):
-        # splits https://admin:pasword@example.com:4443/x/y.html into scheme, user, pass, domain, port and path
+        """
+        splits 'https://admin:pasword@example.com:4443/x/y.html' 
+        into scheme, user, pass, domain, port and path
+
+        """
         if isinstance(uri, URI):
-            uri = uri.get_value()
+            uri = uri.tostring()
         elif type(uri) == bytes:
             uri = uri.decode()
 
@@ -156,7 +227,8 @@ class URI():
             scheme, _, noscheme = uri.partition('://')
             for _, protocol in weber.protocols.items():
                 if scheme in (protocol.scheme, protocol.ssl_scheme):
-                    log.debug_protocol('  Found protocol by scheme: %s -> %s' % (scheme, protocol.scheme))
+                    log.debug_protocol('  Found protocol by scheme: %s -> %s' %
+                                       (scheme, protocol.scheme))
                     Protocol = protocol
         else:
             scheme = None
@@ -182,7 +254,9 @@ class URI():
                 if not Protocol:
                     for _, protocol in weber.protocols.items():
                         if int(port) in (protocol.port, protocol.ssl_port):
-                            log.debug_protocol('  Found protocol by port: %s -> %s' % (port, protocol.scheme))
+                            log.debug_protocol(
+                                '  Found protocol by port: %s -> %s' % 
+                                (port, protocol.scheme))
                             Protocol = protocol
             else:
                 if Protocol:
@@ -190,20 +264,21 @@ class URI():
                         port = Protocol.port
                     elif scheme == Protocol.ssl_scheme:
                         port = Protocol.ssl_port
-                log.debug_protocol('  Using protocol to get port: %s -> %d' % (protocol.scheme, port))
+                log.debug_protocol('  Using protocol to get port: %s -> %d' % 
+                                   (protocol.scheme, port))
         else:
             domain = domainport
             if not Protocol: # use default value
-                log.debug_protocol('  Setting default protocol: %s' % (weber.config['proxy.default_protocol'][0]))
-                Protocol = weber.protocols.get(weber.config['proxy.default_protocol'][0])
+                log.debug_protocol('  Setting default protocol: %s' % 
+                                   (weber.protocols['http']))
+                Protocol = weber.protocols.get('http')
             if not Protocol: # bad config
-                log.err('Unknown default protocol \'%s\'' % (weber.config['proxy.default_protocol'][0]))
+                log.err('Cannot use default protocol.')
                 return tuple()
             
-            port = Protocol.ssl_port if scheme == Protocol.ssl_scheme else Protocol.port
+            port = (Protocol.ssl_port if scheme == Protocol.ssl_scheme 
+                    else Protocol.port)
             
-            #port = Protocol.ssl_port if scheme == Protocol.ssl_scheme else Protocol.port # default
-        
         if not scheme:
             for Protocol in weber.protocols.values():
                 if port == Protocol.port:
@@ -631,7 +706,7 @@ class Event():
         self.rrids = set()
         self.type = ''
 
-
+'''
 class Server():
     """
     The Server class represents remote endpoint. It holds the URI, list of relevant RRs, cookies etc.
@@ -646,4 +721,4 @@ class Server():
     def add_rr(self, rr):
         self.rrs[rr.rrid] = rr
 
-    
+''' 
