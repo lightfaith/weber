@@ -109,4 +109,5 @@ ENV/
 # Private stuff
 nogit/
 
-
+# generated SSL stuff
+ssl/pki/
