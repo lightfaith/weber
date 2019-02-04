@@ -23,7 +23,7 @@ class Server():
     Attributes:
 
     """
-
+    '''
     @staticmethod
     def get_uri(uri : str):
         """Translates uri (str) into uri (obj:URI), strips everything 
@@ -41,32 +41,39 @@ class Server():
         result = URI(uri)
         result.path = '/'
         return result
-
+    '''
 
     def __init__(self, uri):
         """Creates instance of the Server.
         Args:
-            cookies ():
-            certificate ():
-            ssl (bool): 
-            uri (str): URI of the target, path will be stripped
+            attributes (dict) - dict of attributes, so access can be
+                                thread-safe
+               cookies ():
+               certificate ():
+               ssl (bool): 
+               uri (str): URI of the target, path will be stripped
         """
-        self.cookies = OrderedDict()
-        self.certificate_path = None
-        self.certificate_key_path = None
-        self.real_certificate = None
-        self.uri = Server.get_uri(uri)
-        self.ssl = self.uri.scheme.endswith('s') # TODO whitelist? Cause IS-IS
+        self.attributes = {} # TODO append one at the time
+            'cookies': OrderedDict(),
+            'certificate_path': None,
+            'certificate_key_path': None,
+            'self.real_certificate': None,
+            'uri': URI(uri),
+            'ssl': self.attributes['uri'].scheme.endswith('s') # TODO whitelist? Cause IS-IS
+        }
+        self.attributes['uri'].path = ''
         
         """get certificate if ssl"""
-        if self.ssl:
+        if self.attributes['ssl']:
             """generate fake one"""
-            domain = self.uri.domain
-            self.certificate_path = 'ssl/pki/issued/%s.crt' % domain
-            self.certificate_key_path = 'ssl/pki/private/%s.key' % domain
+            domain = self.attributes['uri'].domain
+            self.attributes['certificate_path'] = ('ssl/pki/issued/%s.crt' 
+                                                   % domain)
+            self.attributes['certificate_key_path'] = ('ssl/pki/private/%s.key'
+                                                       % domain)
             """already exists?"""
             try:
-                with open(self.certificate_path, 'r') as f:
+                with open(self.attributes['certificate_path'], 'r') as f:
                     pass
             except:
                 log.debug_flow('Generating fake certfificate for \'%s\'' % 
@@ -82,8 +89,9 @@ class Server():
             import ssl
             from OpenSSL.crypto import FILETYPE_PEM, load_certificate
             x509 = load_certificate(FILETYPE_PEM, ssl.get_server_certificate(
-                        (self.uri.domain, self.uri.port)))
-            # TODO parse and store important stuff in self.certificate
+                        (self.attributes['uri'].domain, 
+                         self.attributes['uri'].port)))
+            # TODO parse and store important stuff in self.attributes['real_certificate']
             #print('subject', x509.get_subject())
             #for i in range(x509.get_extension_count()):
             #    print('extension', x509.get_extension(i))
@@ -94,11 +102,63 @@ class Server():
             #print('sn', x509.get_serial_number())
             #print('sigalgo', x509.get_signature_algorithm())
             #print('expi', x509.has_expired())
+    def get_rps_approval(self):
+        """
+        Sleeps to limit the request spamming for given server.
+        """
+        return True # TODO
 
 
+class ServerManager:
+    """
+    Class to thread-safe access to server instances.
+    Thanks to this Server instances do not have to hold locks and
+    therefore are serializable.
+    Replaces weber.servers
+    """
+    # TODO LOCKS EVERYWHERE!!!!!!
+    def __init__(self):
+        """
+
+        """
+        self.__servers = OrderedDict()
+
+    def create_server(self, uri):
+        """
+        Creates a new server instance IF there is not already 
+        an appropriate one.
+        """
+        if uri not in self.__servers.keys():
+            """new; create one"""
+            log.debug_server('Creating new server instance')
+            self.__servers[uri] = Server(uri)
+        else:
+            log.debug_server('Using existing server instance') 
             
+        """return index"""
+        server_id = self.__servers.keys().index(uri)
+        return  server_id
+    
+    def load_servers(self, servers):
+        """
+        Loads serialized servers
+        """
+        pass # TODO
 
+    def get(self, server_id, name):
+        # TODO whitelist
+        pass
 
+    def set(self, server_id, name, value):
+        # TODO whitelist
+        pass
+
+    def get_rps_approval(self, server_id):
+        self.__servers.items()[server_id][1].get_rps_approval()
+    # TODO replace weber.servers
+    
+"""initialize global ServerManager"""
+weber.serman = ServerManager()
 
 
 class URI():

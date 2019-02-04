@@ -47,8 +47,10 @@ class HTTP():
         return HTTPRequest(data)
     
     @staticmethod
-    def create_response(data, should_tamper, no_stopper=False):
-        return HTTPResponse(data, should_tamper, no_stopper)
+    #def create_response(data, should_tamper, no_stopper=False):
+    #    return HTTPResponse(data, should_tamper, no_stopper)
+    def create_response(data):
+        return HTTPResponse(data)
     
     @staticmethod
     def request_string(req, res, colored=False):
@@ -159,7 +161,7 @@ class HTTPConnectionThread(ConnectionThread):
                 self.keepalive = (request.headers.get(b'Connection') == b'Keep-Alive')
             else:
                 self.keepalive = False # whole template request used; do not repeat
-            
+            '''
             # get URI() from request
             log.debug_flow('Getting localuri from request.')
             downstream_referer = None
@@ -215,7 +217,7 @@ class HTTPConnectionThread(ConnectionThread):
                     upstream_referer = None
 
                 request.path = self.remoteuri.path.encode()
-                request.parse_method()
+                request.parse_method() # TODO why here?
                 request.headers[b'Host'] = self.remoteuri.domain.encode() if self.remoteuri.port in [self.Protocol.port, self.Protocol.ssl_port] else b'%s:%d' % (self.remoteuri.domain.encode(), self.remoteuri.port)
                 if upstream_referer:
                     request.headers[b'Referer'] = upstream_referer.get_value().encode()
@@ -261,7 +263,6 @@ class HTTPConnectionThread(ConnectionThread):
                         del request.headers[undesired]
                     except:
                         pass
-
             # tamper request
             log.debug_flow('Attempting to tamper the request.')
             if request.tampering and positive(weber.config['overview.realtime'][0]):
@@ -461,6 +462,7 @@ class HTTPConnectionThread(ConnectionThread):
             if self.stopper:
                 os.close(self.stopper[fd])
         self.stopper = None
+        '''
         log.debug_flow('HTTP ConnectionThread terminated.')
         
 
@@ -477,6 +479,7 @@ class HTTPConnectionThread(ConnectionThread):
 class HTTPRequest():
     """
     HTTP Request class
+
     """
     #def __init__(self, data, should_tamper, no_stopper=False, request_modifier=None):
     def __init__(self, data):
@@ -502,68 +505,90 @@ class HTTPRequest():
         #self.onlypath = '' 
         #self.time_forwarded = None
 
-        # parse data
+        """set default values"""
+        self.original = data
         self.method = b''
-        # TODO other defaults
-        self.parse(data)
+        self.path = b''
+        self.version = b''
+        self.headers = OrderedDict()
+        
+        self.data = b''
+        self.parameters = {}
+        """parse received data"""
+        self.parse()
 
         # allow forwarding immediately?
         #if not self.should_tamper:
         #    self.forward()
 
 
-    def parse(self, data):
-        # parse given bytes (from socket, editor, file, ...)
-        self.original = data
-        self.headers = OrderedDict()
-        self.data = b''
-        
-        lines = data.splitlines()
-        line0 = ProxyLib.spoof_regex(lines[0], weber.spoof_request_regexs.items())
+    def parse(self):
+        """
+        parse given bytes (from socket, editor, file, ...)
+        """
+        if not self.version: # TODO test; correct? necessary?
+            """first parse -> from original"""
+            lines = self.original.splitlines()
+        else:
+            """parse after tamper -> from bytes()"""
+            lines = self.bytes().splitlines()
+        """parse first line, spoof request regexs"""
+        line0 = ProxyLib.spoof_regex(lines[0], 
+                                     weber.spoof_request_regexs.items())
         try:
             self.method, self.path, self.version = tuple(line0.split(b' '))
         except:
-            log.err('Invalid first header.') # TODO but keep as single string and use it
-            self.method = self.path = self.version = b' '
+            log.err('Invalid first header: \'%s\'' % line0) # TODO but keep as single string and use it
+            self.method = b''
+            self.path = b''
+            self.version = b''
             self.integrity = False
             return 
         #fd_add_comment(self.forward_stopper, 'Request (%s %s) forward stopper' % (self.method, self.path))
-        self.parameters = {}
-        
+        """spoof request regex in headers"""
         for line in lines[1:-1]:
             if not line:
                 continue
-            line = ProxyLib.spoof_regex(line, weber.spoof_request_regexs.items())
+            line = ProxyLib.spoof_regex(line, 
+                                        weber.spoof_request_regexs.items())
             k, _, v = line.partition(b':')
             # TODO duplicit keys? warn
             self.headers[k.title()] = v.strip()
-           
+        """spoof request regex in data"""   
         if len(lines[-1]) > 0:
-            self.data = ProxyLib.spoof_regex(lines[-1], weber.spoof_request_regexs.items())
-
+            self.data = ProxyLib.spoof_regex(lines[-1], 
+                                            weber.spoof_request_regexs.items())
+        """parse method (for parameters)"""
         self.parse_method()
+        """end of request parsing"""
         self.integrity = True
 
     
     def sanitize(self):
-        # alter the Request so we don't have to deal with problematic options, e.g. encoding
-        # should not be used on the original (downstream) Request
-
+        """
+        alter the Request so we don't have to deal with problematic 
+        options, e.g. encoding
+        """
+        '''
         # disable encoding
         self.headers.pop(b'Accept-Encoding', None)
         # disable Range
         self.headers.pop(b'Range', None)
         self.headers.pop(b'If_Range', None)
+        '''
 
 
-    def clone(self, should_tamper=False, no_stopper=True, request_modifier=None):
-        return HTTP.create_request(self.bytes(), should_tamper, no_stopper, request_modifier)
+    #def clone(self, should_tamper=False, no_stopper=True, request_modifier=None):
+    def clone(self):
+        #return HTTP.create_request(self.bytes(), should_tamper, no_stopper, request_modifier)
+        return HTTP.create_request(self.bytes())
 
-    def forward(self):
+    '''def forward(self):
         self.tampering = False
         if self.forward_stopper:
             os.write(self.forward_stopper[1], b'1')
         self.time_forwarded = datetime.now()
+    '''
 
     def parse_method(self):
         # GET, HEAD method
@@ -585,26 +610,42 @@ class HTTPRequest():
                 v = None if v == b'' else v
                 self.parameters[k] = v
         # TRACE works natively
+        # CONNECT works natively (?)
         # TODO more methods
     
     def compute_content_length(self):
-        if weber.config['http.recompute_request_length'][0] and self.data:
+        """
+
+        """
+        if weber.config['http.recompute_request_length'].value and self.data:
             log.debug_parsing('Computing Content-Length...')
             self.headers[b'Content-Length'] = b'%d' % (len(self.data))
 
-
-
-    def lines(self, headers=True, data=True, as_string=True):
-        parts = []
+    def lines(self, headers=True, data=True, splitter=b'\r\n', as_string=True):
+        """
         
+        Args:
+            headers (bool, optional) - if headers should be included
+            data (bool) - if data should be included
+            splitter (bytes) - type of line split (\n or \r\n)
+            as_string (bool) - if result should be str (else bytes)
+        Returns:
+            parts (obj:list of str/bytes) - list of lines
+        """
+        parts = []
         if headers:
+            """add first line and headers"""
             parts.append(b'%s %s %s' % (self.method, self.path, self.version))
-            parts += [b'%s: %s' % (k, '' if v is None else v) for k, v in self.headers.items()]
+            parts += [b'%s: %s' % (k, (v if v else ''))
+                      for k,v in self.headers.items()]
+            """add header-data newline"""
             if data:
                 parts.append(b'')
         if data:
-            parts += self.data.split(b'\n')
+            """add data"""
+            parts += self.data.split(splitter)
         try:
+            """turn to str if desired"""
             parts = [x.decode() for x in parts] if as_string else parts
         except Exception as e:
             log.warn('Response encoding problem occured: '+str(e))
@@ -613,9 +654,20 @@ class HTTPRequest():
         
 
     def __str__(self):
-        return '\n'.join(self.lines())
+        """
+        For user printing
+        """
+        return '\n'.join(self.lines(splitter=b'\n'))
 
     def bytes(self, headers=True, data=True):
+        """
+        for data sending
+        """
+        return b'\r\n'.join(self.lines(headers,
+                                       data,
+                                       splitter=b'\r\n', as_string=False))
+        # TODO is that a good replacement for: ?
+        '''
         result = b''
         if headers:
             result += b'%s %s %s\r\n' % (self.method, self.path, self.version)
@@ -624,6 +676,50 @@ class HTTPRequest():
         if data and len(self.data)>0:
             result += self.data
         return result
+        '''
+
+    def pre_tamper(self):
+        """
+        Things that must be done before the request can be tampered by
+        Weber user.
+
+        NOTE: request_regexs have spoofed in parse() method already.
+        """
+        log.debug_tampering('Running post_tamper for the request.')
+        """remove undesired headers"""
+        log.debug_flow('Attempting to remove undesired headers.')
+        undesired = weber.config['http.drop_request_headers'].value.encode()
+        for u in undesired.split(b' '):
+            try:
+                del self.headers[u]
+            except:
+                pass
+        """remove cache headers if not desired"""
+        if positive(weber.config['http.no_cache'].value):
+            log.debug_flow('Attempting to remove cache headers.')
+            undesired = (
+                b'If-Modified-Since',
+                b'If-None-Match',
+            )
+            for u in undesired:
+                try:
+                    del self.headers[u]
+                except:
+                    pass
+        """end of request pre_tamper method"""
+        log.debug_tampering('Request is ready for tamper.')
+
+    def post_tamper(self):
+        """
+
+        """
+        log.debug_tampering('Running post_tamper for the request.')
+        """compute Content-Length"""
+        log.debug_flow('Attempting to re-compute Content-Length.')
+        self.compute_content_length()
+        """end of request post_tamper method"""
+        log.debug_tampering('Request is ready for forward.')
+
 
 
 
@@ -633,35 +729,52 @@ class HTTPRequest():
 
 
 class HTTPResponse():
+    """
 
-    def __init__(self, data, should_tamper, no_stopper=False):
+    """
+    #def __init__(self, data, should_tamper, no_stopper=False):
+    def __init__(self, data):
+        """
+
+        """
+        '''
         # set up tampering mechanism
         self.should_tamper = should_tamper
         self.forward_stopper = None if no_stopper else os.pipe()
         self.tampering = should_tamper
-        
-        
-        # parse data
-        self.parse(data)
+        '''
+        self.original = data
+        self.status = b''
+        self.statuscode = 0
+        self.version = b''
+        """parse data"""
+        self.parse()
 
         
         # allow forwarding?
-        if not self.should_tamper:
-            self.forward()
+        #if not self.should_tamper:
+        #    self.forward()
     
-    """@staticmethod
+    '''@staticmethod
     def spoof_regex(data):
         for old, new in weber.spoof_regexs.items():
             data = re.sub(old.encode(), new.encode(), data)
         return data
-    """
-    def parse(self, data):
-        # parse given bytes (from socket, editor, file, ...)
-        self.original = data
-        lines = data.split(b'\r\n')
-
-        line0 = ProxyLib.spoof_regex(lines[0], weber.spoof_response_regexs.items())
-
+    '''
+    def parse(self):
+        """
+        parse given bytes (from socket, editor, file, ...)
+        """
+        if not self.version: 
+            """first parse -> from original"""
+            lines = self.original.splitlines()
+        else:
+            """parse after tamper -> from bytes()"""
+            #lines = self.bytes().split(b'\r\n')
+            lines = self.bytes().splitlines()
+        """parse first line, spoof response regexs"""
+        line0 = ProxyLib.spoof_regex(lines[0], 
+                                     weber.spoof_response_regexs.items())
         self.version = line0.partition(b' ')[0]
         try:
             self.statuscode = int(line0.split(b' ')[1])
@@ -669,22 +782,22 @@ class HTTPResponse():
             log.warn('Non-integer status code received.')
             self.statuscode = 0
         self.status = b' '.join(line0.split(b' ')[2:])
-        fd_add_comment(self.forward_stopper, 'Response (%d %s) forward stopper' % (self.statuscode, self.status))
-        
+        #fd_add_comment(self.forward_stopper, 'Response (%d %s) forward stopper' % (self.statuscode, self.status))
+        """parse headers, spoof response regexs"""
         self.headers = OrderedDict()
-
-        # load first set of headers (hopefully only one)
         line_index = 1
         for line_index in range(1, len(lines)):
-            line = ProxyLib.spoof_regex(lines[line_index], weber.spoof_response_regexs.items())
-            if len(line) == 0:
+            line = ProxyLib.spoof_regex(lines[line_index], 
+                                        weber.spoof_response_regexs.items())
+            if not line:
                 break
             k, _, v = line.partition(b':')
             self.headers[k.title()] = v.strip()
         
         line_index += 1
 
-        # chunked Transfer-Encoding?
+        """parse data, spoof response regexs"""
+        """ deal with chunked Transfer-Encoding"""
         data_line_index = line_index # backup the value
         try:
             self.data = b''
@@ -701,15 +814,23 @@ class HTTPResponse():
                     line_index += 1
                     tmpchunk += lines[line_index]
                     if len(tmpchunk) == chunksize: # chunk is complete
-                        log.debug_chunks('end of chunk near %s' % str(lines[line_index][-30:]))
+                        log.debug_chunks('end of chunk near %s' 
+                                         % str(lines[line_index][-30:]))
                         line_index += 1
                         break
                     if len(tmpchunk) > chunksize: # problem...
-                        log.warn('Loaded chunk is bigger than advertised: %d > %d' % (len(tmpchunk), chunksize))
+                        log.warn('Loaded chunk bigger than advertised: %d > %d'
+                                 % (len(tmpchunk), chunksize))
                         break
                     # chunk spans multiple lines...
                     tmpchunk += b'\r\n'
-                self.data += ProxyLib.spoof_regex(tmpchunk, weber.spoof_response_regexs.items())
+                #self.data += ProxyLib.spoof_regex(tmpchunk, 
+                #                                  weber.spoof_response_regexs.items())
+                # rather spoof after chunking? # TODO test
+                self.data += tmpchunk
+            self.data = ProxyLib.spoof_regex(
+                            self.data,
+                            weber.spoof_response_regexs.items())
         except Exception as e:
             line_index = data_line_index # restore the value
             log.debug_chunks('unchunking failed:')
@@ -717,13 +838,17 @@ class HTTPResponse():
             #traceback.print_exc()
             log.debug_chunks('treating as non-chunked...')
             # treat as normal data
-            self.data = ProxyLib.spoof_regex(b'\r\n'.join(lines[line_index:]), weber.spoof_response_regexs.items())
+            self.data = ProxyLib.spoof_regex(
+                            b'\r\n'.join(lines[line_index:]), 
+                            weber.spoof_response_regexs.items())
             # TODO test for matching Content-Type (HTTP Response-Splitting etc.)
         
     
     def sanitize(self):
+        """
         # alter the Response so we don't have to deal with problematic options, e.g. chunked
         # should NOT be used on the original (upstream) Response
+        """
         
         # strip Transfer-Encoding...
         self.headers.pop(b'Transfer-Encoding', None)
@@ -732,38 +857,58 @@ class HTTPResponse():
         self.headers.pop(b'Upgrade', None)
 
 
-    def clone(self, should_tamper=True, no_stopper=True):
-        return HTTP.create_response(self.bytes(), should_tamper, no_stopper)
-
+    #def clone(self, should_tamper=True, no_stopper=True):
+    #    return HTTP.create_response(self.bytes(), should_tamper, no_stopper)
+    def clone(self):
+        return HTTP.create_response(self.bytes())
+    '''
     def forward(self):
         self.tampering = False
         if self.forward_stopper:
             os.write(self.forward_stopper[1], b'1')
- 
+    '''
+    
+
     def compute_content_length(self): # TODO also optional?
         #if b'Content-Length' not in self.headers.keys() and len(self.data)>0:
         if self.data: # TODO added; test it
             log.debug_parsing('Computing Content-Length...')
             self.headers[b'Content-Length'] = b'%d' % (len(self.data))
 
-    def lines(self, headers=True, data=True, as_string=True):
+    def lines(self, headers=True, data=True, splitter=b'\r\n', as_string=True):
+        """
+        
+        Args:
+            headers (bool, optional) - if headers should be included
+            data (bool) - if data should be included
+            splitter (bytes) - type of line split (\n or \r\n)
+            as_string (bool) - if result should be str (else bytes)
+        Returns:
+            parts (obj:list of str/bytes) - list of lines
+        """
         parts = []
         if headers:
+            """add first line and headers"""
             self.compute_content_length()
-            parts.append(b'%s %d %s' % (self.version, self.statuscode, self.status))
-            parts += [b'%s: %s' % (k, '' if v is None else v) for k, v in self.headers.items()]
+            parts.append(b'%s %d %s' % 
+                         (self.version, self.statuscode, self.status))
+            parts += [b'%s: %s' % (k, v if v else '') 
+                      for k, v in self.headers.items()]
+            """add header-data newline"""
             if data:
                 parts.append(b'')
         if data:
-            # Do not include if string is desired and it is binary content
-            # TODO more Content-Types
-            if as_string and self.statuscode < 300 and not is_content_type_text(self.headers.get(b'Content-Type')):
+            """add data"""
+            """not if binary and as_string is wanted"""
+            if as_string and self.statuscode < 300 and not \
+                    is_content_type_text(self.headers.get(b'Content-Type')):
                 parts.append(b'--- BINARY DATA ---')
             else:
-                parts += self.data.split(b'\n')
+                parts += self.data.split(splitter)
             
         try:
-            parts = [x.decode('utf-8', 'replace') for x in parts] if as_string else parts # not accurate
+            parts = [x.decode('utf-8', 'replace') 
+                     for x in parts] if as_string else parts # not accurate # TODO needed?
         except Exception as e:
             log.warn('Response encoding problem occured: %s' % (str(e)))
             log.warn('For '+str(self.headers))
@@ -771,8 +916,23 @@ class HTTPResponse():
         return parts
 
     def __str__(self):
-        return '\n'.join(self.lines())
+        """
+        For user printing
+        """
+        return '\n'.join(self.lines(splitter=b'\n'))
 
+    def bytes(self, headers=True, data=True):
+        """
+        for data sending and storage 
+        """
+        # TODO really?
+        return b'\r\n'.join(self.lines(headers, 
+                                       data, 
+                                       splitter=b'\r\n', 
+                                       as_string=False))
+    '''
+    def __str__(self):
+        return '\n'.join(self.lines())
     def bytes(self, headers=True, data=True):
         self.compute_content_length()
         #data = lib.gzip(self.data) if self.headers.get(b'Content-Encoding') == b'gzip'  else self.data
@@ -784,8 +944,71 @@ class HTTPResponse():
             result += b'\r\n\r\n' + self.data 
         result += b'\r\n\r\n'
         return result
+    '''
+    def pre_tamper(self):
+        """
+        Things that must be done before the response can be tampered by
+        Weber user.
+
+        NOTE: response_regexs have been spoofed in parse() method.
+        """
+        log.debug_tampering('Running pre_tamper for the response.')
+        self.sanitize()
+        
+        # remove undesired headers
+        log.debug_flow('Attempting to remove undesired headers.')
+        undesired = weber.config['http.drop_response_headers'].value.encode()
+        for u in undesired.split(b' '):
+            try:
+                del self.headers[u]
+            except:
+                pass
+
+        # remove cache headers if not desired
+        if positive(weber.config['http.no_cache'].value):
+            log.debug_flow('Attempting to remove cache headers.')
+            for undesired in (b'Expires',):
+                try:
+                    del self.headers[undesired]
+                except:
+                    pass
+            self.headers[b'Cache-Control'] = (b'no-cache, no-store, '
+                                             b'must-revalidate')
+            self.headers[b'Pragma'] = b'no-cache'
+        ''' IN ConnectionThread
+        # store response data if desired
+        if weber.config['crawl.save_path'].value:
+            if response.statuscode >= 200 and response.statuscode < 300:
+                # TODO what about custom error pages? but probably not...
+                # TODO test content-length and 0 -> directory? 
+                log.debug_flow('Saving response data into file.')
+                file_path = create_folders_from_uri(
+                                weber.config['crawl.save_path'].value,
+                                self.remoteuri)
+                with open(file_path, 'wb') as f:
+                    f.write(b'\n'.join(response.lines(headers=False, as_string=False)))
+        """end of response pre_tamper method"""
+        '''
+        log.debug_tampering('Response is ready for tamper.')
+
+    def post_tamper(self, full_uri):
+        """
+
+        """
+        log.debug_tampering('Running post_tamper for the response.')
+        """spoof files if desired (with or without GET arguments)"""
+        log.debug_flow('Spoofing files.')
+        spoof_path = (full_uri.tostring() 
+                      if positive(weber.config['spoof.arguments'].value) 
+                      else full_uri.tostring().partition('?')[0])
+        if spoof_path in weber.spoof_files.keys():
+            self.spoof(weber.spoof_files[spoof_path])
+        """end of response post_tamper method"""
+        log.debug_tampering('Response is ready for forward.')
     
+
     def find_html_attr(self, tagstart, tagend, attr):
+        # TODO refactor
         # this method uses find_between() method to locate attributes and their values for specified tag
         # returns list of (absolute_position, match_string) of attributes
         tagmatches = find_between(self.data, tagstart, tagend)
@@ -798,7 +1021,7 @@ class HTTPResponse():
             #    linkmatches = find_between(self.data, b'%s=' % (attr), b' ', startpos=pos, endpos=endpos, inner=True)
             result += linkmatches
         return result
-
+    '''
     def replace_links(self, tagstart, tagend, attr, prepend=b''):
         # this method searches desired tag attributes using find_html_attr() and replaces its content
         # result is directly written into self.data
@@ -820,9 +1043,10 @@ class HTTPResponse():
         # join oldparts and newparts
         result = filter(None, [x for x in itertools.chain.from_iterable(itertools.zip_longest(oldparts, newparts))])
         self.data = b''.join(result)
-
-
+    '''
+    
     def find_tags(self, startends, attrs=None, valueonly=False):
+        # TODO test/refactor
         result = []
         if attrs is None:
             for startbytes, endbytes in startends:
@@ -834,7 +1058,9 @@ class HTTPResponse():
 
 
     def spoof(self, path):
-        # replace data with file content
+        """
+        replace data with file content
+        """
         try:
             with open(path, 'rb') as f:
                 self.data = f.read()

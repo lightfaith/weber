@@ -63,7 +63,6 @@ except:
         'Usage: {0} [-h <LISTENHOST>] [-p <LISTENPORT>]', 
         '       {0} --restore dump.web',
     ]).format(sys.argv[0]))
-print(arguments)
 
 
 # motd

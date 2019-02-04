@@ -25,7 +25,7 @@ class ProxyLib():
 
     """
     @staticmethod
-    def recvall(conn):
+    def recvall(conn, comment):
         """
 
         """
@@ -36,7 +36,8 @@ class ProxyLib():
             timeout = 0.4
             try:
                 recv_size = 65536
-                log.debug_socket('Getting %d bytes...' % (recv_size))
+                log.debug_socket('Getting %d bytes from %s...' 
+                                 % (recv_size, comment))
                 buf = conn.recv(recv_size)
                 if not buf:
                     break
@@ -301,23 +302,34 @@ class Proxy(threading.Thread):
 
 class ConnectionThread(threading.Thread):
     """
+    
 
+    Attributes:
+        downstream_socket () - socket from browser
+        
     """
-    def __init__(self, conn, from_weber=False):
+    def __init__(self, downstream_socket, from_weber=False):
         """
-
+        
         """
         threading.Thread.__init__(self)
-        self.conn = conn
-        self.server = None
+        self.downstream_socket = downstream_socket
+        #self.server = None
+        self.server_id = -1
         self.from_weber = from_weber
         self.request = None
         self.response = None
         self.rrid = None
         self.terminate = False
-        #self.stopper = os.pipe()
-        self.ssl = False
+        self.stopper = os.pipe() # to allow new request
+        #self.ssl = False
+        self.full_uri = None # for one loop run only, but accessed from functions
+        self.upstream_socket = None
+        self.connect_method = False
+        self.can_forward_request = True # TODO from option
+        self.can_forward_response = True # TODO from option
         self.protocol = weber.protocols['http']
+
 
     def add_request(self, request):
         """Adds request bytes manually.
@@ -328,14 +340,26 @@ class ConnectionThread(threading.Thread):
             request (): 
         """
         self.request = request
+        # TODO not fully implemented / tested
 
+    def wait_for_continuation_signal(self):
+        """
+
+        """
+        r, _, _ = select([self.stopper[0]], [], [])
+
+    def send_continuation_signal(self):
+        if self.stopper:
+            os.write(self.stopper[1], b'1')
+    
     def stop(self):
         """
-
+        
         """
         self.terminate = True
-        #if self.stopper:
-        #    os.write(self.stopper[1], b'1')
+        """send continuation signal in case we are tampering"""
+        self.send_continuation_signal()
+
 
     def run(self):
         """
@@ -343,22 +367,32 @@ class ConnectionThread(threading.Thread):
         """
         
         keepalive = False if self.from_weber else True
+        """send signal so first request can be processed"""
+        self.send_continuation_signal()
 
         while keepalive:
+            """wait for signal - cause previous request can be tampered"""
+            self.wait_for_continuation_signal()
             if self.terminate: break
+            time.sleep(0.5) # TODO delete after testing recvall loops
             """read request from socket if needed"""
             if not self.from_weber:
-                request_raw = ProxyLib.recvall(self.conn)
+                request_raw = ProxyLib.recvall(self.downstream_socket, 
+                                               comment='downstream')
                 #if not self.request.integrity:
                 #    log.debug_socket('Request integrity failure.')
-                #    self.conn.close()
+                #    self.downstream_socket.close()
                 #else:
                 if True:
+                    print(request_raw)
                     log.debug_socket('Request received.')
             
             if self.terminate: break
             """convert to protocol-specific object"""
             self.request = self.protocol.create_request(request_raw)
+            if not self.request.integrity:
+                log.debug_protocol('Received request is invalid.')
+                continue
             self.rrid = weber.rrdb.get_new_rrid()
 
             """provide Weber page with CA if path == /weber"""
@@ -371,100 +405,202 @@ class ConnectionThread(threading.Thread):
             # TEST SSL # WORKS!!!!!!
             if self.request.path == b'seznam.cz:443':
                 self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
-                self.conn = ssl.wrap_socket(
-                        self.conn, 
+                self.downstream_socket = ssl.wrap_socket(
+                        self.downstream_socket, 
                         certfile='ssl/pki/issued/seznam.cz.crt',
                         keyfile='ssl/pki/private/seznam.cz.key',
                         do_handshake_on_connect=True,
                         server_side=True,
                         )
-                print(ProxyLib.recvall(self.conn))
+                print(ProxyLib.recvall(self.downstream_socket, 'downstream'))
                 self.send_response(b'HTTP/1.1 200 OK\r\n\r\nWeber page WORKS!')
                 # TODO return CA and stuff
                 break
             '''
-
+            """get actual full_uri"""
+            if self.connect_method:
+                self.full_uri = weber.serman.get(self.server_id, 'uri').clone()
+                self.full_uri.path = self.request.path.decode()
+            else:
+                self.full_uri = URI(self.request.path) # TODO try for non-proxy requests?
+                
+            print(self.full_uri.tostring())
+            #print(s for s, _ in weber.servers.items())
             """respond to CONNECT methods, create server"""
             """or parse http request and create server"""
-            if self.server is None:
-                server_uri = URI(self.request.path).tostring(path=False)
-                if server_uri in weber.servers.keys():
-                    """already have this server, use it"""
-                    self.server = weber.servers[server_uri]
-                else:
-                    """create new server"""
-                    log.debug_flow('Creating new server instance \'%s\'.' % 
-                                   server_uri)
-                    self.server = Server(server_uri)
-                    weber.servers[server_uri] = self.server
+            if self.server_id == -1:
+                """get valid URI"""
+                server_uri = self.full_uri.tostring(path=False)
+                """create or get existing server"""
+                self.server_id = weber.serman.create_server(server_uri)
+                """create socket to server"""
+                self.upstream_socket = socket.socket(socket.AF_INET, 
+                                                     socket.SOCK_STREAM)
+                #self.upstream_socket.setsockopt(socket.SOL_SOCKET, 
+                #                                socket.SO_KEEPALIVE, 
+                #                                1)
+                server_uri = weber.serman.get(self.server_id, 'uri')
+                self.upstream_socket.connect((server_uri.domain,
+                                              server_uri.port))
                 """confirm if it was CONNECT"""
                 if self.request.method == b'CONNECT':
+                    self.connect_method = True
                     log.debug_flow('Accepting CONNECTion.')
                     self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
-                """upgrade if SSL"""
-                if self.server.ssl:
-                    self.conn = ssl.wrap_socket(
-                            self.conn, 
-                            certfile=self.server.certificate_path,
-                            keyfile=self.server.certificate_key_path,
+                """upgrade both sockets if SSL"""
+                if weber.serman.get_attribute(self.server_id, 'ssl'):
+                    self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
+                    try:
+                        self.downstream_socket = ssl.wrap_socket(
+                            self.downstream_socket, 
+                            certfile=weber.serman.get(self.server_id, 
+                                                      'certificate_path'),
+                            keyfile=weber.serman.get(self.server_id, 
+                                                     'certificate_key_path'),
                             do_handshake_on_connect=True,
-                            server_side=True,
-                            )
-                continue
+                            server_side=True)
+                    except Exception as e:
+                        log.err('Upgrading to SSL failed: %s' % str(e))
+                        continue
+                """continue listening if it was CONNECT"""
+                if self.request.method == b'CONNECT':
+                    continue
                     
+            '''
             # TODO test; del
+            print('sending test response')
             self.send_response(b'HTTP/1.1 200 OK\r\nContent-Length: 17\r\n\r\nWeber page WORKS!')
             continue
-
+            '''
+            
             if self.terminate: break
             self.request.pre_tamper()
             """tamper/forward request"""
             # TODO stopper
-            if self.can_forward_request:
+            if not self.can_forward_request:
+                log.debug_tampering('Request is tampered.')
+            else:
+                log.debug_tampering('Forwarding request without tampering.')
+                """tampering; print overview if appropriate"""
+                if positive(
+                        weber.config['interaction.realtime_overview'].value):
+                    # TODO RRDB overview of this
+                    pass
                 self.continue_forwarding()
-            if self.terminate: break
-            """tamper/forward response"""
-            # TODO stopper
-            if self.can_forward_response:
-                self.continue_sending_response()
-
+            """
+            following parts are in continue_forwarding method,
+            as those can happen much later
+            """
+            """terminate loop - no keepalive"""  # TODO is that normal?
+            keepalive = False
+        """
+        wait for tampered request to be processed if keepalive
+        is off, ignore if termination is in effect.
+        """
+        if not self.terminate:
+            self.wait_for_continuation_signal()
+        """cleanup"""
+        log.debug_flow('Closing sockets and stopper for ConnectionThread')
+        self.upstream_socket.close()
+        self.downstream_socket.close()
+        for fd in (0, 1):
+            os.close(self.stopper[fd])
+        self.stopper = None
+        log.debug_flow('ConnectionThread terminated.')
+        """end of ConnectionThread run() method"""
 
     def continue_forwarding(self):
         """
 
         """
+        # TODO if from weber and brute is set: replace; maybe in post_tamper method
         self.request.post_tamper()
-        self.server.get_rps_approval() # sleep for RPS limiting
+        weber.serman.get_rps_approval(self.server_id) # sleep for RPS limiting
         if self.terminate: return
-        response_raw = self.forward(self.server.uri, self.request.bytes())
+        response_raw = self.forward(self.request.bytes())
         if self.terminate: return
         self.response = self.protocol.create_response(response_raw)
         self.response.pre_tamper()
+        
+        if self.terminate: return
+        """save response data into folder tree if desired"""
+        if weber.config['crawl.save_path'].value:
+            if (self.response.statuscode >= 200 
+                    and self.response.statuscode < 300):
+                # TODO what about custom error pages? but probably not...
+                # TODO test content-length and 0 -> directory?
+                log.debug_flow('Saving response data into file.')
+                file_path = create_folders_from_uri(
+                    weber.config['crawl.save_path'].value,
+                    self.full_uri.tostring()) 
+                with open(file_path, 'wb') as f:
+                    f.write(b'\r\n'.join(self.response.bytes(headers=False)))
+
+        """tamper/forward response"""
+        if not self.can_forward_response:
+            log.debug_tampering('Response is tampered.')
+            """tampering; print overview if appropriate"""
+            if positive(
+                    weber.config['interaction.realtime_overview'].value):
+                # TODO RRDB overview of this
+                pass
+        else:
+            log.debug_tampering('Forwarding response without tampering.')
+            self.continue_sending_response()
+        """
+        following parts are in continue_sending_response method,
+        as those can happen much later
+        """
+
+    def forward(self, data):
+        if self.upstream_socket:
+            log.debug_flow('Forwarding request to server.')
+            log.debug_socket('Forwarding request... (%d B)' 
+                             % (len(data)))
+            self.upstream_socket.send(data)
+            result = ProxyLib.recvall(self.upstream_socket, comment='upstream')
+            if result:
+                log.debug_flow('Response received from server.')
+                print(result)
+                return result
+            #else:
+            #    weber.forward_fail_uris.append(str(self.localuri))
+            #    return b''
+        else:
+            log.err('No upstream socket - cannot forward.')
+            return b''
 
 
     def continue_sending_response(self):
         """
 
         """
-        self.response.post_tamper()
+        self.response.post_tamper(self.full_uri)
         if self.terminate: return
-        self.send_response(response.bytes())
-
+        """print overview if desired"""
+        if positive(
+                weber.config['interaction.realtime_overview'].value):
+            # TODO RRDB overview of this
+            pass
+        self.send_response(self.response.bytes())
+        """allow new request"""
+        self.send_continuation_signal()
 
     def send_response(self, data):
         """
-        Uses self.conn socket to send data back to browser.
+        Uses self.downstream_socket socket to send data back to browser.
 
         Args:
             data (bytes): data to send
         """
         """stop if originating from Weber"""
         if self.from_weber:
+            log.debug_socket('Weber origin -> not sending response.')
             return
 
         if data:
             log.debug_socket('Forwarding response (%d B).' % len(data))
-            self.conn.send(data)
+            self.downstream_socket.send(data)
             log.debug_socket('Response sent.')
         else:
             log.debug_parsing('Response is weird.')

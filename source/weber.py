@@ -2,9 +2,9 @@
 """
 Global structures are defined here.
 """
+from source import log
 from collections import OrderedDict
 from source.lib import positive
-
 """
 Default configuration options
 """
@@ -14,9 +14,10 @@ class Option():
     """
 
     """
-    def __init__(self, default_value, data_type):
+    def __init__(self, default_value, data_type, immutable=False):
         self.__data_type = data_type
         self.value = default_value
+        self.immutable = immutable
 
     @property
     def value(self):
@@ -34,6 +35,9 @@ class Option():
                         (v, self.__data_type))
 
 
+# settings
+config['crawl.save_path'] = Option('', str) # where to store received files
+
 # debug settings
 config['debug.analysis'] =   Option(True, bool)   # stuff relevant to analysis
 config['debug.chunks'] =     Option(True, bool)   # stuff relevant to Transfer-Encoding: chunked parsing
@@ -43,10 +47,20 @@ config['debug.flow'] =       Option(True, bool)   # stuff relevant to program fl
 config['debug.mapping'] =    Option(True, bool)   # stuff relevant to local-remote URL mapping
 config['debug.parsing'] =    Option(True, bool)   # stuff relevant to request/response parsing
 config['debug.protocol'] =   Option(True, bool)   # stuff relevant to protocol decisioning
+config['debug.server'] =     Option(True, bool)   # stuff relevant to server management
 config['debug.socket'] =     Option(True, bool)   # stuff relevant to socket communication
 config['debug.tampering'] =  Option(True, bool)   # stuff relevant to tampering
 
+config['http.no_cache'] = Option(False, bool) # should caching be forcefully disabled?
+config['http.drop_request_headers'] = Option('', str) # which headers (separated by spaces) should be dropped?
+config['http.drop_response_headers'] = Option('Content-Security-Policy Expect-CT', str) # which headers (separated by spaces) should be dropped?
+config['http.recompute_request_length'] = Option(True, bool) # whether request Content-Length should be recomputed before sending to server
+
+config['interaction.realtime_overview'] = Option(True, bool)  # show request/response communication on the fly
+
 config['proxy.threaded'] = Option(True, bool)
+
+config['spoof.arguments'] = Option(False, bool) # should arguments be taken into consideration for spoofing?
 
 '''
 # analysis settings
@@ -59,27 +73,19 @@ config['brute.value_separator'] =   (';', str)   # separator between values
 config['brute.rps'] =   (20, int)   # maximum requests per second
 config['brute.set_separator'] =   ('\n', str)   # separator between value sets
 
-# crawl settings
-config['crawl.save_path'] = ('', str) # where to store received files
-
 
 # edit settings
 config['edit.command'] = ('vim %s', str)
 
 # http settings
-config['http.recompute_request_length'] = (True, bool) # whether request Content-Length should be recomputed before sending to server
 config['http.show_password'] = (False, bool) # should password fields be visible? # TODO implement
 config['http.show_hidden'] = (False, bool) # should hidden fields be visible? # TODO implement
-config['http.no_cache'] = (False, bool) # should caching be forcefully disabled?
-config['http.drop_request_headers'] = ('', str) # which headers (separated by spaces) should be dropped?
-config['http.drop_response_headers'] = ('Content-Security-Policy Expect-CT', str) # which headers (separated by spaces) should be dropped?
 
 # how Weber will interact with user
 config['interaction.show_upstream'] = (True, bool) # what version of RR should be presented?
 config['interaction.command_modifier'] = ('$', str) # which character would start special sequences (line intervals, less)
 
 # overview settings
-config['overview.realtime'] =     (True, bool)  # show request/response communication on the fly
 config['overview.short_request'] = (False, bool) # reduce size of too long URLs
 config['overview.show_event'] =    (False, bool) # show event ID in overview
 config['overview.show_size'] =     (True, bool)  # show response size in overview
@@ -95,7 +101,6 @@ config['proxy.sslkey'] =   ('key.pem', str)
 config['proxy.default_protocol'] = ('http', str) 
 
 # spoof
-config['spoof.arguments'] = (False, bool) # should arguments be taken into consideration for spoofing?
 
 # tamper
 config['tamper.requests'] =  (False, bool) # should all requests be tampered by default?
@@ -163,12 +168,17 @@ Dictionary of analysis modules, filled in source/analysis/*
 }
 """
 analysis = {}
-
+'''
 """
 Dictionary of Server() objects holding info about RRs, cookies etc.
 """
 servers = OrderedDict()
-
+'''
+"""
+ServerManager instance to thread-safe Server operations
+initialized in source/structures.py
+"""
+serman = None
 """
 MOTDs
 """

@@ -266,7 +266,11 @@ def hexdump(data):
 
     
 def create_folders_from_uri(root, uri):
-    uri_path = uri.get_value().replace(':', '_').replace('//', '__')
+    """
+    Args:
+        uri (str) - URI of the server + path in str format
+    """
+    uri_path = uri.replace(':', '_').replace('//', '__')
     # only folder? create fake index.html
     if uri_path.endswith('/'):
         uri_path += 'index.html'

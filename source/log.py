@@ -120,6 +120,10 @@ def debug_parsing(string=''):
     if positive(config['debug.parsing'].value):
         show_marked('prs.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
 
+def debug_server(string=''):
+    if positive(config['debug.server'].value):
+        show_marked('srv.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+
 def debug_socket(string=''):
     if positive(config['debug.socket'].value):
         show_marked('sck.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
