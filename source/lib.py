@@ -29,7 +29,7 @@ def negative(x):
         return True
     return False
 
-def quitstring(x):
+def quit_string(x):
     if type(x) != str:
         return False
     x = x.lower()

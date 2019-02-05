@@ -17,25 +17,45 @@ from source.fd_debug import *
 
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
 doc = {}
-doc['help'] = """Welcome! This is Weber Framework, an open-source protocol proxy. With Weber you can see the traffic you are creating, modify it and more!
+doc['help'] = (
+"""Welcome! This is Weber Framework, an open-source protocol proxy.
+With Weber you can see the traffic, modify it and more!
 
-Currently, Weber will forward to '{remote}' anything sent to '{local}:{port}' (plaintext) or '{local}:{sslport}' (encrypted). Use your browser, client or CLI tool to generate some traffic. You should see some lines popping out in Weber. 
-That is realtime traffic overview and it indicates Weber is serving as a proxy. Use `pr` command to show the overview manually.
+Currently, Weber will forward anything sent to '{local}:{port}' but
+allows you to see the content and maniuplate it. Use your browser,
+client or CLI tool to generate some traffic. You should see some 
+lines popping out in Weber. 
+That is realtime traffic overview and it indicates Weber is serving 
+as a proxy. Use `pr` command to show the overview manually.
 
-You may be interested in the content of each request or response. This can be shown with `prq` and `prs` commands, respectively. Depending on the protocol being proxied, you can also print headers (`prh`) or data (`prd`). 
+You may be interested in the content of each request or response. This
+can be shown with `prq` and `prs` commands, respectively. Depending
+on the protocol being proxied, you can also print headers (`prh`) 
+or data (`prd`). 
 
-There is a number of options Weber can be configured with. You can use 'weber.conf' file or `o` and `os` commands to view and alter them.
+There is a number of options Weber can be configured with. You can use 
+'weber.conf' file or `o` and `os` commands to view and alter them.
 
-Weber has many features. To list basic commands, their syntax and short description, use '?' symbol. For more specific commands, write part of the command and then append the '?' symbol. For example, writing `prq?` show commands relevant to Printing ReQuests. Not all of them are shown, though, some of them needs longer part of the command to be shown.
+Weber has many features. To list basic commands, their syntax and short
+description, use '?' symbol. For more specific commands, write part 
+of the command and then append the '?' symbol. For example, writing 
+`prq?` show commands relevant to Printing ReQuests. Not all of them are 
+shown, though, some of them needs longer part of the command to show.
 
 To read more about commands, append two '??' symbols.
 
-Sometimes result can be huge. Use '~' symbol to show lines with matching keyword. For example, `prqh~Cookie` will show only request headers which have something to do with Cookie. If you need more complex patterns, use '~~' for regex matching. For example `prsh~~(200 OK|404 Not Found)`.
+Sometimes result can be huge. Use '~' symbol to show lines with 
+matching keyword. For example, `prqh~Cookie` will show only request 
+headers which have something to do with Cookie. If you need more 
+complex patterns, use '~~' for regex matching. For example 
+`prsh~~(200 OK|404 Not Found)`.
 
-Append `{modifier}L` to show the result in less. If you want to use different symbol than '{modifier}', consider changing the 'interaction.command_modifier' option.
+Append `{modifier}L` to show the result in less. If you want to use
+different symbol than '{modifier}', consider changing the 
+'interaction.command_modifier' option.
 
 HAVE FUN.
-"""
+""") # TODO fix commands
 
 # analysis
 doc['a'] = """Weber supports automatic testing of common security weaknesses. Enabled tests can be printed with `ap` command.

@@ -70,6 +70,8 @@ config['overview.show_size'] =     Option(True, bool)  # show response size in o
 config['overview.show_time'] =     Option(False, bool) # show forwarded time in overview # TODO also relative?
 config['overview.show_uri'] =      Option(True, bool)  # show uri in overview
 
+config['proxy.host'] =     Option('localhost', str, immutable=True)
+config['proxy.port'] =     Option(8555, int, immutable=True)
 config['proxy.threaded'] = Option(True, bool)
 
 config['spoof.arguments'] = Option(False, bool) # should arguments be taken into consideration for spoofing?
@@ -94,8 +96,6 @@ config['http.show_hidden'] = (False, bool) # should hidden fields be visible? # 
 config['interaction.show_upstream'] = (True, bool) # what version of RR should be presented?
 
 # proxy-relevant settings
-config['proxy.host'] =     ('localhost', str)
-config['proxy.port'] =     (8555, int)
 config['proxy.sslport'] =  (8556, int)
 config['proxy.sslcert'] =  ('cert.pem', str)
 config['proxy.sslkey'] =   ('key.pem', str)

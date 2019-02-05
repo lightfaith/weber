@@ -16,12 +16,14 @@ import difflib
 from source.fd_debug import *
 
 
-"""
-Universal class for commands.
-"""
 class Command():
-
+    """
+    Universal class for commands.
+    """
     def __init__(self, command, apropos, doc_tag, function):
+        """
+
+        """
         self.command = command
         self.apropos = apropos
         if type(doc_tag) == str:
@@ -32,6 +34,12 @@ class Command():
             self.doc_tag = doc_tag[0]
             self.description_format = doc_tag[1]
         self.function = function
+    
+    def __repr__(self):
+        return 'Command(%s)' % (self.command)
+
+    def __str__(self):
+        return 'Command(%s)' % (self.command)
 
     def get_description(self):
         try:
@@ -40,70 +48,77 @@ class Command():
             return ''
 
     def run(self, *args):
+        """
+        Run command
+        """
         return self.function(*args)
 
-    def __repr__(self):
-        return 'Command(%s)' % (self.command)
 
-    def __str__(self):
-        return 'Command(%s)' % (self.command)
-
-
-"""
-Function to add new command
-"""
 def add_command(command):
+    """
+    Function to add new command
+    """
     weber.commands[command.command.partition(' ')[0]] = command
 
-
-"""
-Function to run commands, apply filters etc.
-"""
 def run_command(fullcommand):
+    """
+    Function to run commands, apply filters etc.
+    """
     modifier = weber.config['interaction.command_modifier'].value
     log.debug_command('  Fullcmd: \'%s\'' % (fullcommand))
+    """split by command modifier and greppers"""
     parts = list(filter(None, re.split('(~~|~|\%s)' % (modifier), fullcommand)))
     command = parts[0]
-    phase = {'~': False, '~~': False, modifier: False}
+    phase = {'~': False, '~~': False, modifier: False} # actual parsing phase
     
-    # test if it is documented
+    """test if it is documented"""
     try:
         if not weber.commands[command.rstrip('?')].get_description().strip():
             log.warn('The command has no documentation.')
     except:
         # command does not exist, but it will be dealt in a while
-        pass 
-    # help or command?
+        pass
     if command.endswith('?'):
+        """help, not command"""
         lines = []
         for k, v in sorted(weber.commands.items(), key=lambda x:x[0]):
             length = 40
-            if k == '': # empty command - just print long description
+            if k == '':
+                """empty command - just print long description"""
                 continue
             
             if k.startswith(command[:-1]) and len(k)-len(command[:-1])<=1:
-                # do colors
+                """commands with same starting"""
                 cmd, _, args = v.command.partition(' ')
-                # question mark after command?
-                more = ''
-                if len([x for x in weber.commands.keys() if x.startswith(cmd)])>1:
+                more = '' # possible question mark
+                if len([x for x in weber.commands.keys() 
+                        if x.startswith(cmd)])>1:
+                    """add question mark after command"""
                     length += len(log.COLOR_BROWN)+len(log.COLOR_NONE)
                     more = log.COLOR_BROWN+'[?]'+log.COLOR_NONE
-                command_colored = '%s%s %s%s%s' % (cmd, more, log.COLOR_BROWN, args, log.COLOR_NONE)
-                apropos_colored = '%s%s%s' % (log.COLOR_DARK_GREEN, v.apropos, log.COLOR_NONE)
-                lines.append('    %-*s %s' % (length, command_colored, apropos_colored))
-        # show description if '??'
+                """prepare apropos lines"""
+                command_colored = '%s%s %s%s%s' % (cmd, more, log.COLOR_BROWN, 
+                                                   args, log.COLOR_NONE)
+                apropos_colored = '%s%s%s' % (log.COLOR_DARK_GREEN, v.apropos, 
+                                              log.COLOR_NONE)
+                lines.append('    %-*s %s' % (length, command_colored, 
+                                              apropos_colored))
         if command.endswith('??'):
+            """big help"""
             for k, v in weber.commands.items():
                 if k == command[:-2]:
                     lines.append('')
-                    lines += ['    '+log.COLOR_DARK_GREEN+line+log.COLOR_NONE for line in v.get_description().splitlines()]
+                    lines += ['    '+log.COLOR_DARK_GREEN+line+log.COLOR_NONE 
+                              for line in v.get_description().splitlines()]
     else:
         try:
+            """split command into command and args"""
             command, *args = command.split(' ')
             log.debug_command('  Command: \'%s\'' % (command))
             log.debug_command('  Args:    %s' % (str(args)))
-            # run command
+            """
+            run the command
+            """
             lines = weber.commands[command].run(*args)
 
         except Exception as e:
@@ -112,95 +127,124 @@ def run_command(fullcommand):
             traceback.print_exc()
             return
 
-    # Lines can be:
-    #     a list of strings:
-    #         every line matching grep expression or starting with '{grepignore}' will be printed
-    #     a list of lists:
-    #         every line of inner list matching grep expression or starting with '{grepignore}' will be printed if there is at least one grep matching line WITHOUT '{grepignore}'
-    #         Reason: prsh~Set-Cookie will print all Set-Cookie lines along with RRIDs, RRIDs without match are ignored
+    """
+    Deal with resulting lines
+    
+    Lines can be:
+        a list of strings:
+            every line matching grep expression or starting with 
+            '{grepignore}' will be printed
+        a list of lists:
+            every line of inner list matching grep expression or 
+            starting with '{grepignore}' will be printed if there is 
+            at least one grep matching line WITHOUT '{grepignore}'
+    Reason: prsh~Set-Cookie will print all Set-Cookie lines along with 
+            RRIDs, RRIDs without match are ignored
+    """
     result_lines = []
     nocolor = lambda line: re.sub('\033\\[[0-9]+m', '', str(line))
     
-    # go through all command parts and modify those lines
+    """go through all command parts (greps etc.) and modify lines"""
     for part in parts[1:]:
         tmp_lines = []
-        # special character? set phase
         if part in phase.keys():
-            # another phase active? bad command...
+            """special character? set phase"""
             if any(phase.values()):
+                """another phase active? bad command..."""
                 log.err('Invalid command.')
                 return
-            # no phase? set it
+            """no phase? set it and move on"""
             phase[part] = True
             continue
-        # no phase and no special character? bad command...
         elif not any(phase.values()):
+            """no phase and no special character? bad command..."""
             log.err('Invalid command (bad regex)!')
             return
-        
-
-        # deal with phases
         elif phase['~']:
-            # normal grep
+            """normal grep"""
             log.debug_command('  grep \'%s\'' % part)
             phase['~'] = False
             for line in lines:
                 if type(line) == str:
-                    if str(line).startswith('{grepignore}') or part in nocolor(line):
+                    if (str(line).startswith('{grepignore}') 
+                            or part in nocolor(line)):
+                        """str ignoring grep OR wanted value inside"""
                         tmp_lines.append(line)
                 elif type(line) == list:
-                    # pick groups if at least one line starts with {grepignore} or matches grep
-                    sublines = [l for l in line if str(l).startswith('{grepignore}') or part in nocolor(l)]
-                    if [x for x in sublines if not str(x).startswith('{grepignore}') and x.strip()]:
+                    """pick groups if at least one line if
+                       ignores grep or matches grep"""
+                    sublines = [l for l in line 
+                                if str(l).startswith('{grepignore}') 
+                                or part in nocolor(l)]
+                    if [x for x in sublines 
+                            if not str(x).startswith('{grepignore}') 
+                            and x.strip()]:
+                        """found something; use matching lines"""
                         tmp_lines.append(sublines)
         elif phase['~~']:
-            # regex grep
+            """regex grep"""
             log.debug_command('  regex_grep \'%s\'' % part)
             phase['~~'] = False
             for line in lines:
                 if type(line) == str:
-                    if str(line).startswith('{grepignore}') or re.search(part, nocolor(line.strip())):
+                    if (str(line).startswith('{grepignore}') 
+                            or re.search(part, nocolor(line.strip()))):
+                        """str ignoring grep OR wanted value inside"""
                         tmp_lines.append(line)
                 elif type(line) == list:
-                    # pick groups if at least one line starts with {grepignore} or matches grep
-                    sublines = [l for l in line if str(l).startswith('{grepignore}') or re.search(part, nocolor(l.strip()))]
-                    if [x for x in sublines if not str(x).startswith('{grepignore}') and x.strip()]:
+                    """pick groups if at least one line if
+                       ignores grep or matches grep"""
+                    sublines = [l for l in line 
+                                if str(l).startswith('{grepignore}') 
+                                or re.search(part, nocolor(l.strip()))]
+                    if [x for x in sublines 
+                            if not str(x).startswith('{grepignore}') 
+                            and x.strip()]:
+                        """found something; use matching lines"""
                         tmp_lines.append(sublines)
-        elif phase[modifier]: # TODO line intervals and more features
-            # modifying
+        elif phase[modifier]:
+            """modifier: less etc.""" # TODO line intervals and more features
             log.debug_command('  modification \'%s\'' % part)
-            phase[modifier] = False
-            # less? 
+            phase[modifier] = False 
             if part.endswith('L'):
+                """less"""
                 less_lines = []
+                """find all lines to show"""
                 for line in lines:
                     if type(line) == str:
-                        less_lines.append(nocolor(re.sub('^\\{grepignore\\}', '', line)))
+                        """use returned string in less"""
+                        less_lines.append(nocolor(
+                            re.sub('^\\{grepignore\\}', '', line)))
                     elif type(line) == list:
                         for subline in line:
-                            less_lines.append(nocolor(re.sub('^\\{grepignore\\}', '', subline)))
-                # suppress debugs and realtime overview
-                oldconfig = {k:weber.config[k].value for k in weber.config.keys() if k.startswith('debug.') or k == 'interaction.realtime_overview'}
+                            """ use all returned lines in less"""
+                            less_lines.append(nocolor(
+                                re.sub('^\\{grepignore\\}', '', subline)))
+                """suppress debugs and realtime overview"""
+                oldconfig = {k:weber.config[k].value 
+                             for k in weber.config.keys() 
+                             if k.startswith('debug.') 
+                             or k == 'interaction.realtime_overview'}
                 for k, _ in oldconfig.items():
-                    weber.config[k] = (False, weber.config[k][1])
-                # run less
+                    weber.config[k].value = False
+                """run less"""
                 with tempfile.NamedTemporaryFile() as f:
                     f.write('\n'.join(less_lines).encode())
                     f.flush()
                     subprocess.call(['less', f.name])
-                # restore debug and realtime overview settings
+                """restore debug and realtime overview settings"""
                 for k, v in oldconfig.items():
                     weber.config[k].value = v
                 return
-
-        # use parsed lines for more parsing
+        """use parsed lines for more parsing"""
         lines = tmp_lines
-
-    # any phase remained? that's wrong
+    """end of line parsing"""
     if any(phase.values()):
+        """still in parsing phase -> wrong"""
         log.err('Invalid command.')
         return
     
+    """print resulting lines"""
     for line in lines:
         if type(line) == str:
             log.tprint(re.sub('^\\{grepignore\\}', '', line))
@@ -211,25 +255,29 @@ def run_command(fullcommand):
                 log.tprint(re.sub('^\\{grepignore\\}', '', subline))
 
 
-
-
 """
 Important command functions
 """
 
 def foreach_rrs(function, *args, fromtemplate=False, **kwargs):
     """
-    This method iterates through desired RRs and runs desired function on them.
+    This method iterates through desired RRs and runs desired
+    function on them.
     RRs are expected to be the last item of *args.
     """
+    """discard empty args"""
     args = list(filter(None, args))
     result = []
-    source = weber.tdb if fromtemplate else weber.rrdb
     try:
-        desired_rrs, noproblem = source.get_desired_rrs(None if len(args)<1 else args[-1])
+        """get rrs to show"""
+        desired_rrs, noproblem = weber.rrdb.get_desired_rrs(None 
+                                                            if len(args)<1 
+                                                            else args[-1])
         desired_rrs = desired_rrs.items()
+        """remember not to send rrids to called function"""
         arg_interval = -1 if noproblem else len(args)
-    except ValueError: # no items yet
+    except ValueError: 
+        """no match"""
         return result
     except Exception as e:
         log.err('Cannot get desired rrs: %s' %  (str(e)))
@@ -237,28 +285,37 @@ def foreach_rrs(function, *args, fromtemplate=False, **kwargs):
         traceback.print_exc()
         desired_rrs = []
 
+    """for each RR: prepare and run function"""
     for rrid, rr in desired_rrs:
+        """create line denoting RR ID"""
         tmpresult = []
-        tmpresult.append('{grepignore}%s-- #%d --%s' % (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
+        tmpresult.append('{grepignore}%s--- #%d ---%s' % 
+                         (log.COLOR_BLUE+log.COLOR_BOLD, rrid, log.COLOR_NONE))
+        """
+        send number of matches to the function; used by write function
+        to determine whether use given path as folder
+        """
         kwargs['rr_count'] = len(desired_rrs)
-
+        """run given function"""
         tmpresult += function(rrid, rr, *args[:arg_interval], **kwargs)
-        #tmpresult += function(rrid, rr, *args[1:], **kwargs)
+        
         tmpresult.append('')
+        """store result"""
         if len(list(filter(None, tmpresult)))>1:
             result.append(tmpresult)
-        #print(result)
     return result
 
 def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
+    """
+
+    """
     startends = kwargs['startends']
     attrs = kwargs.get('attrs')
     valueonly = kwargs['valueonly']
     
-    r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
-    if r is None: # race condition, return nothing for now
+    if rr.response is None: # race condition, return nothing for now
         return []
-    return r.find_tags(startends, attrs, valueonly)
+    return rr.response.find_tags(startends, attrs, valueonly)
     
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
 
@@ -268,16 +325,19 @@ def find_tags(_, rr, *__, **kwargs):  # rrid, rr, *args, **kwargs
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
 
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
+"""function to prepare specific values to main help page"""
 get_help_arguments = lambda: {
-    'remote': list(weber.mapping.l_r.items())[0][1].domain, 
-    'local': weber.config['proxy.host'][0], 
-    'port': weber.config['proxy.port'][0], 
-    'sslport': weber.config['proxy.sslport'][0], 
-    'modifier': weber.config['interaction.command_modifier'][0]
+    'local': weber.config['proxy.host'].value, 
+    'port': weber.config['proxy.port'].value, 
+    'modifier': weber.config['interaction.command_modifier'].value
 }
 
 add_command(Command('', '', ('help', get_help_arguments), lambda: []))
-add_command(Command('help', 'prints short intro on Weber features', ('help', get_help_arguments), lambda *_: [line for line in doc['help'].format(**get_help_arguments()).splitlines()]))
+add_command(Command('help', 
+                    'prints short intro on Weber features', 
+                    ('help', get_help_arguments), 
+                    lambda *_: [line for line in 
+                     doc['help'].format(**get_help_arguments()).splitlines()]))
 
 """
 TEST COMMANDS
@@ -294,6 +354,9 @@ add_command(Command('test', 'prints test message', '', test_function))
 def prompt_function(*_): # TODO for testing only!
     while True:
         print('> ', end='')
+        c = input()
+        if quit_string(c):
+            break
         exec(input())
     return []
 add_command(Command('prompt', 'gives python3 shell', '', prompt_function))
