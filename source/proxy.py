@@ -150,164 +150,6 @@ class Proxy(threading.Thread):
         log.debug_flow('Proxy stopped.')
 
 
-
-
-        
-    
-    '''
-    def __init__(self, init_target=''):
-        threading.Thread.__init__(self)
-        self.init_target = init_target
-        self.threads = []
-        self.terminate = False
-        self.stopper = os.pipe()
-        fd_add_comment(self.stopper, 'proxy stopper')
-        self.lock = threading.Lock()
-        
-        # set up server socket
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            self.server_socket.bind((weber.config['proxy.host'][0], weber.config['proxy.port'][0]))
-        except Exception as e:
-            log.err('Cannot bind: %s' % (str(e)))
-            return
-
-        # set up server socket for SSL
-        self.ssl_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.ssl_server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            self.ssl_server_socket.bind((weber.config['proxy.host'][0], weber.config['proxy.sslport'][0]))
-        except Exception as e:
-            log.err('Cannot bind: %s' % (str(e)))
-            return
-        self.ssl_server_socket = ssl.wrap_socket(self.ssl_server_socket, certfile=weber.config['proxy.sslcert'][0], keyfile=weber.config['proxy.sslkey'][0], server_side=True, do_handshake_on_connect=False)
-        
-        weber.mapping.add_init(self.init_target)
-
-        # initialize tamper counters (for `trq <n>` and `trs <n>`)
-        self.tamper_request_counter = 0
-        self.tamper_response_counter = 0
-        log.debug_flow('Proxy created.')
-        
-
-    def stop(self):
-        self.terminate = True
-        os.write(self.stopper[1], b'1')
-        log.debug_flow('Proxy ordered to terminate.')
-
-
-    def should_tamper(self, what):
-        default = weber.config.get('tamper.%ss' % (what), False)[0]
-        # TODO domain, regex, mimetype matches
-        if default:
-            return True
-        with self.lock:
-            if what == 'request':
-                if self.tamper_request_counter > 0: 
-                    self.tamper_request_counter -= 1
-                    return True
-                else:
-                    return False
-            else:
-                if self.tamper_response_counter > 0:
-                    self.tamper_response_counter -= 1
-                    return True
-                else:
-                    return False
-        return False
-
-
-    def add_connectionthread_from_template(self, template_rr, request_modifier=None):
-        """
-            template_rr      = template RR to clone
-            brute_set        = brute values to fill in before sending
-            request_modifier = function to alter request after receiving
-        """ # TODO remove brute-set
-        # create new connection in new thread
-        log.debug_flow('Adding connectionthread from template.')
-        t = template_rr.Protocol.create_connection_thread(None, template_rr.uri_downstream.port, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'), template_rr, request_modifier)
-        # TODO bfi - need rrid before transmission even when proxy.threaded
-        t.start()
-        if positive(weber.config.get('proxy.threaded')[0]):
-            self.threads.append(t)
-        else:
-            t.join()
-        return t.rrid
-        
-
-    def run(self):
-        log.debug_flow('Proxy started.')
-        try:
-            self.server_socket.listen(1)
-            self.ssl_server_socket.listen(1)
-        except Exception as e:
-            log.err('Cannot listen.')
-            return
-
-        while True:
-            #print(fd_table_status_str('FIFO'))
-            r, _, _ = select([self.server_socket, self.ssl_server_socket, self.stopper[0]], [], [])
-            # accept connection, thread it
-            used_port = None
-            if not self.terminate:
-                server_socket = None
-                if self.server_socket in r:
-                    server_socket = self.server_socket
-                    used_port = weber.config['proxy.port'][0]
-                elif self.ssl_server_socket in r:
-                    server_socket = self.ssl_server_socket
-                    used_port = weber.config['proxy.sslport'][0]
-                if server_socket is None or used_port is None: # should not happen
-                    continue
-                try:
-                    conn, client = server_socket.accept()
-
-                    log.debug_socket('Connection accepted from \'%s:%d\':' % client)
-                    # what process is contacting us?
-                    netstat = subprocess.Popen('netstat -tpn'.split(), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                    o, _ = netstat.communicate()
-                    for line in [line for line in o.splitlines() if list(filter(None, line.decode().split(' ')))[3] == '%s:%d' % (client)]:
-                        log.debug_socket(line.decode())
-                    
-
-                    # create new connection in new thread
-                    log.debug_flow('Proxy creating ConnectionThread.')
-                    t = weber.mapping.Protocol.create_connection_thread(conn, used_port, weber.rrdb.get_new_rrid(), self.should_tamper('request'), self.should_tamper('response'))
-                    t.start()
-                    if positive(weber.config.get('proxy.threaded')[0]):
-                        self.threads.append(t)
-                    else:
-                        t.join()
-                except socket.timeout:
-                    pass
-                except Exception as e:
-                    log.err('Proxy error: '+str(e))
-                    log.err('See traceback:')
-                    traceback.print_exc()
-
-            
-            # terminate? end everything
-            if self.terminate:
-                for t in self.threads:
-                    t.stop()
-                time.sleep(0.1)
-            
-            # clean terminated connections
-            threads_todel = [t for t in self.threads if not t.isAlive()]
-            for t in threads_todel:
-                t.join()
-                self.threads.remove(t)
-
-            # terminate and nothing runs anymore? 
-            if self.terminate and len(self.threads) == 0:
-                self.server_socket.shutdown(socket.SHUT_RDWR)
-                self.ssl_server_socket.shutdown(socket.SHUT_RDWR)
-                break
-        log.debug_flow('Proxy stopped.')
-    '''
-
-
 class ConnectionThread(threading.Thread):
     """
     
@@ -322,8 +164,6 @@ class ConnectionThread(threading.Thread):
         """
         threading.Thread.__init__(self)
         self.downstream_socket = downstream_socket
-        #self.server = None
-        self.server_id = -1
         self.from_weber = from_weber
         self.request = None
         self.response = None
@@ -339,7 +179,24 @@ class ConnectionThread(threading.Thread):
         self.can_forward_request = True # TODO from option
         self.can_forward_response = True # TODO from option
         self.protocol = weber.protocols['http']
+    
+    def send_continuation_signal(self):
+        if self.stopper:
+            os.write(self.stopper[1], b'1')
+    
+    def wait_for_continuation_signal(self):
+        """
 
+        """
+        r, _, _ = select([self.stopper[0]], [], [])
+
+    def stop(self):
+        """
+        
+        """
+        self.terminate = True
+        """send continuation signal in case we are tampering"""
+        self.send_continuation_signal()
 
     def add_request(self, request):
         """Adds request bytes manually.
@@ -351,24 +208,6 @@ class ConnectionThread(threading.Thread):
         """
         self.request = request
         # TODO not fully implemented / tested
-
-    def wait_for_continuation_signal(self):
-        """
-
-        """
-        r, _, _ = select([self.stopper[0]], [], [])
-
-    def send_continuation_signal(self):
-        if self.stopper:
-            os.write(self.stopper[1], b'1')
-    
-    def stop(self):
-        """
-        
-        """
-        self.terminate = True
-        """send continuation signal in case we are tampering"""
-        self.send_continuation_signal()
 
 
     def run(self):

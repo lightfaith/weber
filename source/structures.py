@@ -556,103 +556,116 @@ class RRDB():
             
 
 weber.rrdb = RRDB()
-weber.tdb = RRDB()
+#weber.tdb = RRDB()
 
-"""
-Request/Response pairs (both downstream and upstream versions)
-"""
 class RR():
-    def __init__(self, rrid, request_downstream, request_upstream, Protocol):
+    """
+    Request/Response pairs, together with other important structures
+    """
+    def __init__(self, rrid, request, server, Protocol):
+        """
+
+        """
         self.rrid = rrid
-        self.request_downstream = request_downstream
-        self.request_upstream = request_upstream
-        self.response_upstream = None
-        self.response_downstream = None
-        self.uri_downstream = None
-        self.uri_upstream = None
-        self.eid = None
+        self.request = request
+        self.response = None
+        self.server = server
+        self.eid = None # TODO
         self.Protocol = Protocol
         self.analysis_notes = [] # list of (upstream|downstream, <severity>, <message>) lines
     
+    def __str__(self):
+        return 'RR(%d --> %s)' % (self.rrid, self.server.uri.tostring())
+
     def clone(self):
-        result = RR(self.rrid, self.request_downstream.clone(), self.request_upstream.clone(), self.Protocol)
-        if self.response_upstream is not None:
-            result.response_upstream = self.response_upstream.clone()
-            result.response_upstream.tampering = False
-        if self.response_downstream is not None:
-            result.response_downstream = self.response_downstream.clone()
-            result.response_downstream.tampering = False
-        if self.uri_upstream is not None:
-            result.uri_upstream = self.uri_upstream.clone()
-        if self.uri_downstream is not None:
-            result.uri_downstream = self.uri_downstream.clone()
-        result.analysis_notes = [x for x in self.analysis_notes]
+        """
+
+        """
+        result = RR(self.rrid, self.request.clone(), self.server, self.Protocol)
+        if self.response:
+            # TODO needed? not for resend nor template...
+            result.response = self.response.clone()
+        #result.analysis_notes = [x for x in self.analysis_notes] # TODO new analysis, right?
         return result
 
-    def __str__(self):
-        return 'RR(%s <--> %s)' % (self.uri_downstream, self.uri_upstream)
+    def add_response(self, response, allow_analysis=True):
+        """
 
-    def add_response(self, response_upstream, response_downstream, allow_analysis=True):
-        self.response_upstream = response_upstream
-        self.response_downstream = response_downstream
-        # do analysis here if permitted by proxy (upstream->downstream already done) and if desired
-        if allow_analysis and weber.config['analysis.immediate'][0] and not self.analysis_notes:
+        """
+        self.response = response
+        """do analysis here if permitted by proxy and desired"""
+        if (allow_analysis 
+                and positive(weber.config['analysis.immediate'].value) 
+                and not self.analysis_notes):
             log.debug_analysis('Running immediate analysis.')
             self.analyze()
 
-    
     def request_string(self, colored=True):
-        req = self.request_upstream if weber.config['interaction.show_upstream'][0] else self.request_downstream
-        res = self.response_upstream if weber.config['interaction.show_upstream'][0] else self.response_downstream
-        return self.Protocol.request_string(req, res, colored)
-    
+        """
+        
+        """
+        return self.Protocol.request_string(self.request, 
+                                            self.response, 
+                                            colored)
 
     def response_string(self, colored=True):
-        res = self.response_upstream if weber.config['interaction.show_upstream'][0] else self.response_downstream
-        return self.Protocol.response_string(res, colored)
+        """
 
+        """
+        return self.Protocol.response_string(self.response, colored)
 
-    def analyze(self): # intra-RR analysis
+    def analyze(self):
+        """
+        intra-RR analysis
+        """
+
         self.analysis_notes = []
-        ## for both upstream and downstream - WHY DOWNSTREAM?
-        #for source, req, res, uri in (('upstream', self.request_upstream, self.response_upstream, self.uri_upstream), ('downstream', self.request_downstream, self.response_downstream, self.uri_downstream)):
-        for source, req, res, uri in (('upstream', self.request_upstream, self.response_upstream, self.uri_upstream),):
-            log.debug_analysis(' Analyzing %s for RR #%d' % (source, self.rrid))
-            # run all known tests
-            for name, analysis_pack in weber.analysis.items():
-                log.debug_analysis('  using %s' % (name))
-                if not analysis_pack['enabled']:
-                    log.debug_analysis('   NOT enabled, skipping...')
+        log.debug_analysis(' Analyzing RR #%d' % (self.rrid))
+        """run all known tests except ignored"""
+        ignored_tests = weber.config['analysis.ignored_tests'].value.split(';')
+        """for every analysis pack"""
+        for name, analysis_pack in weber.analysis.items():
+            log.debug_analysis('  using %s' % (name))
+            if not analysis_pack['enabled']:
+                log.debug_analysis('   NOT enabled, skipping...')
+                continue
+            """for every Test"""
+            for tname, note, protocols, conditions in analysis_pack['rr_tests']:
+                """skip ignored"""
+                if tname in ignored_tests:
                     continue
-
-                for testname, note, supported, conditions in analysis_pack['rr_tests']:
-                    # but skip ignored ones
-                    if testname in weber.config['analysis.ignored_tests'][0].split(';'):
-                        continue
-                    log.debug_analysis('  Trying \'%s\'' % (testname))
-                    if self.Protocol.scheme not in supported:
-                        log.debug_analysis('   NOT supported for this protocol, skipping...')
-                        continue
-                    try:
-                        match = True
-                        for comment, condition in conditions:
-                            result = bool(condition(req, res, uri))
-                            log.debug_analysis('    checking \'%s\': %s' % (comment, str(result)))
-                            if not result:
-                                match = False
-                                break
-                        # and remember found issues
-                        if match:
-                            log.debug_analysis('    MATCH => %s: %s' % (note[0], note[1]))
-                            self.analysis_notes.append((source, testname, *note))
-                    except Exception as e:
-                        log.debug_analysis('!!! "%s" test failed for RR #%d (%s): %s' % (testname, self.rrid, source, str(e)))
-                        traceback.print_exc()
+                log.debug_analysis('  Trying \'%s\'' % (tname))
+                if self.Protocol.scheme not in protocols:
+                    """skip if incorrect protocol"""
+                    log.debug_analysis('   NOT supported for this protocol,'
+                                       'skipping...')
+                    continue
+                try:
+                    match = True
+                    """for every condition in the Test"""
+                    for comment, condition in conditions:
+                        result = bool(condition(self.request, 
+                                                self.response, 
+                                                self.server))
+                        log.debug_analysis('    checking \'%s\': %s' 
+                                           % (comment, str(result)))
+                        if not result:
+                            match = False
+                            break
+                    # and remember found issues
+                    if match:
+                        log.debug_analysis('    MATCH => %s: %s' 
+                                           % (note[0], note[1]))
+                        self.analysis_notes.append((tname, *note))
+                except Exception as e:
+                    log.debug_analysis('!!! "%s" test failed for RR #%d: %s' 
+                                       % (tname, self.rrid, str(e)))
+                    traceback.print_exc()
     
     def __repr__(self):
         return 'RR(%d)' % self.rrid
 
-
+'''
 """
 Local-Remote URI mapping
 """
@@ -777,7 +790,7 @@ class Mapping():
 
 
 weber.mapping = Mapping()
-
+'''
 
 """
 Event

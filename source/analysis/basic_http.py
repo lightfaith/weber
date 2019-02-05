@@ -21,7 +21,7 @@ basic_http = {
     #      ('Category', 'Message', certainity) in case all conditions match
     #      [list of supported protocols (SSL variants excluded)], 
     #      [list of ('comment', 'condition'))
-    #                                ` lambda req,res,uri: True or False # whether the problem is found
+    #                                ` lambda req,res,server: True or False # whether the problem is found
     #     )
     'rr_tests': [
         (   'NO_CONTENT-TYPE', 
@@ -58,7 +58,7 @@ basic_http = {
             [
                 ('response exists', lambda _,res,__: res),
                 ('set-cookie header', lambda _,res,__: b'Set-Cookie' in res.headers.keys()),
-                ('over SSL', lambda _,__,uri: uri.scheme in ('https',)),
+                ('over SSL', lambda _,__,server: server.uri.scheme in ('https',)),
                 ('no secure in set-cookie', lambda _,res,__: b'secure' not in [attr.strip().lower() for attr in res.headers.get(b'Set-Cookie').split(b';')]),
             ]
         ),
@@ -68,7 +68,7 @@ basic_http = {
             [
                 ('response exists', lambda _,res,__: res),
                 ('hsts header', lambda _,res,__: b'Strict-Transport-Security' in res.headers.keys()),
-                ('over HTTP', lambda _,__,uri: uri.scheme in ('http',)),
+                ('over HTTP', lambda _,__,server: server.uri.scheme in ('http',)),
             ]
         ),
         (   'NO_HSTS', 
@@ -76,7 +76,7 @@ basic_http = {
             ['http'], 
             [
                 ('response exists', lambda _,res,__: res),
-                ('over SSL', lambda _,__,uri: uri.scheme in ('https',)),
+                ('over SSL', lambda _,__,server: server.uri.scheme in ('https',)),
                 ('no hsts header', lambda _,res,__: b'Strict-Transport-Security' not in res.headers.keys()),
             ]
         ),
@@ -127,7 +127,7 @@ basic_http = {
             [
                 ('response exists', lambda _,res,__: res),
                 ('401 code', lambda _,res,__: res.statuscode == 401),
-                ('over HTTP', lambda _,__,uri: uri.scheme in ('http',)),
+                ('over HTTP', lambda _,__,server: server.uri.scheme in ('http',)),
             ]
         ),
     ],
