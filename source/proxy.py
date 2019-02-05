@@ -25,7 +25,7 @@ class ProxyLib():
 
     """
     @staticmethod
-    def recvall(conn, comment):
+    def recvall(conn, comment, stopper):
         """
 
         """
@@ -40,11 +40,17 @@ class ProxyLib():
                                  % (recv_size, comment))
                 buf = conn.recv(recv_size)
                 if not buf:
-                    print('not buf')
-                    break
+                    # TODO test so no spams
+                    """nothing loaded? wait for new input"""
+                    if not chunks:
+                        print("Waiting for new input")
+                        r, _, _ = select([conn, stopper], [], [])
+                    """or terminate if asked"""
+                    if stopper in r:
+                        break
                 chunks.append(buf)
             except socket.timeout:
-                print('socket timeout')
+                """no more data recently, return what we have"""
                 break
         return b''.join(chunks)
 
@@ -325,6 +331,8 @@ class ConnectionThread(threading.Thread):
         self.terminate = False
         self.stopper = os.pipe() # to allow new request
         #self.ssl = False
+        self.server_id = None # TODO not necessary if self.server is used?
+        self.server = None
         self.full_uri = None # for one loop run only, but accessed from functions
         self.upstream_socket = None
         self.connect_method = False
@@ -380,7 +388,8 @@ class ConnectionThread(threading.Thread):
             """read request from socket if needed"""
             if not self.from_weber:
                 request_raw = ProxyLib.recvall(self.downstream_socket, 
-                                               comment='downstream')
+                                               comment='downstream',
+                                               stopper=self.stopper[0])
                 #if not self.request.integrity:
                 #    log.debug_socket('Request integrity failure.')
                 #    self.downstream_socket.close()
@@ -421,7 +430,7 @@ class ConnectionThread(threading.Thread):
             '''
             """get actual full_uri"""
             if self.connect_method:
-                self.full_uri = weber.serman.get(self.server_id, 'uri').clone()
+                self.full_uri = self.server.uri.clone()
                 self.full_uri.path = self.request.path.decode()
             else:
                 self.full_uri = URI(self.request.path) # TODO try for non-proxy requests?
@@ -430,35 +439,33 @@ class ConnectionThread(threading.Thread):
             #print(s for s, _ in weber.servers.items())
             """respond to CONNECT methods, create server"""
             """or parse http request and create server"""
-            if self.server_id == -1:
+            if not self.server:
                 """get valid URI"""
                 server_uri_str = self.full_uri.tostring(path=False)
                 """create or get existing server"""
-                self.server_id = weber.serman.create_server(server_uri_str)
+                self.server = weber.servers[
+                                  Server.create_server(server_uri_str)]
                 """create socket to server"""
                 self.upstream_socket = socket.socket(socket.AF_INET, 
                                                      socket.SOCK_STREAM)
                 #self.upstream_socket.setsockopt(socket.SOL_SOCKET, 
                 #                                socket.SO_KEEPALIVE, 
                 #                                1)
-                server_uri = weber.serman.get(self.server_id, 'uri')
-                self.upstream_socket.connect((server_uri.domain,
-                                              server_uri.port))
+                self.upstream_socket.connect((self.server.uri.domain,
+                                              self.server.uri.port))
                 """confirm if it was CONNECT"""
                 if self.request.method == b'CONNECT':
                     self.connect_method = True
                     log.debug_flow('Accepting CONNECTion.')
                     self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
                 """upgrade both sockets if SSL"""
-                if weber.serman.get(self.server_id, 'ssl'):
+                if self.server.ssl:
                     self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
                     try:
                         self.downstream_socket = ssl.wrap_socket(
                             self.downstream_socket, 
-                            certfile=weber.serman.get(self.server_id, 
-                                                      'certificate_path'),
-                            keyfile=weber.serman.get(self.server_id, 
-                                                     'certificate_key_path'),
+                            certfile=self.server.certificate_path,
+                            keyfile=self.server.certificate_key_path,
                             do_handshake_on_connect=True,
                             server_side=True)
                     except Exception as e:
@@ -503,11 +510,14 @@ class ConnectionThread(threading.Thread):
             self.wait_for_continuation_signal()
         """cleanup"""
         log.debug_flow('Closing sockets and stopper for ConnectionThread')
-        self.upstream_socket.close()
-        self.downstream_socket.close()
-        for fd in (0, 1):
-            os.close(self.stopper[fd])
-        self.stopper = None
+        if self.upstream_socket:
+            self.upstream_socket.close()
+        if self.downstream_socket:
+            self.downstream_socket.close()
+        if self.stopper:
+            for fd in (0, 1):
+                os.close(self.stopper[fd])
+            self.stopper = None
         log.debug_flow('ConnectionThread terminated.')
         """end of ConnectionThread run() method"""
 
@@ -517,7 +527,7 @@ class ConnectionThread(threading.Thread):
         """
         # TODO if from weber and brute is set: replace; maybe in post_tamper method
         self.request.post_tamper()
-        weber.serman.get_rps_approval(self.server_id) # sleep for RPS limiting
+        self.server.get_rps_approval() # sleep for RPS limiting
         if self.terminate: return
         response_raw = self.forward(self.request.bytes())
         if self.terminate: return
@@ -560,7 +570,9 @@ class ConnectionThread(threading.Thread):
             log.debug_socket('Forwarding request... (%d B)' 
                              % (len(data)))
             self.upstream_socket.send(data)
-            result = ProxyLib.recvall(self.upstream_socket, comment='upstream')
+            result = ProxyLib.recvall(self.upstream_socket, 
+                                      comment='upstream',
+                                      stopper=self.stopper[0])
             if result:
                 log.debug_flow('Response received from server.')
                 print(result)

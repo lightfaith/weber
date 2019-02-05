@@ -23,6 +23,7 @@ class Server():
     Attributes:
 
     """
+    creation_lock = threading.Lock()
     '''
     @staticmethod
     def get_uri(uri : str):
@@ -42,6 +43,27 @@ class Server():
         result.path = '/'
         return result
     '''
+    @staticmethod
+    def create_server(uri):
+        """
+        Creates a new server instance IF there is not already 
+        an appropriate one.
+
+        Returns:
+            server_id - ID of Server in weber.servers list
+        """
+        with Server.creation_lock:
+            matching = [s for s in weber.servers if s.uri.tostring() == uri]
+            if not matching:
+                """new; create one"""
+                log.debug_server('Creating new server instance.')
+                new_server = Server(uri)
+                weber.servers.append(new_server)
+                matching = [new_server]
+            else:
+                log.debug_server('Using existing server instance') 
+            """return index"""
+            return weber.servers.index(matching[0])
 
     def __init__(self, uri):
         """Creates instance of the Server.
@@ -53,26 +75,27 @@ class Server():
                ssl (bool): 
                uri (str): URI of the target, path will be stripped
         """
-        self.attributes = {} # TODO append one at the time
-        self.attributes['cookies'] =  OrderedDict()
-        self.attributes['certificate_path'] = None
-        self.attributes['certificate_key_path'] = None
-        self.attributes['self.real_certificate'] = None
-        self.attributes['uri'] = URI(uri)
-        self.attributes['uri'].path = ''
-        self.attributes['ssl'] = self.attributes['uri'].scheme.endswith('s') # TODO whitelist? Cause IS-IS
+        self.lock = None
+        self.cookies =  OrderedDict()
+        self.certificate_path = None
+        self.certificate_key_path = None
+        self.real_certificate = None
+        self.uri = URI(uri)
+        self.uri.path = ''
+        self.ssl = self.uri.scheme.endswith('s') # TODO whitelist? Cause IS-IS
         
+        """setup lock"""
+        self.setup_lock()
+
         """get certificate if ssl"""
-        if self.attributes['ssl']:
+        if self.ssl:
             """generate fake one"""
-            domain = self.attributes['uri'].domain
-            self.attributes['certificate_path'] = ('ssl/pki/issued/%s.crt' 
-                                                   % domain)
-            self.attributes['certificate_key_path'] = ('ssl/pki/private/%s.key'
-                                                       % domain)
+            domain = self.uri.domain
+            self.certificate_path = ('ssl/pki/issued/%s.crt' % domain)
+            self.certificate_key_path = ('ssl/pki/private/%s.key' % domain)
             """already exists?"""
             try:
-                with open(self.attributes['certificate_path'], 'r') as f:
+                with open(self.certificate_path, 'r') as f:
                     pass
             except:
                 log.debug_flow('Generating fake certfificate for \'%s\'' % 
@@ -88,8 +111,8 @@ class Server():
             import ssl
             from OpenSSL.crypto import FILETYPE_PEM, load_certificate
             x509 = load_certificate(FILETYPE_PEM, ssl.get_server_certificate(
-                        (self.attributes['uri'].domain, 
-                         self.attributes['uri'].port)))
+                        (self.uri.domain, 
+                         self.uri.port)))
             # TODO parse and store important stuff in self.attributes['real_certificate']
             #print('subject', x509.get_subject())
             #for i in range(x509.get_extension_count()):
@@ -101,13 +124,17 @@ class Server():
             #print('sn', x509.get_serial_number())
             #print('sigalgo', x509.get_signature_algorithm())
             #print('expi', x509.has_expired())
+    
+    def setup_lock(self):
+        self.lock = threading.Lock()
+
     def get_rps_approval(self):
         """
         Sleeps to limit the request spamming for given server.
         """
-        return True # TODO
+        return True # TODO with self.lock sleep 
 
-
+'''
 class ServerManager:
     """
     Class to thread-safe access to server instances.
@@ -131,19 +158,6 @@ class ServerManager:
     def get_id(self, uri):
         return list(self.__servers.keys()).index(uri)
 
-    def create_server(self, uri):
-        """
-        Creates a new server instance IF there is not already 
-        an appropriate one.
-        """
-        if uri not in self.__servers.keys():
-            """new; create one"""
-            log.debug_server('Creating new server instance')
-            self.__servers[uri] = Server(uri)
-        else:
-            log.debug_server('Using existing server instance') 
-        """return index"""
-        return  self.get_id(uri)
     
     def load_servers(self, servers):
         """
@@ -168,7 +182,7 @@ class ServerManager:
     
 """initialize global ServerManager"""
 weber.serman = ServerManager()
-
+'''
 
 class URI():
     """Single URI instance.
@@ -371,7 +385,6 @@ class RRDB():
         self.rrid = 0 # last rrid
         self.rrs = OrderedDict() # rrid:RR()
         self.lock = None
-        
         self.setup_lock()
 
     def setup_lock(self):

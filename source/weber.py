@@ -168,17 +168,18 @@ Dictionary of analysis modules, filled in source/analysis/*
 }
 """
 analysis = {}
-'''
 """
 Dictionary of Server() objects holding info about RRs, cookies etc.
 """
-servers = OrderedDict()
+#servers = OrderedDict()
+servers = []
 '''
 """
 ServerManager instance to thread-safe Server operations
 initialized in source/structures.py
 """
 serman = None
+'''
 """
 MOTDs
 """
