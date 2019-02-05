@@ -35,6 +35,10 @@ class Option():
                         (v, self.__data_type))
 
 
+# analysis settings
+config['analysis.immediate'] = Option(True, bool) # should analysis be done immediately?
+config['analysis.ignored_tests'] = Option('', str) # list of analysis test name to NOT perform; space-separated
+
 # settings
 config['crawl.save_path'] = Option('', str) # where to store received files
 
@@ -57,15 +61,20 @@ config['http.drop_response_headers'] = Option('Content-Security-Policy Expect-CT
 config['http.recompute_request_length'] = Option(True, bool) # whether request Content-Length should be recomputed before sending to server
 
 config['interaction.realtime_overview'] = Option(True, bool)  # show request/response communication on the fly
+config['interaction.command_modifier'] = Option('$', str) # which character would start special sequences (line intervals, less)
+
+# overview settings
+config['overview.short_request'] = Option(False, bool) # reduce size of too long URLs
+config['overview.show_event'] =    Option(False, bool) # show event ID in overview
+config['overview.show_size'] =     Option(True, bool)  # show response size in overview
+config['overview.show_time'] =     Option(False, bool) # show forwarded time in overview # TODO also relative?
+config['overview.show_uri'] =      Option(True, bool)  # show uri in overview
 
 config['proxy.threaded'] = Option(True, bool)
 
 config['spoof.arguments'] = Option(False, bool) # should arguments be taken into consideration for spoofing?
 
 '''
-# analysis settings
-config['analysis.immediate'] = (True, bool) # should analysis be done immediately?
-config['analysis.ignored_tests'] = ('', str) # list of analysis test name to NOT perform
 
 # brute settings
 config['brute.placeholder'] = ('###', str) # placeholder start and end, e.g. ###0###
@@ -83,14 +92,6 @@ config['http.show_hidden'] = (False, bool) # should hidden fields be visible? # 
 
 # how Weber will interact with user
 config['interaction.show_upstream'] = (True, bool) # what version of RR should be presented?
-config['interaction.command_modifier'] = ('$', str) # which character would start special sequences (line intervals, less)
-
-# overview settings
-config['overview.short_request'] = (False, bool) # reduce size of too long URLs
-config['overview.show_event'] =    (False, bool) # show event ID in overview
-config['overview.show_size'] =     (True, bool)  # show response size in overview
-config['overview.show_time'] =     (False, bool) # show forwarded time in overview # TODO also relative?
-config['overview.show_uri'] =      (True, bool)  # show uri in overview
 
 # proxy-relevant settings
 config['proxy.host'] =     ('localhost', str)

@@ -35,11 +35,11 @@ class HTTP():
     ] # TODO more
 
     fault_injection_delimiters = tuple(' \r\n:;/&?')
-
+    '''
     @staticmethod
     def create_connection_thread(conn, local_port, rrid, tamper_request, tamper_response, template_rr=None, request_modifier=None):
         return HTTPConnectionThread(conn, local_port, rrid, tamper_request, tamper_response, template_rr, request_modifier)
-
+    '''
     @staticmethod
     #def create_request(data, should_tamper, no_stopper=False, request_modifier=None):
     #    return HTTPRequest(data, should_tamper, no_stopper, request_modifier)
@@ -77,7 +77,8 @@ class HTTP():
 
             # shorten path if desired
             path = req.path.decode()
-            if weber.config['overview.short_request'][0] and len(path)>50:
+            if (positive(weber.config['overview.short_request'].value)
+                    and len(path)>50):
                 path = '...'+path[-47:]
 
             # return pretty string
@@ -122,7 +123,7 @@ weber.protocols['http'] = HTTP
 
 
 
-
+'''
 class HTTPConnectionThread(ConnectionThread):
     """
     Class for dealing with HTTP communication.
@@ -161,7 +162,6 @@ class HTTPConnectionThread(ConnectionThread):
                 self.keepalive = (request.headers.get(b'Connection') == b'Keep-Alive')
             else:
                 self.keepalive = False # whole template request used; do not repeat
-            '''
             # get URI() from request
             log.debug_flow('Getting localuri from request.')
             downstream_referer = None
@@ -462,9 +462,9 @@ class HTTPConnectionThread(ConnectionThread):
             if self.stopper:
                 os.close(self.stopper[fd])
         self.stopper = None
-        '''
         log.debug_flow('HTTP ConnectionThread terminated.')
         
+'''
 
 
 
@@ -501,9 +501,8 @@ class HTTPRequest():
         #self.forward_stopper = None if no_stopper else os.pipe()
         #self.forward_stopper = os.pipe()
         #self.tampering = self.should_tamper
-        
+        self.tampering = False # just flag so we can filter; set in ConnectionThread
         #self.onlypath = '' 
-        #self.time_forwarded = None
 
         """set default values"""
         self.original = data
@@ -707,12 +706,14 @@ class HTTPRequest():
                 except:
                     pass
         """end of request pre_tamper method"""
+        self.tampering = True
         log.debug_tampering('Request is ready for tamper.')
 
     def post_tamper(self):
         """
 
         """
+        self.tampering = False
         log.debug_tampering('Running post_tamper for the request.')
         """compute Content-Length"""
         log.debug_flow('Attempting to re-compute Content-Length.')
@@ -989,12 +990,14 @@ class HTTPResponse():
                     f.write(b'\n'.join(response.lines(headers=False, as_string=False)))
         """end of response pre_tamper method"""
         '''
+        self.tampering = True
         log.debug_tampering('Response is ready for tamper.')
 
     def post_tamper(self, full_uri):
         """
 
         """
+        self.tampering = False
         log.debug_tampering('Running post_tamper for the response.')
         """spoof files if desired (with or without GET arguments)"""
         log.debug_flow('Spoofing files.')

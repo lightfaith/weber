@@ -44,7 +44,7 @@ class Server():
         return result
     '''
     @staticmethod
-    def create_server(uri):
+    def create_server(uri, protocol):
         """
         Creates a new server instance IF there is not already 
         an appropriate one.
@@ -57,7 +57,7 @@ class Server():
             if not matching:
                 """new; create one"""
                 log.debug_server('Creating new server instance.')
-                new_server = Server(uri)
+                new_server = Server(uri, protocol)
                 weber.servers.append(new_server)
                 matching = [new_server]
             else:
@@ -65,23 +65,22 @@ class Server():
             """return index"""
             return weber.servers.index(matching[0])
 
-    def __init__(self, uri):
+    def __init__(self, uri, protocol):
         """Creates instance of the Server.
         Args:
-            attributes (dict) - dict of attributes, so access can be
-                                thread-safe
-               cookies ():
-               certificate ():
-               ssl (bool): 
-               uri (str): URI of the target, path will be stripped
+            cookies ():
+            certificate ():
+            ssl (bool): 
+            uri (str): URI of the target, path will be stripped
         """
         self.lock = None
+        self.uri = URI(uri)
+        self.uri.path = ''
+        self.protocol = protocol
         self.cookies =  OrderedDict()
         self.certificate_path = None
         self.certificate_key_path = None
         self.real_certificate = None
-        self.uri = URI(uri)
-        self.uri.path = ''
         self.ssl = self.uri.scheme.endswith('s') # TODO whitelist? Cause IS-IS
         
         """setup lock"""
@@ -391,17 +390,27 @@ class RRDB():
         self.lock = threading.Lock()
     
     def get_new_rrid(self): # generated in Proxy(), so it is thread-safe
+        """
+
+        """
         with self.lock:
             self.rrid += 1
             return self.rrid
 
-    def add_request(self, rrid, request_downstream, request_upstream, Protocol):
-        self.rrs[rrid] = RR(rrid, request_downstream, request_upstream, Protocol)
+    def add_request(self, rrid, request, server, times):
+        """
 
-    def add_response(self, rrid, response_upstream, response_downstream, allow_analysis=True):
-        self.rrs[rrid].add_response(response_upstream, response_downstream, allow_analysis)
+        """
+        self.rrs[rrid] = RR(rrid, request, server, times)
+
+    def add_response(self, rrid, response, allow_analysis=True):
+        """
+
+        """
+        self.rrs[rrid].add_response(response, allow_analysis)
     
     def add_rr(self, rr, update_rr_rrid=False):
+        # TODO not refactored
         # used when creating a template => rrid in rr will probably be updated
         rrid = self.get_new_rrid()
         if update_rr_rrid:
@@ -409,10 +418,15 @@ class RRDB():
         self.rrs[rrid] = rr
         return rrid
 
-    def get_desired_rrs(self, arg, showlast=False, onlytampered=False, withanalysis=False):
-        # this method parses rrid specifier (e.g. 1,2,3-5,10)
-        # returns OrderedDict of rrid, RR sorted by rrid and flag whether problem occured
-        if len(self.rrs.keys()) == 0:
+    def get_desired_rrs(self, arg, showlast=False, 
+                        onlytampered=False, withanalysis=False):
+        """
+        this method parses rrid specifier (e.g. 1,2,3-5,10)
+        returns OrderedDict of (rrid, RR sorted by rrid) and flag 
+        whether problem occured
+        """
+        """rrs empty? don't even try"""
+        if not self.rrs.keys():
             return {}
         indices = []
         minimum = 1
@@ -420,11 +434,12 @@ class RRDB():
         noproblem = True
         #pdb.set_trace()
         if arg is not None:
+            """argument specified, deal with it"""
             for desired in arg.split(','):
                 start = minimum
                 end = maximum
-                
                 if '-' in desired:
+                    """interval"""
                     _start, _, _end = desired.partition('-')
                     if _start.isdigit():
                         start = min([max([start, int(_start)]), end])
@@ -440,87 +455,123 @@ class RRDB():
                         end = tmp
                     indices += list(range(start, end+1))
                 else:
+                    """single value"""
                     if desired.isdigit():
                         indices.append(int(desired))
         else:
+            """no RRID specified - use everything"""
             indices = list(range(minimum, maximum+1))[(-10 if showlast else 0):]
-        #print('indices', indices)       
-        if positive(weber.config['interaction.show_upstream'][0]):
-            keys = [x for x in self.rrs.keys() if (not onlytampered and (not withanalysis or self.rrs[x].analysis_notes)) or self.rrs[x].request_upstream.tampering or (self.rrs[x].response_upstream is not None and self.rrs[x].response_upstream.tampering)]
-        else:
-            keys = [x for x in self.rrs.keys() if (not onlytampered and (not withanalysis or self.rrs[x].analysis_notes)) or self.rrs[x].request_downstream.tampering or (self.rrs[x].response_downstream is not None and self.rrs[x].response_downstream.tampering)]
+        """"""
+        keys = [x for x in self.rrs.keys() 
+                if (not onlytampered 
+                    and (not withanalysis or self.rrs[x].analysis_notes)) 
+                or self.rrs[x].request.tampering 
+                or (self.rrs[x].response is not None 
+                    and self.rrs[x].response.tampering)]
         #print('keys:', keys)
-        return (OrderedDict([(i, self.rrs[i]) for i in sorted(indices) if i in keys]), noproblem)
+        """return resulting dict and flag"""
+        return (OrderedDict([(i, self.rrs[i]) 
+                    for i in sorted(indices) if i in keys]), 
+                noproblem)
 
     
-    def overview(self, args, header=True, show_event=False, show_size=False, show_time=False, show_uri=False, show_last=False, only_tampered=False, only_with_analysis=False):
-        show_event = show_event or weber.config['overview.show_event'][0]
-        show_time = show_time or weber.config['overview.show_time'][0]
-        show_uri = show_uri or weber.config['overview.show_uri'][0]
-        show_size = show_size or weber.config['overview.show_size'][0]
+    def overview(self, args, header=True, show_event=False, show_size=False, 
+                 show_time=False, show_uri=False, show_last=False, 
+                 only_tampered=False, only_with_analysis=False):
+        """
+
+        """
+        show_event = (show_event 
+                      or positive(weber.config['overview.show_event'].value))
+        show_time = (show_time 
+                     or positive(weber.config['overview.show_time'].value))
+        show_uri = (show_uri 
+                    or positive(weber.config['overview.show_uri'].value))
+        show_size = (show_size 
+                     or positive(weber.config['overview.show_size'].value))
 
         result = []
-        arg = None if len(args)<1 else args[0]
+        arg = args[0] if args else None
         #eidlen = max([3]+[len(str(e)) for e,_ in weber.events.items()])
-        desired = self.get_desired_rrs(arg, showlast=show_last, onlytampered=only_tampered, withanalysis=only_with_analysis)
+        """find out what to show"""
+        desired = self.get_desired_rrs(arg, 
+                                       showlast=show_last, 
+                                       onlytampered=only_tampered, 
+                                       withanalysis=only_with_analysis)
         if not desired:
             return []
-        desired = desired[0] # forget the noproblem flag
+        """forget the noproblem flag"""
+        desired = desired[0] 
 
-        # create big table with everything desired
+        """create big table with everything desired"""
         table = []
         format_line = '    '
 
-        # header and format string
+        """header and format string"""
         row = []
         if show_time:
+            """time"""
             row.append('Time')
             format_line += '%-*s  '
         if show_event:
+            """event"""
             row.append('EID')
             format_line += '%-*s  '
+        """RRID"""
         row.append('{0}{0}RRID'.format(log.COLOR_NONE))
         format_line += '%-*s  '
         if show_uri:
+            """Server URI"""
             row.append('Server')
             format_line += '%-*s  '
+        """Request"""
         row.append('{0}{0}{0}{0}Request'.format(log.COLOR_NONE))
         format_line += '%-*s  '
+        """Response"""
         row.append('{0}{0}{0}{0}Response'.format(log.COLOR_NONE))
         format_line += '%-*s  '
         if show_size:
+            """Size"""
             row.append('Size')
             format_line += '%*s'
 
-        # remember header if desired
+        """use header if desired (e.g. not in realtime overview)"""
         if header:
             table.append(row)
         
-        # get lines
+        """get lines"""
         for rrid, rr in desired.items():
             row = []
             if show_time:
-                time_forwarded = rr.request_upstream.time_forwarded
-                row.append(time_forwarded.strftime('%H:%M:%S.%f')[:-3] if time_forwarded else '')
+                """time"""
+                time_value = rr.times.get('response_received') # TODO originally request_forwarded...
+                row.append(time_value.strftime('%H:%M:%S.%f')[:-3] 
+                           if time_value else '')
             if show_event:
+                """event"""
                 row.append(('%d' % rr.eid) if rr.eid else '')
-            row.append(('\033[07m%-4d\033[27m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
-            #row.append(('\033[07m%-4d\033[00m' if rr.analysis_notes else '\033[00m%-4d\033[00m') % (rrid))
+            row.append(('\033[07m%-4d\033[27m' if rr.analysis_notes 
+                        else '\033[00m%-4d\033[00m') % (rrid))
             if show_uri:
+                """Server URI"""
                 try:
-                    row.append((rr.uri_upstream if weber.config['interaction.show_upstream'][0] else rr.uri_downstream).get_value(path=False)) 
+                    row.append(rr.server.uri.tostring()) 
                 except:
                     continue
+            """Request"""
             row.append(rr.request_string(colored=True))
+            """Response"""
             row.append(rr.response_string(colored=True))
             if show_size:
+                """Size"""
                 try:
-                    row.append('%d B' % len((rr.response_upstream if weber.config['interaction.show_upstream'][0] else rr.response_downstream).data))
+                    row.append('%d B' % len(rr.response.data))
                 except:
                     row.append('- B')
+            """Add into table"""
             table.append(row)
 
-        # get max lengths for each column
+        """get max lengths for each column"""
         color_length = len(log.COLOR_GREEN)+len(log.COLOR_NONE)
         lengths = []
 
@@ -532,24 +583,25 @@ class RRDB():
                 print(table)
                 print()
             
-        # add border
+        """add border"""
         if header:
             table.insert(1, [])
             for i in range(len(table[0])):
                 if table[0][i].endswith('RRID'):
-                    border = '{0}{0}'.format(log.COLOR_NONE)+'='*(lengths[i]-color_length)
+                    border = ('{0}{0}'.format(log.COLOR_NONE)
+                              + '='*(lengths[i]-color_length))
                 elif table[0][i].endswith(('Request', 'Response')):
-                    border = '{0}{0}{0}{0}'.format(log.COLOR_NONE)+'='*(lengths[i]-2*color_length)
+                    border = ('{0}{0}{0}{0}'.format(log.COLOR_NONE)
+                              + '='*(lengths[i] - 2*color_length))
                 else:
                     border = '='*lengths[i]
                 table[1].append(border)
 
-        # return pretty lines
+        """return pretty lines"""
         for line in table:
-            # prepare arguments
             arguments = []
-            for i in range(len(line)):
-                arguments += [lengths[i], line[i]]
+            for i, line in enumerate(line):
+                arguments += [lengths[i], line]
             result.append(format_line % tuple(arguments))
         return result
 
@@ -562,7 +614,8 @@ class RR():
     """
     Request/Response pairs, together with other important structures
     """
-    def __init__(self, rrid, request, server, Protocol):
+    #def __init__(self, rrid, request, server, Protocol):
+    def __init__(self, rrid, request, server, times):
         """
 
         """
@@ -570,18 +623,20 @@ class RR():
         self.request = request
         self.response = None
         self.server = server
+        self.times = times
         self.eid = None # TODO
-        self.Protocol = Protocol
+        #self.Protocol = Protocol
         self.analysis_notes = [] # list of (upstream|downstream, <severity>, <message>) lines
     
     def __str__(self):
         return 'RR(%d --> %s)' % (self.rrid, self.server.uri.tostring())
 
-    def clone(self):
+    def clone(self): # TODO is this needed? ConnectionThread will create everything from scratch...
         """
 
         """
-        result = RR(self.rrid, self.request.clone(), self.server, self.Protocol)
+        #result = RR(self.rrid, self.request.clone(), self.server, self.Protocol)
+        result = RR(self.rrid, self.request.clone(), self.server, {})
         if self.response:
             # TODO needed? not for resend nor template...
             result.response = self.response.clone()
@@ -604,15 +659,15 @@ class RR():
         """
         
         """
-        return self.Protocol.request_string(self.request, 
-                                            self.response, 
-                                            colored)
+        return self.server.protocol.request_string(self.request, 
+                                                   self.response, 
+                                                   colored)
 
     def response_string(self, colored=True):
         """
 
         """
-        return self.Protocol.response_string(self.response, colored)
+        return self.server.protocol.response_string(self.response, colored)
 
     def analyze(self):
         """
@@ -622,7 +677,7 @@ class RR():
         self.analysis_notes = []
         log.debug_analysis(' Analyzing RR #%d' % (self.rrid))
         """run all known tests except ignored"""
-        ignored_tests = weber.config['analysis.ignored_tests'].value.split(';')
+        ignored_tests = weber.config['analysis.ignored_tests'].value.split()
         """for every analysis pack"""
         for name, analysis_pack in weber.analysis.items():
             log.debug_analysis('  using %s' % (name))
@@ -635,7 +690,7 @@ class RR():
                 if tname in ignored_tests:
                     continue
                 log.debug_analysis('  Trying \'%s\'' % (tname))
-                if self.Protocol.scheme not in protocols:
+                if self.server.protocol.scheme not in protocols:
                     """skip if incorrect protocol"""
                     log.debug_analysis('   NOT supported for this protocol,'
                                        'skipping...')

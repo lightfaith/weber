@@ -60,7 +60,7 @@ def add_command(command):
 Function to run commands, apply filters etc.
 """
 def run_command(fullcommand):
-    modifier = weber.config['interaction.command_modifier'][0]
+    modifier = weber.config['interaction.command_modifier'].value
     log.debug_command('  Fullcmd: \'%s\'' % (fullcommand))
     parts = list(filter(None, re.split('(~~|~|\%s)' % (modifier), fullcommand)))
     command = parts[0]
@@ -180,7 +180,7 @@ def run_command(fullcommand):
                         for subline in line:
                             less_lines.append(nocolor(re.sub('^\\{grepignore\\}', '', subline)))
                 # suppress debugs and realtime overview
-                oldconfig = {k:weber.config[k] for k in weber.config.keys() if k.startswith('debug.') or k == 'overview.realtime'}
+                oldconfig = {k:weber.config[k].value for k in weber.config.keys() if k.startswith('debug.') or k == 'interaction.realtime_overview'}
                 for k, _ in oldconfig.items():
                     weber.config[k] = (False, weber.config[k][1])
                 # run less
@@ -190,7 +190,7 @@ def run_command(fullcommand):
                     subprocess.call(['less', f.name])
                 # restore debug and realtime overview settings
                 for k, v in oldconfig.items():
-                    weber.config[k] = v
+                    weber.config[k].value = v
                 return
 
         # use parsed lines for more parsing

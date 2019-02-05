@@ -12,6 +12,7 @@ import threading
 import time
 import traceback
 from select import select
+from datetime import datetime
 
 from source import weber
 from source import log
@@ -80,14 +81,14 @@ class Proxy(threading.Thread):
         self.threads = []
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(
-                                          socket.SOL_SOCKET, 
-                                          socket.SO_REUSEADDR, 
-                                          1)
+            socket.SOL_SOCKET, 
+            socket.SO_REUSEADDR, 
+            1)
         try:
             self.socket.bind((self.listen_host, self.listen_port))
         except Exception as e:
             log.err('Cannot bind: %s' % (str(e)))
-            return
+            exit_program(-1, None)
         log.debug_flow('Proxy created.')
 
     def stop(self):
@@ -167,7 +168,7 @@ class ConnectionThread(threading.Thread):
         self.from_weber = from_weber
         self.request = None
         self.response = None
-        self.rrid = None
+        self.rrid = None # for one loop run only, but accesssed from functions
         self.terminate = False
         self.stopper = os.pipe() # to allow new request
         #self.ssl = False
@@ -179,6 +180,7 @@ class ConnectionThread(threading.Thread):
         self.can_forward_request = True # TODO from option
         self.can_forward_response = True # TODO from option
         self.protocol = weber.protocols['http']
+        self.times = {} # for one loop run only, but accessed from functions
     
     def send_continuation_signal(self):
         if self.stopper:
@@ -224,11 +226,15 @@ class ConnectionThread(threading.Thread):
             self.wait_for_continuation_signal()
             if self.terminate: break
             time.sleep(0.5) # TODO delete after testing recvall loops
+            """reset times dictionary for new traffic"""
+            self.times = {}
+          
             """read request from socket if needed"""
             if not self.from_weber:
                 request_raw = ProxyLib.recvall(self.downstream_socket, 
                                                comment='downstream',
                                                stopper=self.stopper[0])
+                self.times['request_received'] = datetime.now()
                 #if not self.request.integrity:
                 #    log.debug_socket('Request integrity failure.')
                 #    self.downstream_socket.close()
@@ -283,7 +289,8 @@ class ConnectionThread(threading.Thread):
                 server_uri_str = self.full_uri.tostring(path=False)
                 """create or get existing server"""
                 self.server = weber.servers[
-                                  Server.create_server(server_uri_str)]
+                                  Server.create_server(server_uri_str, 
+                                                       self.protocol)]
                 """create socket to server"""
                 self.upstream_socket = socket.socket(socket.AF_INET, 
                                                      socket.SOCK_STREAM)
@@ -292,11 +299,18 @@ class ConnectionThread(threading.Thread):
                 #                                1)
                 self.upstream_socket.connect((self.server.uri.domain,
                                               self.server.uri.port))
-                """confirm if it was CONNECT"""
+                """was it CONNECT?"""
                 if self.request.method == b'CONNECT':
+                    """send confirmation response"""
                     self.connect_method = True
                     log.debug_flow('Accepting CONNECTion.')
                     self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
+                else:
+                    """not connect -> remove server from req path"""
+                    self.request.path = self.request.path[
+                         self.request.path.find(
+                             b'/', 
+                             len(self.server.uri.scheme)+3):]
                 """upgrade both sockets if SSL"""
                 if self.server.ssl:
                     self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
@@ -321,12 +335,17 @@ class ConnectionThread(threading.Thread):
             continue
             '''
             
+            """request and server are done, time to play with it"""
+            weber.rrdb.add_request(self.rrid, 
+                                   self.request, 
+                                   self.server, 
+                                   self.times)
             if self.terminate: break
             self.request.pre_tamper()
             """tamper/forward request"""
-            # TODO stopper
             if not self.can_forward_request:
                 log.debug_tampering('Request is tampered.')
+                self.times['request_tampered'] = datetime.now()
             else:
                 log.debug_tampering('Forwarding request without tampering.')
                 """tampering; print overview if appropriate"""
@@ -368,9 +387,12 @@ class ConnectionThread(threading.Thread):
         self.request.post_tamper()
         self.server.get_rps_approval() # sleep for RPS limiting
         if self.terminate: return
+        self.times['request_forwarded'] = datetime.now()
         response_raw = self.forward(self.request.bytes())
+        self.times['response_received'] = datetime.now()
         if self.terminate: return
         self.response = self.protocol.create_response(response_raw)
+        weber.rrdb.add_response(self.rrid, self.response)
         self.response.pre_tamper()
         
         if self.terminate: return
@@ -390,6 +412,7 @@ class ConnectionThread(threading.Thread):
         """tamper/forward response"""
         if not self.can_forward_response:
             log.debug_tampering('Response is tampered.')
+            self.times['response_tampered'] = datetime.now()
             """tampering; print overview if appropriate"""
             if positive(
                     weber.config['interaction.realtime_overview'].value):
@@ -402,6 +425,23 @@ class ConnectionThread(threading.Thread):
         following parts are in continue_sending_response method,
         as those can happen much later
         """
+    
+    def continue_sending_response(self):
+        """
+
+        """
+        self.response.post_tamper(self.full_uri)
+        if self.terminate: return
+        """print overview if desired"""
+        if positive(
+                weber.config['interaction.realtime_overview'].value):
+            # TODO RRDB overview of this
+            pass
+        self.send_response(self.response.bytes())
+        self.times['response_forwarded'] = datetime.now()
+        """allow new request"""
+        self.send_continuation_signal()
+
 
     def forward(self, data):
         if self.upstream_socket:
@@ -423,21 +463,6 @@ class ConnectionThread(threading.Thread):
             log.err('No upstream socket - cannot forward.')
             return b''
 
-
-    def continue_sending_response(self):
-        """
-
-        """
-        self.response.post_tamper(self.full_uri)
-        if self.terminate: return
-        """print overview if desired"""
-        if positive(
-                weber.config['interaction.realtime_overview'].value):
-            # TODO RRDB overview of this
-            pass
-        self.send_response(self.response.bytes())
-        """allow new request"""
-        self.send_continuation_signal()
 
     def send_response(self, data):
         """

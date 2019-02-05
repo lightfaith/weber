@@ -38,7 +38,8 @@ def quitstring(x):
     return False
 
 def exit_program(signal, frame):
-    if signal == -1: # immediate termination due to -h or bad parameter
+    """immediate termination due to -h, bad parameter or bind() fail"""
+    if signal == -1:                 
         sys.exit(0)
 
     log.newline() # newline
