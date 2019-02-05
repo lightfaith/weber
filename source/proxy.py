@@ -40,9 +40,11 @@ class ProxyLib():
                                  % (recv_size, comment))
                 buf = conn.recv(recv_size)
                 if not buf:
+                    print('not buf')
                     break
                 chunks.append(buf)
             except socket.timeout:
+                print('socket timeout')
                 break
         return b''.join(chunks)
 
@@ -430,9 +432,9 @@ class ConnectionThread(threading.Thread):
             """or parse http request and create server"""
             if self.server_id == -1:
                 """get valid URI"""
-                server_uri = self.full_uri.tostring(path=False)
+                server_uri_str = self.full_uri.tostring(path=False)
                 """create or get existing server"""
-                self.server_id = weber.serman.create_server(server_uri)
+                self.server_id = weber.serman.create_server(server_uri_str)
                 """create socket to server"""
                 self.upstream_socket = socket.socket(socket.AF_INET, 
                                                      socket.SOCK_STREAM)
@@ -448,7 +450,7 @@ class ConnectionThread(threading.Thread):
                     log.debug_flow('Accepting CONNECTion.')
                     self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
                 """upgrade both sockets if SSL"""
-                if weber.serman.get_attribute(self.server_id, 'ssl'):
+                if weber.serman.get(self.server_id, 'ssl'):
                     self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
                     try:
                         self.downstream_socket = ssl.wrap_socket(

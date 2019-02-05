@@ -54,14 +54,13 @@ class Server():
                uri (str): URI of the target, path will be stripped
         """
         self.attributes = {} # TODO append one at the time
-            'cookies': OrderedDict(),
-            'certificate_path': None,
-            'certificate_key_path': None,
-            'self.real_certificate': None,
-            'uri': URI(uri),
-            'ssl': self.attributes['uri'].scheme.endswith('s') # TODO whitelist? Cause IS-IS
-        }
+        self.attributes['cookies'] =  OrderedDict()
+        self.attributes['certificate_path'] = None
+        self.attributes['certificate_key_path'] = None
+        self.attributes['self.real_certificate'] = None
+        self.attributes['uri'] = URI(uri)
         self.attributes['uri'].path = ''
+        self.attributes['ssl'] = self.attributes['uri'].scheme.endswith('s') # TODO whitelist? Cause IS-IS
         
         """get certificate if ssl"""
         if self.attributes['ssl']:
@@ -122,6 +121,15 @@ class ServerManager:
 
         """
         self.__servers = OrderedDict()
+    
+    def get_key_by_id(self, server_id):
+        return list(self.__servers.items())[server_id][0]
+
+    def get_server_by_id(self, server_id):
+        return list(self.__servers.items())[server_id][1]
+
+    def get_id(self, uri):
+        return list(self.__servers.keys()).index(uri)
 
     def create_server(self, uri):
         """
@@ -134,10 +142,8 @@ class ServerManager:
             self.__servers[uri] = Server(uri)
         else:
             log.debug_server('Using existing server instance') 
-            
         """return index"""
-        server_id = self.__servers.keys().index(uri)
-        return  server_id
+        return  self.get_id(uri)
     
     def load_servers(self, servers):
         """
@@ -146,15 +152,18 @@ class ServerManager:
         pass # TODO
 
     def get(self, server_id, name):
-        # TODO whitelist
-        pass
+        if name in ('uri', 'ssl'):
+            return self.get_server_by_id(server_id).attributes[name]
+        else:
+            log.err('Cannot get \'%s\' server attribute (not in whitelist).' 
+                    % name)
 
     def set(self, server_id, name, value):
         # TODO whitelist
         pass
 
     def get_rps_approval(self, server_id):
-        self.__servers.items()[server_id][1].get_rps_approval()
+        self.get_server_by_id(server_id).get_rps_approval()
     # TODO replace weber.servers
     
 """initialize global ServerManager"""
@@ -354,10 +363,10 @@ class URI():
         return (scheme, user, password, domain, int(port), '/'+path, Protocol)
 
 
-"""
-Database of Request/Response pairs.
-"""
 class RRDB():
+    """
+    Database of Request/Response pairs.
+    """
     def __init__(self):
         self.rrid = 0 # last rrid
         self.rrs = OrderedDict() # rrid:RR()
