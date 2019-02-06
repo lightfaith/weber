@@ -3,7 +3,12 @@
 Commands and config methods are implemented here.
 """
 
-import os, sys, re, traceback, tempfile, subprocess
+import os
+import sys
+import re
+import traceback
+import tempfile
+import subprocess
 from source import weber
 from source import lib
 from source import log
@@ -12,7 +17,6 @@ from source.docs import doc
 from source.protocols.protocols import *
 from source.lib import *
 from source.structures import RRDB, Event, URI
-import difflib
 from source.fd_debug import *
 
 
@@ -513,62 +517,49 @@ add_command(Command('rqf [<rrid>[:<rrid>]]',
 COMPARE COMMANDS
 """
 def cmp_rr_function(*args, **kwargs):
-    # args: rrid1 rrid2
-    #
-    # flags: 1 - lines only present in first
-    #        2 - lines only present in second
-    #        c - common lines
-    #        d - different lines only
-    #        D - all lines, mark different
+    """
+    Compares 2 given RRs or any part of them.
     
+    Args:   rrid1 rrid2
+    Kwargs: mask:  request? response? header? data?
+            forms: 1 - lines only present in first
+                   2 - lines only present in second
+                   c - common lines
+                   d - different lines only
+                   D - all lines, mark different
+    """
     result = []
-    # parse args
+    """parse args"""
     try:
-        flag = args[0]
-        if flag not in '12cdD':
-            raise TypeError
-    except:
-        log.err('Invalid flag parameter.')
-        return result
-    try:
-        rr1 = weber.rrdb.rrs[int(args[1])]
+        rr1 = weber.rrdb.rrs[int(args[0])]
     except:
         log.err('Invalid first RRID.')
         return result
     try:
-        rr2 = weber.rrdb.rrs[int(args[2])]
+        rr2 = weber.rrdb.rrs[int(args[1])]
     except:
         log.err('Invalid second RRID.')
         return result
     
+    form = kwargs['form']
     showrequest = bool(kwargs['mask'] & 0x8)
     showresponse = bool(kwargs['mask'] & 0x4)
     showheaders = bool(kwargs['mask'] & 0x2)
     showdata = bool(kwargs['mask'] & 0x1)
     
-    # deal with requests for both rrs
     if showrequest:
+        """get request lines"""
         rrs_lines = []
         for rr in (rr1, rr2):
-            r = rr.request_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.request_downstream
-            rrs_lines.append(r.lines(headers=showheaders, data=showdata))
-        
-        # diff
-        diff_lines = [line for line in difflib.Differ().compare(rrs_lines[0], rrs_lines[1]) if not line.startswith('?')]
-        if flag == '1':
-            diff_lines = [line[2:] for line in diff_lines if line.startswith('-')]
-        elif flag == '2':
-            diff_lines = [line[2:] for line in diff_lines if line.startswith('+')]
-        elif flag == 'c':
-            diff_lines = [line[2:] for line in diff_lines if not line.startswith(('-', '+'))]
-        elif flag == 'd':
-            diff_lines = [line for line in diff_lines if line.startswith(('-', '+'))]
-        result += diff_lines
+            rrs_lines.append(
+                rr.request.lines(headers=showheaders, data=showdata))
+        """diff them"""
+        result += diff_lines(rrs_lines[0], rrs_lines[1])
         if showresponse:
             result.append('')
 
-    # deal with responses for both rrs
     if showresponse:
+        """get response lines"""
         rrs_lines = []
         for rr in (rr1, rr2):
             r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
@@ -576,18 +567,10 @@ def cmp_rr_function(*args, **kwargs):
                 rrs_lines.append(['Response not received yet...'])
             else:
                 rrs_lines.append(r.lines(headers=showheaders, data=showdata))
-        # diff
-        diff_lines = [line for line in difflib.Differ().compare(rrs_lines[0], rrs_lines[1]) if not line.startswith('?')]
-        if flag == '1':
-            diff_lines = [line[2:] for line in diff_lines if line.startswith('-')]
-        elif flag == '2':
-            diff_lines = [line[2:] for line in diff_lines if line.startswith('+')]
-        elif flag == 'c':
-            diff_lines = [line[2:] for line in diff_lines if not line.startswith(('-', '+'))]
-        elif flag == 'd':
-            diff_lines = [line for line in diff_lines if line.startswith(('-', '+'))]
-        result += diff_lines
+        """diff them"""
+        result += diff_lines(rrs_lines[0], rrs_lines[1])
     return result
+
 """rac* - compare full RRs"""
 add_command(Command('rac rrid1 rrid2', 
                     'compare two request-response pairs', 

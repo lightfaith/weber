@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import traceback
+import difflib
 
 from gzip import GzipFile
 #from source import weber
@@ -288,10 +289,50 @@ def create_folders_from_uri(root, uri):
 
 
 def run_command(command):
+    """
+    Run command in shell.
+
+    Args:
+        command (str) - command to execute
+
+    Returns:
+        return code
+        standard output
+        standard error output
+    """
     p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
     (out, err) = p.communicate()
     return (p.returncode, out, err)
 
+def diff_lines(lines_1, lines_2, form):
+    """
+    Diffs 2 sets of lines. 
+
+    Args:
+        lines_1 (list of str): first sample
+        lines_2 (list of str): second sample
+        form (str): diff form to perform
+                    D - full diff (default)
+                    1 - only lines unique to first set
+                    2 - only lines unique to second set
+                    c - only common lines
+                    d - only different lines
+    """
+    lines = [line for line in difflib.Differ().compare(lines_1, lines_2)
+             if not line.startswith('?')]
+    """alert with respect to form"""
+    if form == '1':
+        lines = [line[2:] for line in lines if line.startswith('-')]
+    elif form == '2':
+        lines = [line[2:] for line in lines if line.startswith('+')]
+    elif form == 'c':
+        lines = [line[2:] for line in lines 
+                      if not line.startswith(('-', '+'))]
+    elif form == 'd':
+        lines = [line for line in lines 
+                      if line.startswith(('-', '+'))]
+    return lines	
+        
 # --
 
