@@ -684,7 +684,7 @@ class HTTPRequest():
 
         NOTE: request_regexs have spoofed in parse() method already.
         """
-        log.debug_tampering('Running post_tamper for the request.')
+        log.debug_tampering('Running pre_tamper for the request.')
         """remove undesired headers"""
         log.debug_flow('Attempting to remove undesired headers.')
         undesired = weber.config['http.drop_request_headers'].value.encode()
@@ -824,8 +824,6 @@ class HTTPResponse():
                         print()
                         log.warn('Loaded chunk bigger than advertised: %d > %d'
                                  % (len(tmpchunk), chunksize))
-                        print('HEXDUMP:')
-                        print('\n'.join(hexdump(tmpchunk)))
                         break
                     # chunk spans multiple lines...
                     tmpchunk += b'\r\n'

@@ -62,7 +62,7 @@ config['crawl.save_path'] = Option('', str) # where to store received files
 
 # debug settings
 config['debug.analysis'] =   Option(False, bool)   # stuff relevant to analysis
-config['debug.chunks'] =     Option(True, bool)   # stuff relevant to Transfer-Encoding: chunked parsing
+config['debug.chunks'] =     Option(False, bool)   # stuff relevant to Transfer-Encoding: chunked parsing
 config['debug.command'] =    Option(False, bool)   # stuff relevant to user commands
 config['debug.config'] =     Option(False, bool)   # stuff relevant to configuration
 config['debug.flow'] =       Option(True, bool)   # stuff relevant to program flow
@@ -215,7 +215,8 @@ motd = [
     'HTTP/1.1 403 Forbidden',
     'HTTP/1.1 404 Not Found',
 
-    'Weber tip of the day: Use \'q\' to quit the program.',
-    'Weber tip of the day: Use \'pr\' to print overview of all received requests.',
+    "Weber tip of the day: Use 'q' to quit the program.",
+    "Weber tip of the day: Use 'r' to print overview of all received requests.",
+    "Weber tip of the day: Consider using 'rsdwa' to autosave all downloaded data.",
 ]
 

@@ -32,27 +32,46 @@ class ProxyLib():
         """
         timeout = None # for the first recv
         chunks = []
+        # TODO fix looping
         while True:
-            conn.settimeout(timeout)
-            timeout = 0.4
+            #print('sleeping for a while')
+            #time.sleep(1) # TODO delete after testing
+            #conn.settimeout(timeout)
             try:
                 recv_size = 65536
+                r, _, _ = select([conn], [], [], timeout)
                 log.debug_socket('Getting %d bytes from %s...' 
                                  % (recv_size, comment))
-                buf = conn.recv(recv_size)
+                if conn in r:
+                    buf = conn.recv(recv_size)
+                else:
+                    print('select timeout.')
+                    break
+                #print('Got', len(buf), 'B')
+                #print('BUF:', buf, type(buf), bool(buf))
                 if not buf:
+                    print('Nothing loaded in this recvall iteration, returning (not buf)')
+                    break
+                    '''
                     # TODO test so no spams
                     """nothing loaded? wait for new input"""
                     if not chunks:
                         print("Waiting for new input")
                         r, _, _ = select([conn, stopper], [], [])
-                    """or terminate if asked"""
-                    if stopper in r:
-                        break
+                        """or terminate if asked"""
+                        if stopper in r:
+                            print('Recvall is terminating.')
+                            break
+                        elif conn in r:
+                            print('Connection awoken the recvall select.')
+                    '''
                 chunks.append(buf)
             except socket.timeout:
                 """no more data recently, return what we have"""
+                print('recvall stopping (socket.timeout)')
                 break
+            """set timeout for the next round"""
+            timeout = 0.4
         return b''.join(chunks)
 
     @staticmethod
@@ -225,7 +244,7 @@ class ConnectionThread(threading.Thread):
             """wait for signal - cause previous request can be tampered"""
             self.wait_for_continuation_signal()
             if self.terminate: break
-            time.sleep(0.5) # TODO delete after testing recvall loops
+            #time.sleep(0.5) # TODO delete after testing recvall loops
             """reset times dictionary for new traffic"""
             self.times = {}
           
@@ -240,7 +259,6 @@ class ConnectionThread(threading.Thread):
                 #    self.downstream_socket.close()
                 #else:
                 if True:
-                    print(request_raw)
                     log.debug_socket('Request received.')
             
             if self.terminate: break
@@ -280,7 +298,7 @@ class ConnectionThread(threading.Thread):
             else:
                 self.full_uri = URI(self.request.path) # TODO try for non-proxy requests?
                 
-            print(self.full_uri.tostring())
+            print('full URI:', self.full_uri.tostring())
             #print(s for s, _ in weber.servers.items())
             """respond to CONNECT methods, create server"""
             """or parse http request and create server"""
@@ -313,6 +331,7 @@ class ConnectionThread(threading.Thread):
                              len(self.server.uri.scheme)+3):]
                 """upgrade both sockets if SSL"""
                 if self.server.ssl:
+                    log.debug_socket('Upgrading sockets to SSL.')
                     self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
                     try:
                         self.downstream_socket = ssl.wrap_socket(
@@ -367,7 +386,7 @@ class ConnectionThread(threading.Thread):
         if not self.terminate:
             self.wait_for_continuation_signal()
         """cleanup"""
-        log.debug_flow('Closing sockets and stopper for ConnectionThread')
+        log.debug_flow('Closing sockets and stopper for ConnectionThread.')
         if self.upstream_socket:
             self.upstream_socket.close()
         if self.downstream_socket:
@@ -454,7 +473,6 @@ class ConnectionThread(threading.Thread):
                                       stopper=self.stopper[0])
             if result:
                 log.debug_flow('Response received from server.')
-                print(result)
                 return result
             #else:
             #    weber.forward_fail_uris.append(str(self.localuri))
