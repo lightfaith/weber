@@ -125,18 +125,20 @@ simply forwarded, else a duplicate is created first.
 """) # TODO move to rq section
 
 # compare
-doc['c'] = """Commands starting with 'c' serve for data comparison. Currently, requests or responses (or their parts) can be compared, see documentation for `cr` for more information."""
-doc['crX'] = """Commands starting with `cr` serve for request and response comparison. 
+doc['compare_rr'] = (
+    """Requests and responses can be compared. Such commands ends with
+'c', 'c1', 'c2', 'cc', or 'cd' (see the differences below).
 
-The syntax is usually <command> <modifier> <rrid1> <rrid2>.
-The <modifier> is one of (1, 2, c, d, D) symbols. This determines the diff format:
-- 1 - show lines unique for first RR,
-- 2 - show lines unique for second RR,
-- c - show lines present in both RRs,
-- d - show lines that differ (+ and - signs are prepended to show what lines are added and removed, respectively),
-- D - show all lines, mark different lines with + and - signs (like c and d modifiers together).
-"""
-doc['cru'] = """The `cru` command shows lines that are changed by Weber when links are translated. This is for debug purposes."""
+The syntax is <command> <rrid1> <rrid2>.
+If using 'c' command form, all lines from both subjects are shown. 
+Different lines are denoted by + and - signs.
+
+Other command forms are:
+  'c1' - show lines unique for first RR,
+  'c2' - show lines unique for second RR,
+  'cc' - show only lines present in both RRs,
+  'cd' - show only lines that differ with + and - signs
+""")
 
 # event
 doc['e'] = """Events are used to group relevant request-response pairs together. Use `e` to print them! 

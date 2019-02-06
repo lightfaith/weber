@@ -512,15 +512,8 @@ add_command(Command('rqf [<rrid>[:<rrid>]]',
 """
 COMPARE COMMANDS
 """
-# c
-add_command(Command('c', 'compare', 'c', lambda *_: []))
-
-# cr
-add_command(Command('cr', 'compare requests/responses', 'crX', lambda *_: []))
-
-#def crX_function(rrid1, rrid2, flag, function, **kwargs):
-def crX_function(*args, **kwargs):
-    # args: flag rrid1 rrid2
+def cmp_rr_function(*args, **kwargs):
+    # args: rrid1 rrid2
     #
     # flags: 1 - lines only present in first
     #        2 - lines only present in second
@@ -540,14 +533,14 @@ def crX_function(*args, **kwargs):
     try:
         rr1 = weber.rrdb.rrs[int(args[1])]
     except:
-        log.err('Invaplid first RRID.')
+        log.err('Invalid first RRID.')
         return result
     try:
         rr2 = weber.rrdb.rrs[int(args[2])]
     except:
         log.err('Invalid second RRID.')
         return result
-
+    
     showrequest = bool(kwargs['mask'] & 0x8)
     showresponse = bool(kwargs['mask'] & 0x4)
     showheaders = bool(kwargs['mask'] & 0x2)
@@ -595,35 +588,195 @@ def crX_function(*args, **kwargs):
             diff_lines = [line for line in diff_lines if line.startswith(('-', '+'))]
         result += diff_lines
     return result
-    
-add_command(Command('cra (12cdD) rrid1 rrid2', 'diff two request-response pairs', 'crX', lambda *args: crX_function(*args, mask=0xf)))
-add_command(Command('crh (12cdD) rrid1 rrid2', 'diff two request-response headers', 'crX', lambda *args: crX_function(*args, mask=0xe)))
-add_command(Command('crd (12cdD) rrid1 rrid2', 'diff two request-response data', 'crX', lambda *args: crX_function(*args, mask=0xd)))
-add_command(Command('crq (12cdD) rrid1 rrid2', 'diff two requests', 'crX', lambda *args: crX_function(*args, mask=0xb)))
-add_command(Command('crqh (12cdD) rrid1 rrid2', 'diff two request headers', 'crX', lambda *args: crX_function(*args, mask=0xa)))
-add_command(Command('crqd (12cdD) rrid1 rrid2', 'diff two request data', 'crX', lambda *args: crX_function(*args, mask=0x9)))
-add_command(Command('crs (12cdD) rrid1 rrid2', 'diff two responses', 'crX', lambda *args: crX_function(*args, mask=0x7)))
-add_command(Command('crsh (12cdD) rrid1 rrid2', 'diff two response headers', 'crX', lambda *args: crX_function(*args, mask=0x6)))
-add_command(Command('crsd (12cdD) rrid1 rrid2', 'diff two response data', 'crX', lambda *args: crX_function(*args, mask=0x5)))
-
-# cru diff upstream downstream
-def cru_function(_, rr, *__, **___):
-    reqd = rr.request_downstream.lines()
-    requ = rr.request_upstream.lines()
-    diffonly = lambda lines: [line for line in lines if line.startswith(('-', '+'))]
-    result = diffonly(difflib.Differ().compare(reqd, requ))
-    try:
-        resd = rr.response_downstream.lines()
-        resu = rr.response_upstream.lines()
-        result += ['', ''] + diffonly(difflib.Differ().compare(resu, resd))
-    except:
-        pass
-    return result
-add_command(Command('cru rrid', 'diff upstream and downstream', 'cru', lambda *args: foreach_rrs(cru_function, *args)))
-
-
-
-
+"""rac* - compare full RRs"""
+add_command(Command('rac rrid1 rrid2', 
+                    'compare two request-response pairs', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xf, form='D')))
+add_command(Command('rac1 rrid1 rrid2', 
+                    'show unique lines in first request-response pair', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xf, form='1')))
+add_command(Command('rac2 rrid1 rrid2', 
+                    'show unique lines in second request-response pair', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xf, form='2')))
+add_command(Command('racc rrid1 rrid2', 
+                    'show common lines in two request-response pairs', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xf, form='c')))
+add_command(Command('racd rrid1 rrid2', 
+                    'show different lines in two request-response pairs', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xf, form='d')))
+"""rhc* - compare RR headers"""
+add_command(Command('rhc rrid1 rrid2', 
+                    'compare two request-response headers', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xe, form='D')))
+add_command(Command('rhc1 rrid1 rrid2', 
+                    'show unique lines in first request-response headers', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xe, form='1')))
+add_command(Command('rhc2 rrid1 rrid2', 
+                    'show unique lines in second request-response headers', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xe, form='2')))
+add_command(Command('rhcc rrid1 rrid2', 
+                    'show common lines in two request-response headers', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xe, form='c')))
+add_command(Command('rhcd rrid1 rrid2', 
+                    'show different lines in two request-response headers', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xe, form='d')))
+"""rdc* - compare RR data"""
+add_command(Command('rdc rrid1 rrid2', 
+                    'compare two request-response data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xd, form='D')))
+add_command(Command('rdc1 rrid1 rrid2', 
+                    'show unique lines in first request-response data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xd, form='1')))
+add_command(Command('rdc2 rrid1 rrid2', 
+                    'show unique lines in second request-response data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xd, form='2')))
+add_command(Command('rdcc rrid1 rrid2', 
+                    'show common lines in two request-response data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xd, form='c')))
+add_command(Command('rdcd rrid1 rrid2', 
+                    'show different lines in two request-response data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xd, form='d')))
+"""rqc* - compare requests"""
+add_command(Command('rqc rrid1 rrid2', 
+                    'compare two requests', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xb, form='D')))
+add_command(Command('rqc1 rrid1 rrid2', 
+                    'show unique lines in first request', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xb, form='1')))
+add_command(Command('rqc2 rrid1 rrid2', 
+                    'show unique lines in second request', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xb, form='2')))
+add_command(Command('rqcc rrid1 rrid2', 
+                    'show common lines in two requests', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xb, form='c')))
+add_command(Command('rqcd rrid1 rrid2', 
+                    'show different lines in two requests', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xb, form='d')))
+"""rqhc* - compare request headers"""
+add_command(Command('rqhc rrid1 rrid2', 
+                    'compare two request headers', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xa, form='D')))
+add_command(Command('rqhc1 rrid1 rrid2', 
+                    'show unique lines in first request header', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xa, form='1')))
+add_command(Command('rqhc2 rrid1 rrid2', 
+                    'show unique lines in second request header', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xa, form='2')))
+add_command(Command('rqhcc rrid1 rrid2', 
+                    'show common lines in two request headers', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xa, form='c')))
+add_command(Command('rqhcd rrid1 rrid2', 
+                    'show different lines in two request headers', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0xa, form='d')))
+"""rqdc* - compare request data"""
+add_command(Command('rqdc rrid1 rrid2', 
+                    'compare two request data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x9, form='D')))
+add_command(Command('rqdc1 rrid1 rrid2', 
+                    'show unique lines in first request data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x9, form='1')))
+add_command(Command('rqdc2 rrid1 rrid2', 
+                    'show unique lines in second request data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x9, form='2')))
+add_command(Command('rqdcc rrid1 rrid2', 
+                    'show common lines in two request data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x9, form='c')))
+add_command(Command('rqdcd rrid1 rrid2', 
+                    'show different lines in two request data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x9, form='d')))
+"""rsc* - compare responses"""
+add_command(Command('rsc rrid1 rrid2', 
+                    'compare two responses', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x7, form='D')))
+add_command(Command('rsc1 rrid1 rrid2', 
+                    'show unique lines in first response', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x7, form='1')))
+add_command(Command('rsc2 rrid1 rrid2', 
+                    'show unique lines in second response', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x7, form='2')))
+add_command(Command('rscc rrid1 rrid2', 
+                    'show common lines in two responses', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x7, form='c')))
+add_command(Command('rscd rrid1 rrid2', 
+                    'show different lines in two responses', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x7, form='d')))
+"""rshc* - compare response headers"""
+add_command(Command('rshc rrid1 rrid2', 
+                    'compare two response headers', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x6, form='D')))
+add_command(Command('rshc1 rrid1 rrid2', 
+                    'show unique lines in first response header', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x6, form='1')))
+add_command(Command('rshc2 rrid1 rrid2', 
+                    'show unique lines in second response header', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x6, form='2')))
+add_command(Command('rshcc rrid1 rrid2', 
+                    'show common lines in two response headers', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x6, form='c')))
+add_command(Command('rshcd rrid1 rrid2', 
+                    'show different lines in two response headers', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x6, form='d')))
+"""rsdc* - compare response data"""
+add_command(Command('rsdc rrid1 rrid2', 
+                    'compare two response data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x5, form='D')))
+add_command(Command('rsdc1 rrid1 rrid2', 
+                    'show unique lines in first response data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x5, form='1')))
+add_command(Command('rsdc2 rrid1 rrid2', 
+                    'show unique lines in second response data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x5, form='2')))
+add_command(Command('rsdcc rrid1 rrid2', 
+                    'show common lines in two response data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x5, form='c')))
+add_command(Command('rsdcd rrid1 rrid2', 
+                    'show different lines in two response data', 
+                    'compare_rr', 
+                    lambda *args: cmp_rr_function(*args, mask=0x5, form='d')))
 
 
 
