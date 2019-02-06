@@ -263,7 +263,8 @@ def run_command(fullcommand):
 Important command functions
 """
 
-def foreach_rrs(function, *args, fromtemplate=False, **kwargs):
+#def foreach_rrs(function, *args, fromtemplate=False, **kwargs):
+def foreach_rrs(function, *args, **kwargs):
     """
     This method iterates through desired RRs and runs desired
     function on them.
@@ -353,6 +354,7 @@ def test_function(*_):
         result.append(str(server.rrs))
         result.append('')
     return result
+
 add_command(Command('test', 'prints test message', '', test_function))
 
 def prompt_function(*_): # TODO for testing only!
@@ -363,6 +365,7 @@ def prompt_function(*_): # TODO for testing only!
             break
         exec(input())
     return []
+
 add_command(Command('prompt', 'gives python3 shell', '', prompt_function))
 
 
@@ -383,6 +386,7 @@ def ap_function(*args):
             for testname, info, *_ in v['rr_tests']:
                 result.append('        %s: %s' % (testname, info[1]))
     return result
+
 add_command(Command('ap', 'print analysis packs', 'ap', ap_function))
 
 """ape, apd - enable/disable analysis pack"""
@@ -398,6 +402,31 @@ add_command(Command('ape <pack>', 'enable analysis pack', 'ap',
 add_command(Command('apd <pack>', 'disable analysis pack', 'ap', 
                     lambda *args: apX_function(*args, enable=False)))
 
+"""ar - print analysis results"""
+def ar_function(_, rr, *__, **___):
+    result = []
+    for testname, severity, message, certainity in rr.analysis_notes:
+        color = log.COLOR_NONE
+        if severity == 'SECURITY':
+            color = log.COLOR_RED
+        if severity == 'WARNING':
+            color = log.COLOR_YELLOW
+        if severity == 'INFOLEAK':
+            color = log.COLOR_CYAN
+        if certainity:
+            color += log.COLOR_BOLD
+        result += log.info('%s<%s>%s %s: %s' % (color, 
+                                                severity, 
+                                                log.COLOR_NONE, 
+                                                testname, 
+                                                message), stdout=False)
+    return result
+
+add_command(Command('ar [<rrid>[:<rrid>]]', 
+                    'print results of RR analysis', 
+                    'ar', 
+                    lambda *args: foreach_rrs(par_function, *args)))
+
 """arr - run analysis"""
 def arr_function(_, rr, *__, **___):
     result = []
@@ -405,6 +434,7 @@ def arr_function(_, rr, *__, **___):
     if rr.analysis_notes:
        result += ar_function(_, rr, *__, **___)
     return result
+
 add_command(Command('arr [<rrid>[:<rrid>]]', 
                     'run RR analysis on specified request-response pairs', 
                     'arr', 
@@ -424,6 +454,7 @@ def b_function(*args):
     else:
         log.err('No dictionary loaded, see `bl`.')
         return []
+
 add_command(Command('b', 'brute-force (alias for `pwb`)', 'b', b_function))
 
 """bl - load dictionary for bruteforce"""
@@ -441,6 +472,7 @@ def bl_function(*args):
     except Exception as e:
         log.err('Cannot open file (%s).' % (str(e)))
         return []
+
 add_command(Command('bl <path>', 
                     'load file for brute', 
                     ('bl', 
@@ -452,6 +484,7 @@ add_command(Command('bl <path>',
 def bfi_function(_, rr, *__, **___):
     data = rr.__bytes__()
     return [] # TODO change
+
 add_command(Command('bfi [<rrid>[:<rrid>]]', 
                     'brute fault injection from template rrids', 
                     'bfi', 
@@ -492,6 +525,7 @@ def bra_function(rrid, rr, *__, **___):
         if sleep:
             time.sleep(sleep)
     return []
+
 add_command(Command('bra [<rrid>[:<rrid>]]', 
                     'brute from template rrids for all sets', 
                     'br', lambda *args: foreach_rrs(bra_function, 
@@ -506,6 +540,7 @@ def brf_function(_, rr, *__, **___):
     # TODO stop tampering OR create duplicate and forward
     weber.proxy.add_connectionthread_from_template(rr, lambda data: data)
     return []
+
 add_command(Command('rqf [<rrid>[:<rrid>]]', 
                     'forward request', 
                     'rqf', 
@@ -769,6 +804,14 @@ add_command(Command('rsdcd rrid1 rrid2',
 """
 EVENT COMMANDS
 """
+# TODO refactor from scratch
+#e    print events     
+#ea     create event, define type
+#era    add RRs into event 
+#erD    delete RRs from event
+#eD      destroy event, keep rrs in default
+#es   select actual event
+'''
 # e
 def e_function(*_): #TODO filter?
     result = []
@@ -830,7 +873,7 @@ def et_function(*args):
     weber.events[eid].type = t
     return []
 add_command(Command('et <eid> <type>', 'define type for an event', 'et', et_function))
-
+'''
 
 
 
@@ -848,6 +891,12 @@ add_command(Command('et <eid> <type>', 'define type for an event', 'et', et_func
 """
 MODIFY COMMANDS
 """
+# TODO refactor
+#rD     delete RR 
+#rqC     clone rq
+#rqm   - as mrq; duplicate if not tamper
+#rsm   - as mrs; only if tamper
+'''
 add_command(Command('m', 'modify', 'm', lambda *_: []))
 add_command(Command('mt', 'modify template', 'mr', lambda *_: []))
 add_command(Command('mtr', 'modify template request/response', 'mr', lambda *_: []))
@@ -927,7 +976,7 @@ add_command(Command('mrq! <rrid>', 'create template from request and modify', 'm
 add_command(Command('mrs! <rrid>', 'create template from response and modify', 'mr', lambda *args: mr_function('response', *args, force_template_creation=True)))
 add_command(Command('mtrq <rrid>', 'modify template request', 'mr', lambda *args: mr_function('request', *args, fromtemplate=True)))
 add_command(Command('mtrs <rrid>', 'modify template response', 'mr', lambda *args: mr_function('response', *args, fromtemplate=True)))
-
+'''
 
 
 
@@ -942,165 +991,220 @@ add_command(Command('mtrs <rrid>', 'modify template response', 'mr', lambda *arg
 """
 OPTIONS COMMANDS
 """
-o_function = lambda *_: ['    %-30s  %s' % (k, str(v[0] if v[1] != str else '\''+v[0]+'\'').replace('\n', '\\n').replace('\r', '\\r')) for k,v in weber.config.items()]
-add_command(Command('o', 'Weber options (alias for `pwo`)', 'o', o_function))
+# TODO add to weber section
+"""wo - show options"""
+def wo_function(*_):
+    lines = []
+    for k,v in weber.config.items():
+        lines.append('    %-30s  %s' % (k, v.get_text_value()))
+    return lines
 
-# os
-def os_function(*args):
+add_command(Command('wo', 'print Weber options', 'wo', wo_function))
+
+"""wos - set an option"""
+def wos_function(*args):
+    """parse key and value"""
     try:
         key = args[0]
         value = args[1]
     except:
         log.err('Invalid arguments.')
         return []
-    typ = str if key not in weber.config.keys() else weber.config[key][1]
-    if typ == bool:
-        value = positive(value)
-    weber.config[key] = (typ(value), typ)
-    return []
-add_command(Command('os <key> <value>', 'change Weber configuration', 'os', os_function))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-"""
-PRINT COMMANDS
-"""
-add_command(Command('p', 'print', 'p', lambda *_: []))
-
-# par
-def par_function(_, rr, *__, **___):
-    result = []
-    desired = 'upstream' if positive(weber.config['interaction.show_upstream'][0]) else 'downstream'
-    for source, testname, severity, message, certainity in rr.analysis_notes:
-        if source != desired:
-            continue
-        color = log.COLOR_NONE
-        if severity == 'SECURITY':
-            color = log.COLOR_RED
-        if severity == 'WARNING':
-            color = log.COLOR_YELLOW
-        if severity == 'INFOLEAK':
-            color = log.COLOR_CYAN
-
-        if certainity:
-            color += log.COLOR_BOLD
-        result += log.info('%s<%s>%s %s: %s' % (color, severity, log.COLOR_NONE, testname, message), stdout=False)
-    return result
-add_command(Command('par [<rrid>[:<rrid>]]', 'print results of RR analysis', 'par', lambda *args: foreach_rrs(par_function, *args)))
-
-
-# pc
-def pc_function(_, rr, *__, **___):
+    """try to set || create new"""
     try:
-        r = rr.request_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.request_downstream
-        cookies = r.headers[b'Cookie'].split(b';')
+        weber.config[key].value = value
+    except:
+        """create user-defined with @"""
+        key = key if key.startswith('@') else '@%s' % key
+        weber.config[key] = Option(value, data_type)
+    return []
+
+add_command(Command('wos <key> <value>', 
+                    'change Weber configuration', 
+                    'wo', 
+                    wos_function))
+
+"""rc - print Cookie headers in requests"""
+def rc_function(_, rr, *__, **___):
+    try:
+        cookies = rr.request.headers[b'Cookie'].split(b';')
         cookies = dict([tuple(c.split(b'=')) for c in cookies])
         maxlen = max([0]+[len(k.decode().strip()) for k in cookies.keys()])
-        return ['%*s: %s' % (maxlen, k.decode().strip(), v.decode()) for k,v in cookies.items()]
+        return ['%*s: %s' % (maxlen, k.decode().strip(), v.decode()) 
+                for k,v in cookies.items()]
     except:
         return []
-add_command(Command('pc [<rrid>[:<rrid>]]', 'print cookies', 'pc', lambda *args: foreach_rrs(pc_function, *args)))
-add_command(Command('ptc [<rrid>[:<rrid>]]', 'print cookies from templates', 'pc', lambda *args: foreach_rrs(pc_function, fromtemplate=True, *args)))
 
-# pcs
-def pcs_function(_, rr, *__, **___):
+add_command(Command('rc [<rrid>[:<rrid>]]', 
+                    'print cookies sent in requests', 
+                    'rc', 
+                    lambda *args: foreach_rrs(rc_function, *args)))
+
+"""rcs - print Set-Cookie headers in responses"""
+def rcs_function(_, rr, *__, **___):
     try:
-        r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
-        cookies = r.headers[b'Set-Cookie'].split(b';')
-        attrs = dict([(tuple(c.strip().split(b'=')+[b''])[:2]) for c in cookies])
+        cookies = rr.response.headers[b'Set-Cookie'].split(b';')
+        attrs = dict([(tuple(c.strip().split(b'=')+[b''])[:2]) 
+                      for c in cookies])
         maxlen = max([0]+[len(k.decode()) for k in attrs.keys()])
-        return ['%*s%s' % (maxlen, k.decode(), (': '+v.decode() if len(v)>0 else '')) for k,v in attrs.items()]
+        return ['%*s%s' 
+                % (maxlen, k.decode(), (': '+v.decode() if v else '')) 
+                for k,v in attrs.items()]
     except:
         #traceback.print_exc()
         return []
-add_command(Command('pcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences', 'pcs', lambda *args: foreach_rrs(pcs_function, *args)))
-add_command(Command('ptcs [<rrid>[:<rrid>]]', 'print Set-Cookie occurences from templates', 'pcs', lambda *args: foreach_rrs(pcs_function, fromtemplate=True, *args)))
-add_command(Command('pe [<eid>[:<eid>]]', 'print events', 'e', e_function))
+add_command(Command('rcs [<rrid>[:<rrid>]]', 
+                    'print cookies set in reqponses', 
+                    'rcs', lambda *args: foreach_rrs(rcs_function, *args)))
 
+#add_command(Command('pe [<eid>[:<eid>]]', 'print events', 'e', e_function))
 
-# ph - only relevant for HTTP
+# rH - only relevant for HTTP
 if 'source.protocols.http' in sys.modules.keys():
-    add_command(Command('ph', 'print HTML-related info', 'ph', lambda *_: []))
-    add_command(Command('pth', 'print HTML-related info in templates', 'ph', lambda *_: []))
+    add_command(Command('rH', 'print HTML-related info', 'ph', lambda *_: []))
 
-    # phc
-    add_command(Command('phc [<rrid>[:<rrid>]]', 'print comments', 'phc', lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<!--', b'-->')], valueonly=False)))
-    add_command(Command('pthc [<rrid>[:<rrid>]]', 'print comments in templates', 'phc', lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<!--', b'-->')], valueonly=False)))
+    """rHc - print HTML comments"""
+    add_command(Command('rHc [<rrid>[:<rrid>]]', 
+                        'print HTML comments', 
+                        'rHc', 
+                        lambda *args: foreach_rrs(
+                            find_tags, 
+                            *args, 
+                            startends=[(b'<!--', b'-->')], 
+                            valueonly=False)))
 
-    # phf
-    add_command(Command('phf [<rrid>[:<rrid>]]', 'print HTML forms', 'phf', lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<form', b'</form>')], valueonly=False)))
-    add_command(Command('pthf [<rrid>[:<rrid>]]', 'print HTML forms from templates', 'phf', lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<form', b'</form>')], valueonly=False)))
+    """rHf - print HTML forms"""
+    add_command(Command('rHf [<rrid>[:<rrid>]]', 
+                        'print HTML forms', 
+                        'rHf', 
+                        lambda *args: foreach_rrs(
+                            find_tags, 
+                            *args, 
+                            startends=[(b'<form', b'</form>')], 
+                            valueonly=False)))
 
-    # phl
-    add_command(Command('phl [<rrid>[:<rrid>]]', 'print HTML links', 'phl', lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], attrs=[x[2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], valueonly=True)))
-    add_command(Command('pthl [<rrid>[:<rrid>]]', 'print links from templates', 'phl', lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[x[:2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], attrs=[x[2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], valueonly=True)))
+    """rHl - print hyperlinks"""
+    add_command(
+        Command(
+            'rHl [<rrid>[:<rrid>]]', 
+            'print HTML links', 
+            'rHl', 
+            lambda *args: foreach_rrs(
+                find_tags, 
+                *args, 
+                startends=[x[:2] for x in 
+                           sys.modules['source.protocols.http'].HTTP.link_tags], 
+                attrs=[x[2] for x in 
+                       sys.modules['source.protocols.http'].HTTP.link_tags], 
+                valueonly=True)))
     
-    add_command(Command('phlc [<rrid>[:<rrid>]]', 'print links with context', 'phlc', lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], valueonly=False)))
-    add_command(Command('pthlc [<rrid>[:<rrid>]]', 'print links from templates with context', 'phlc', lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], valueonly=False)))
+    """rHlc - print hyperlinks with context"""
+    add_command(
+        Command(
+            'rHlc [<rrid>[:<rrid>]]', 
+            'print HTML links with context', 
+            'rHlc', 
+            lambda *args: foreach_rrs(
+                find_tags, 
+                *args, 
+                startends=[x[:2] for x in 
+                           sys.modules['source.protocols.http'].HTTP.link_tags], 
+                attrs=[x[2] for x in 
+                       sys.modules['source.protocols.http'].HTTP.link_tags], 
+                valueonly=False)))
+    #add_command(Command('phlc [<rrid>[:<rrid>]]', 'print links with context', 'phlc', lambda *args: foreach_rrs(find_tags, *args, startends=[x[:2] for x in sys.modules['source.protocols.http'].HTTP.link_tags], valueonly=False)))
 
-    # phm
-    add_command(Command('phm [<rrid>[:<rrid>]]', 'print <main> elements', 'phm', lambda *args: foreach_rrs(find_tags, *args, startends=[(b'<main', b'</main>')], valueonly=False)))
-    add_command(Command('pthm [<rrid>[:<rrid>]]', 'print <main> elements in templates', 'phm', lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(b'<main', b'</main>')], valueonly=False)))
+    """rHm - print <main> elements"""
+    add_command(Command('phm [<rrid>[:<rrid>]]', 
+                        'print <main> elements', 
+                        'phm', 
+                        lambda *args: foreach_rrs(
+                            find_tags, 
+                            *args, 
+                            startends=[(b'<main', b'</main>')], 
+                            valueonly=False)))
 
-    # phs
-    add_command(Command('phs <start> <end>', 'search in HTML', 'phm', lambda *args: foreach_rrs(find_tags, *args, startends=[(args[0].encode(), args[1].encode())], valueonly=False)))
-    add_command(Command('pths <start> <end>', 'search in HTML of templates', 'phm', lambda *args: foreach_rrs(find_tags, *args, fromtemplate=True, startends=[(args[0].encode(), args[1].encode())], valueonly=False)))
+    """rHs - search in HTML"""
+    add_command(Command('rHs <start> <end>', 
+                        'search in HTML', 
+                        'phm', 
+                        lambda *args: foreach_rrs(
+                            find_tags, 
+                            *args, 
+                            startends=[(args[0].encode(), args[1].encode())], 
+                            valueonly=False)))
 
+"""rp - print request parameters"""
+def rp_function(_, rr, *__, **___):
+    maxlen = max([0]+[len(k) for k in rr.request.parameters.keys()])
+    return ['%*s: %s' % (maxlen, k.decode(), v.decode() if v else '') 
+            for k, v in r.parameters.items()]
 
-# pp
-def pp_function(_, rr, *__, **___):
-    r = rr.request_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.request_downstream
-    maxlen = max([0]+[len(k) for k in r.parameters.keys()])
-    return ['%*s: %s' % (maxlen, k.decode(), '' if v is None else v.decode()) for k, v in r.parameters.items()]
-add_command(Command('pp [<rrid>[:<rrid>]]', 'print parameters', 'pp', lambda *args: foreach_rrs(pp_function, *args)))
-add_command(Command('ptp [<rrid>[:<rrid>]]', 'print template parameters', 'pp', lambda *args: foreach_rrs(pp_function, fromtemplate=True, *args)))
+add_command(Command('rp [<rrid>[:<rrid>]]', 
+                    'print HTTP parameters', 
+                    'rp', 
+                    lambda *args: foreach_rrs(rp_function, *args)))
 
-# pr_function defined in structures.py because it is also used by proxy (realtime overview)
-def overview_handler(args, source, show_last=False, only_tampered=False, only_with_analysis=False):
-    #args = list(filter(None, args))
+"""overview
+overview is defined in structures.py because it is also used by proxy 
+(realtime overview)"""
+def overview_handler(
+        args, 
+        show_last=False, 
+        only_tampered=False, 
+        only_with_analysis=False):
+    """decide what columns to show"""
     show_event = False
     show_size = False
     show_time = False
     show_uri = False
-    if args and re.match('^[estu]+$', args[0]): # some modifiers (defaults are considered in overview() function)
+    """some modifiers (defaults are considered in overview() function)"""
+    if args and re.match('^[estu]+$', args[0]): 
         show_event = 'e' in args[0]
         show_size = 's' in args[0]
         show_time = 't' in args[0]
         show_uri = 'u' in args[0]
         args = args[1:]
-    return source.overview(args, show_event=show_event, show_size=show_size, show_time=show_time, show_uri=show_uri, show_last=show_last, only_tampered=only_tampered, only_with_analysis=only_with_analysis)
+    """show overview"""
+    return weber.rrdb.overview(
+        args, 
+        show_event=show_event, 
+        show_size=show_size, 
+        show_time=show_time, 
+        show_uri=show_uri, 
+        show_last=show_last, 
+        only_tampered=only_tampered, 
+        only_with_analysis=only_with_analysis)
 
-add_command(Command('pr [estu] [<rrid>[:<rrid>]]', 'print request-response overview (alias for `pro`)', 'pr', lambda *args: overview_handler(args, source=weber.rrdb)))
+add_command(Command('r [estu] [<rrid>[:<rrid>]]', 
+                    'print request-response overview (alias for `ro`)', 
+                    'r', 
+                    lambda *args: overview_handler(args)))
 
-add_command(Command('pro [estu] [<rrid>[:<rrid>]]', 'print request-response overview', 'pr', lambda *args: overview_handler(args, source=weber.rrdb)))
-add_command(Command('pt [estu] [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', 'pr', lambda *args: overview_handler(args, source=weber.tdb)))
-add_command(Command('ptr [estu] [<rrid>[:<rrid>]]', 'print templates overview (alias for `ptro`)', 'pr', lambda *args: overview_handler(args, source=weber.tdb)))
-add_command(Command('ptro [estu] [<rrid>[:<rrid>]]', 'print templates overview', 'pr', lambda *args: overview_handler(args, source=weber.tdb)))
+add_command(Command('ro [estu] [<rrid>[:<rrid>]]', 
+                    'print request-response overview', 
+                    'r', 
+                    lambda *args: overview_handler(args)))
+"""rol - overview of last 10"""
+add_command(Command('rol [estu] [<rrid>[:<rrid>]]', 
+                    'print last request-response overview', 
+                    'r', 
+                    lambda *args: overview_handler(args, show_last=True)))
+"""rot - overview of tampering"""
+add_command(Command('rot [estu] [<rrid>[:<rrid>]]', 
+                    'print request-response pairs in tampering state', 
+                    'r', 
+                    lambda *args: overview_handler(args, only_tampered=True)))
 
-# prol
-add_command(Command('prol [estu] [<rrid>[:<rrid>]]', 'print last request-response overview', 'pr', lambda *args: overview_handler(args, source=weber.rrdb, show_last=True)))
-add_command(Command('ptrol [estu] [<rrid>[:<rrid>]]', 'print last template request-response overview', 'pr', lambda *args: overview_handler(args, source=weber.tdb, show_last=True)))
+"""roa - overview of RRs with analysis notes"""
+add_command(Command('roa [estu] [<rrid>[:<rrid>]]', 
+                    'print request-response pairs with analysis notes', 
+                    'r', 
+                    lambda *args: overview_handler(args, 
+                                                   only_with_analysis=True)))
 
-# prot
-add_command(Command('prot [estu] [<rrid>[:<rrid>]]', 'print request-response pairs in tamper state', 'pr', lambda *args: overview_handler(args, source=weber.rrdb, only_tampered=True)))
-
-# proa
-add_command(Command('proa [estu] [<rrid>[:<rrid>]]', 'print request-response pairs with analysis notes', 'pr', lambda *args: overview_handler(args, source=weber.rrdb, only_with_analysis=True)))
-
-
-# prX
-def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of desired requests/responses/both
+""" rX detailed print of X"""
+def rx_function(_, rr, *__, **kwargs): 
     result = []
     showrequest = bool(kwargs['mask'] & 0x8)
     showresponse = bool(kwargs['mask'] & 0x4)
@@ -1108,86 +1212,134 @@ def prx_function(_, rr, *__, **kwargs): # print detailed headers/data/both of de
     showdata = bool(kwargs['mask'] & 0x1)
     usehexdump = kwargs.get('hexdump') or False
 
-    # deal with requests
+    """deal with requests"""
     if showrequest:
-        r = rr.request_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.request_downstream
-        result += r.lines(headers=showheaders, data=showdata) if not usehexdump else hexdump(r.bytes(headers=showheaders, data=showdata))
+        result += (rr.request.lines(headers=showheaders, data=showdata) 
+                   if not usehexdump else 
+                   hexdump(rr.request.bytes(headers=showheaders, 
+                                            data=showdata)))
         if showresponse:
             result.append('')
-    # deal with responses
+    """deal with responses"""
     if showresponse:
-        r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
-        if r is None:
+        if not rr.response:
             result.append('Response not received yet...')
         else:
-            result += r.lines(headers=showheaders, data=showdata) if not usehexdump else hexdump(r.bytes(headers=showheaders, data=showdata))
+            result += (rr.response.lines(headers=showheaders, data=showdata) 
+                       if not usehexdump 
+                       else hexdump(rr.response.bytes(headers=showheaders, 
+                                                      data=showdata)))
     return result
 
-add_command(Command('pra [<rrid>[:<rrid>]]', 'print requests-response pairs verbose', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0xf)))
-add_command(Command('prh [<rrid>[:<rrid>]]', 'print request-response headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0xe)))
-add_command(Command('prd [<rrid>[:<rrid>]]', 'print request-response data', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0xd)))
-add_command(Command('prq [<rrid>[:<rrid>]]', 'print requests verbose', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0xb)))
-add_command(Command('prqh [<rrid>[:<rrid>]]', 'print request headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0xa)))
-add_command(Command('prqd [<rrid>[:<rrid>]]', 'print request data', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0x9)))
-add_command(Command('prs [<rrid>[:<rrid>]]', 'print responses verbose', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0x7)))
-add_command(Command('prsh [<rrid>[:<rrid>]]', 'print response headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0x6)))
-add_command(Command('prsd [<rrid>[:<rrid>]]', 'print response data', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0x5)))
+add_command(Command('ra [<rrid>[:<rrid>]]', 
+                    'print requests-response pairs verbose', 
+                    'rX', 
+                    lambda *args: foreach_rrs(rx_function, *args, mask=0xf)))
+add_command(Command('rh [<rrid>[:<rrid>]]', 
+                    'print request-response headers', 
+                    'rX', 
+                    lambda *args: foreach_rrs(rx_function, *args, mask=0xe)))
+add_command(Command('rd [<rrid>[:<rrid>]]', 
+                    'print request-response data', 
+                    'rX', 
+                    lambda *args: foreach_rrs(rx_function, *args, mask=0xd)))
+add_command(Command('rq [<rrid>[:<rrid>]]', 
+                    'print requests verbose', 
+                    'rX', 
+                    lambda *args: foreach_rrs(rx_function, *args, mask=0xb)))
+add_command(Command('rqh [<rrid>[:<rrid>]]',
+                    'print request headers', 
+                    'rX', 
+                    lambda *args: foreach_rrs(rx_function, *args, mask=0xa)))
+add_command(Command('rqd [<rrid>[:<rrid>]]', 
+                    'print request data', 
+                    'rX', 
+                    lambda *args: foreach_rrs(rx_function, *args, mask=0x9)))
+add_command(Command('rs [<rrid>[:<rrid>]]', 
+                    'print responses verbose', 
+                    'rX', 
+                    lambda *args: foreach_rrs(rx_function, *args, mask=0x7)))
+add_command(Command('rsh [<rrid>[:<rrid>]]', 
+                    'print response headers', 
+                    'rX', 
+                    lambda *args: foreach_rrs(rx_function, *args, mask=0x6)))
+add_command(Command('rsd [<rrid>[:<rrid>]]', 
+                    'print response data', 
+                    'rX', 
+                    lambda *args: foreach_rrs(rx_function, *args, mask=0x5)))
 
-add_command(Command('prax [<rrid>[:<rrid>]]', 'print hexdump of requests-response pairs verbose', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0xf, hexdump=True)))
-add_command(Command('prhx [<rrid>[:<rrid>]]', 'print hexdump of request-response headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0xe, hexdump=True)))
-add_command(Command('prdx [<rrid>[:<rrid>]]', 'print hexdump of request-response data', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0xd, hexdump=True)))
-add_command(Command('prqx [<rrid>[:<rrid>]]', 'print hexdump of requests verbose', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0xb, hexdump=True)))
-add_command(Command('prqhx [<rrid>[:<rrid>]]', 'print hexdump of request headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0xa, hexdump=True)))
-add_command(Command('prqdx [<rrid>[:<rrid>]]', 'print hexdump of request data', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0x9, hexdump=True)))
-add_command(Command('prsx [<rrid>[:<rrid>]]', 'print hexdump of responses verbose', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0x7, hexdump=True)))
-add_command(Command('prshx [<rrid>[:<rrid>]]', 'print hexdump of response headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0x6, hexdump=True)))
-add_command(Command('prsdx [<rrid>[:<rrid>]]', 'print hexdump of response data', 'prX', lambda *args: foreach_rrs(prx_function, *args, mask=0x5, hexdump=True)))
+add_command(Command('rax [<rrid>[:<rrid>]]',
+                    'print hexdump of requests-response pairs verbose', 
+                    'rX', 
+                    lambda *args: foreach_rrs(
+                        rx_function, *args, mask=0xf, hexdump=True)))
+add_command(Command('rhx [<rrid>[:<rrid>]]',
+                    'print hexdump of request-response headers', 
+                    'rX', 
+                    lambda *args: foreach_rrs(
+                        rx_function, *args, mask=0xe, hexdump=True)))
+add_command(Command('rdx [<rrid>[:<rrid>]]', 
+                    'print hexdump of request-response data', 
+                    'rX', 
+                    lambda *args: foreach_rrs(
+                        rx_function, *args, mask=0xd, hexdump=True)))
+add_command(Command('rqx [<rrid>[:<rrid>]]',
+                    'print hexdump of requests verbose', 
+                    'rX', 
+                    lambda *args: foreach_rrs(
+                        rx_function, *args, mask=0xb, hexdump=True)))
+add_command(Command('rqhx [<rrid>[:<rrid>]]',
+                    'print hexdump of request headers', 
+                    'rX', 
+                    lambda *args: foreach_rrs(
+                        rx_function, *args, mask=0xa, hexdump=True)))
+add_command(Command('rqdx [<rrid>[:<rrid>]]', 
+                    'print hexdump of request data', 
+                    'rX', 
+                    lambda *args: foreach_rrs(
+                        rx_function, *args, mask=0x9, hexdump=True)))
+add_command(Command('rsx [<rrid>[:<rrid>]]', 
+                    'print hexdump of responses verbose', 
+                    'rX', 
+                    lambda *args: foreach_rrs(
+                        rx_function, *args, mask=0x7, hexdump=True)))
+add_command(Command('rshx [<rrid>[:<rrid>]]', 
+                    'print hexdump of response headers', 
+                    'rX', 
+                    lambda *args: foreach_rrs(
+                        rx_function, *args, mask=0x6, hexdump=True)))
+add_command(Command('rsdx [<rrid>[:<rrid>]]', 
+                    'print hexdump of response data', 
+                    'rX', 
+                    lambda *args: foreach_rrs(
+                        rx_function, *args, mask=0x5, hexdump=True)))
 
-add_command(Command('ptra [<rrid>[:<rrid>]]', 'print template requests-response pairs verbose', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xf)))
-add_command(Command('ptrh [<rrid>[:<rrid>]]', 'print template request-response headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xe)))
-add_command(Command('ptrd [<rrid>[:<rrid>]]', 'print template request-response data', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xd)))
-add_command(Command('ptrq [<rrid>[:<rrid>]]', 'print template requests', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xb)))
-add_command(Command('ptrqh [<rrid>[:<rrid>]]', 'print template request headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xa)))
-add_command(Command('ptrqd [<rrid>[:<rrid>]]', 'print template request data', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x9)))
-add_command(Command('ptrs [<rrid>[:<rrid>]]', 'print template responses', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x7)))
-add_command(Command('ptrsh [<rrid>[:<rrid>]]', 'print template response headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x6)))
-add_command(Command('ptrsd [<rrid>[:<rrid>]]', 'print template response data', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x5)))
-
-add_command(Command('ptrax [<rrid>[:<rrid>]]', 'print template requests-response pairs verbose', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xf, hexdump=True)))
-add_command(Command('ptrhx [<rrid>[:<rrid>]]', 'print template request-response headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xe, hexdump=True)))
-add_command(Command('ptrdx [<rrid>[:<rrid>]]', 'print template request-response data', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xd, hexdump=True)))
-add_command(Command('ptrqx [<rrid>[:<rrid>]]', 'print template requests', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xb, hexdump=True)))
-add_command(Command('ptrqhx [<rrid>[:<rrid>]]', 'print template request headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0xa, hexdump=True)))
-add_command(Command('ptrqdx [<rrid>[:<rrid>]]', 'print template request data', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x9, hexdump=True)))
-add_command(Command('ptrsx [<rrid>[:<rrid>]]', 'print template responses', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x7, hexdump=True)))
-add_command(Command('ptrshx [<rrid>[:<rrid>]]', 'print template response headers', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x6, hexdump=True)))
-add_command(Command('ptrsdx [<rrid>[:<rrid>]]', 'print template response data', 'prX', lambda *args: foreach_rrs(prx_function, *args, fromtemplate=True, mask=0x5, hexdump=True)))
-
-# pw 
-add_command(Command('pw', 'print weber-related information', 'pw', lambda *_: []))
+"""w - Weber stuff """ # TODO move to Weber section 
+add_command(Command('w', 'Weber-related information', 'w', lambda *_: []))
 
 # pwb
-add_command(Command('pwb', 'print brute lists', 'b', b_function))
+#add_command(Command('pwb', 'print brute lists', 'b', b_function))
 
+'''
 # pwm
 def pwm_function(*args):
     k_len = max([len(str(k)) for k, _ in weber.mapping.l_r.items()])
     return ['    %*s <--> %s' % (k_len, k, v) for k, v in weber.mapping.l_r.items()]    
 add_command(Command('pwm', 'print URI mapping', 'pwm', pwm_function))
+'''
 
-# pwo
-add_command(Command('pwo', 'print weber configuration', 'o', o_function))
-
-# pws
+"""ws - print spoof settings"""
 def get_spoof_regexs(requests=True, responses=True):
     result = []
     if requests:
-        result +=  ['    %s -> %s' % (k, v) for k,v in weber.spoof_request_regexs.items()]
+        result +=  ['    %s -> %s' % (k, v) 
+                    for k,v in weber.spoof_request_regexs.items()]
     if responses:
-        result +=  ['    %s -> %s' % (k, v) for k,v in weber.spoof_response_regexs.items()]
+        result +=  ['    %s -> %s' % (k, v) 
+                    for k,v in weber.spoof_response_regexs.items()]
     return result
 
-def pws_function(*args):
+def ws_function(*args):
     result = []
     files = ['    %s' % (x) for x in weber.commands['pwsf'].run()]
     if files:
@@ -1205,28 +1357,44 @@ def pws_function(*args):
         result += response_regexs
 
     return result
-add_command(Command('pws', 'print spoof settings', 'pws', pws_function))
 
-# pwsf
-def pwsf_function(*args):
+add_command(Command('ws', 'print spoof settings', 'ws', ws_function))
+
+"""rssf - print file spoof settings"""
+def rssf_function(*args):
     return ['    %s -> %s' % (k, v) for k,v in weber.spoof_files.items()]
-add_command(Command('pwsf', 'print "spoof file" settings', 'pwsf', pwsf_function))
 
-# pwsr
-add_command(Command('pwsr', 'print "spoof regex" settings', 'pwsr', pws_function))
-add_command(Command('pwsrq', 'print "spoof request regex" settings', 'pwsr', lambda *_: get_spoof_regexs(responses=False)))
-add_command(Command('srs', 'print "spoof response regex" settings', 'pwsr', lambda *_: get_spoof_regexs(requests=False)))
+add_command(Command('rssf', 
+                    'print "spoof file" settings', 
+                    'rssf', 
+                    rssf_function))
 
-# pwt
-add_command(Command('pwt', 'print alive threads', 'pwt', lambda *_: ['    %s' % ('?' if t.remoteuri is None else t.remoteuri) for t in weber.proxy.threads]))
+"""rqs - print request regex spoof settings"""
+add_command(Command('rqs', 
+                    'print "spoof request regex" settings', 
+                    'rqs', 
+                    lambda *_: get_spoof_regexs(responses=False)))
 
+"""rss - print response regex spoof settings"""
+add_command(Command('rss', 
+                    'print response "spoof regex" settings', 
+                    'rss', 
+                    lambda *_: get_spoof_regexs(requests=False)))
+
+"""wt - print alive threads"""
+add_command(Command('wt', 
+                    'print alive threads', 
+                    'wt', 
+                    lambda *_: ['    %s' 
+                                % (t.server.uri if t.server else '?') 
+                                for t in weber.proxy.threads]))
 """
 Quit
 """
-add_command(Command('q', 'quit', 'q', lambda *_: [])) # solved in weber
+"""q - quit (solved in /weber)"""
+add_command(Command('q', 'quit', 'q', lambda *_: []))
 
-
-
+'''
 """
 Spoofing
 """
@@ -1236,9 +1404,9 @@ add_command(Command('sf', 'print "spoof file" settings', 'sf', pwsf_function))
 add_command(Command('sr', 'print "spoof regex" settings', 'sr', lambda *_: get_spoof_regexs()))
 add_command(Command('srq', 'print "spoof request regex" settings (alias for `pwsrq`)', 'sr', lambda *_: get_spoof_regexs(responses=False)))
 add_command(Command('srs', 'print "spoof response regex" settings (alias for `pwsrs`)', 'sr', lambda *_: get_spoof_regexs(requests=False)))
-
-# sfa
-def sfa_function(*args):
+'''
+"""rssfa - add file spoof"""
+def rssfa_function(*args):
     args = list(filter(None, args))
     try:
         uri = URI(args[0])
@@ -1254,18 +1422,24 @@ def sfa_function(*args):
         return []
     weber.spoof_files[uri.get_value()] = args[1]
     return []
-add_command(Command('sfa <uri> <file>', 'add/modify file spoof', 'sf', sfa_function))
+add_command(Command('rssfa <uri> <file>', 
+                    'add/modify file spoof', 
+                    'sf', 
+                    rssfa_function))
 
-# sfd
-def sfd_function(*args):
+"""rssfD - delete file spoof"""
+def rssfD_function(*args):
     try:
         del weber.spoof_files[args[0]]
     except:
         log.err('Invalid spoof URI.')
     return []
-add_command(Command('sfd <uri>', 'delete file spoof', 'sf', sfd_function))
+add_command(Command('rssfD <uri>', 
+                    'delete file spoof', 
+                    'sf', 
+                    rssfD_function))
 
-# sra # TODO desired also for requests?
+"""rXsa - add regex spoof""" 
 def srXa_function(*args, spoof_dict=None):
     try:
         regex = ' '.join(args)
@@ -1280,6 +1454,7 @@ def srXa_function(*args, spoof_dict=None):
     if len(parts) != 2:
         log.err('Invalid regular expression.')
         return []
+    """add spoof entry"""
     try:
         spoof_dict[parts[0]] = parts[1]
     except:
@@ -1287,11 +1462,20 @@ def srXa_function(*args, spoof_dict=None):
 
     return []
 
-add_command(Command('srqa /old/new/', 'add/modify regex spoof for requests', 'srXa', lambda *args: srXa_function(*args, spoof_dict=weber.spoof_request_regexs)))
-add_command(Command('srsa /old/new/', 'add/modify regex spoof for responses', 'srXa', lambda *args: srXa_function(*args, spoof_dict=weber.spoof_response_regexs)))
+add_command(Command('rqsa /old/new/', 
+                    'add/modify regex spoof for requests', 
+                    'rXsa', 
+                    lambda *args: srXa_function(
+                        *args, spoof_dict=weber.spoof_request_regexs)))
 
-# srd
-def srXd_function(*args, spoof_dict=None):
+add_command(Command('rssa /old/new/', 
+                    'add/modify regex spoof for responses', 
+                    'rXsa', 
+                    lambda *args: srXa_function(
+                        *args, spoof_dict=weber.spoof_response_regexs)))
+
+"""rXsD - remove regex spoof"""
+def rXsD_function(*args, spoof_dict=None):
     try:
         del spoof_dict[args[0]]
     except TypeError:
@@ -1299,8 +1483,17 @@ def srXd_function(*args, spoof_dict=None):
     except:
         log.err('Invalid spoof value.')
     return []
-add_command(Command('srqd <old>', 'delete request regex spoof', 'srXd', lambda *args: srXd_function(*args, spoof_dict=weber.spoof_request_regexs)))
-add_command(Command('srsd <old>', 'delete response regex spoof', 'srXd', lambda *args: srXd_function(*args, spoof_dict=weber.spoof_response_regexs)))
+
+add_command(Command('rqsD <old>', 
+                    'delete request regex spoof', 
+                    'rXsD', 
+                    lambda *args: rXsD_function(
+                        *args, spoof_dict=weber.spoof_request_regexs)))
+add_command(Command('rssD <old>', 
+                    'delete response regex spoof', 
+                    'rXsD', 
+                    lambda *args: srXd_function(
+                        *args, spoof_dict=weber.spoof_response_regexs)))
 
 
 

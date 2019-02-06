@@ -33,17 +33,29 @@ class Option():
             except:
                 log.err('Option error - cannot cast \'%s\' to %s' % 
                         (v, self.__data_type))
-
+    
+    def get_text_value(self):
+        """
+        Returns value suitable for printing.
+        """
+        result = (str(self.value) if self.__data_type != str 
+                                 else '\'%s\'' % self.value)
+        for old, new in [
+                ('\n', '\\n'),
+                ('\r', '\\r'),
+            ]:
+            result = result.replace(old, new)
+        return result
 
 # analysis settings
 config['analysis.immediate'] = Option(True, bool) # should analysis be done immediately?
 config['analysis.ignored_tests'] = Option('', str) # list of analysis test name to NOT perform; space-separated
 
 # brute settings
-config['brute.placeholder'] = ('###', str) # placeholder start and end, e.g. ###0###
-config['brute.value_separator'] =   (';', str)   # separator between values
-config['brute.rps'] =   (20, int)   # maximum requests per second
-config['brute.set_separator'] =   ('\n', str)   # separator between value sets
+config['brute.placeholder'] = Option('###', str) # placeholder start and end, e.g. ###0###
+config['brute.value_separator'] =   Option(';', str)   # separator between values
+config['brute.rps'] =   Option(20, int)   # maximum requests per second
+config['brute.set_separator'] =   Option('\n', str)   # separator between value sets
 
 # crawl settings
 config['crawl.save_path'] = Option('', str) # where to store received files

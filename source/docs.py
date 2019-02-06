@@ -173,118 +173,185 @@ WARNING: If appending a header to requests/responses with empty data part, make 
 """
 
 # options
-doc['o'] = """Active Weber configuration can be printed with `pwo` and `o` command.
+# TODO to weber section
+# TODO user-specific keys usage
+doc['wo'] = (
+    """Active Weber configuration can be printed with `wo` command.
+User-specific keys can also be defined. For those, at sign (@) will
+be automatically prepended.
 
-Default configuration is located in source/weber.py.
-User configuration can be specified in weber.conf in Weber root directory.
-Configuration can be changed on the fly using the `os` command.
-"""
-doc['os'] = """Active Weber configuration can be changed using the `os` command. User-specific keys can also be defined.
-"""
+Default configuration is located in 'source/weber.py' file.
+User configuration can be specified in 'weber.conf' file in the Weber 
+root directory.
+Configuration can be changed on the fly using the `wos` command.
+""")
 
 # print
-doc['p'] = """Commands starting with `p` can be used to print various information. Use documentation for each command.
+#doc['p'] = """Commands starting with `p` can be used to print various information. Use documentation for each command.
+#"""
+doc['rc'] = (
+    """Cookies for specific requests are printed with `rc` command. 
+To see Set-Cookie responses, use `rcs` command.
+""")
+doc['rcs'] = """Set-Cookie headers can be searched with `rcs` command.
 """
-doc['pc'] = """Cookies for specific requests are printed with `pc` command. To see Set-Cookie responses, use `pcs` command.
+doc['rH'] = (
+"""Commands starting with 'rH' serve for extracting HTML-related 
+information from the communication.
+""")
+doc['rHc'] = """HTML comments can be searched with `rHc` command.
 """
-doc['pcs'] = """Set-Cookie headers can be searched with `pcs` command.
+doc['rHf'] = (
+    """Forms present on given page are shown with `rHf` command.
+""")
+doc['rHl'] = (
+    """Links from all known tags are printed with `rHl` command. 
+To see their context as well, use `rHlc` command.
+""")
+doc['rHlc'] = (
+    """Links from all known tags together with their context are 
+    printed with `rHlc` command.
+""")
+doc['rHm'] = """HTML <main> tags can be searched with `rHm` command.
 """
-doc['ph'] = """Commands starting with 'ph' serve for extracting HTML-related information from the communication.
-"""
-doc['phc'] = """HTML comments can be searched with `phc` command.
-"""
-doc['phf'] = """Forms present on given page are shown with `pf` command.
-"""
-doc['phl'] = """Links from all known tags are printed with `phl` command. To see their context as well, use `phlc` command.
-"""
-doc['phlc'] = """Links from all known tags together with their context are printed with `phlc` command.
-"""
-doc['phm'] = """HTML <main> tags can be searched with `phm` command.
-"""
-doc['phs'] = """You can do interval search with `phs` command. Note that for certain elements (form, comment, etc.) there are other predefined commands.
-"""
+doc['rHs'] = (
+    """You can do interval search with `rHs` command. Note that 
+for certain elements (form, comment, etc.) there are other 
+predefined commands.
+""")
 
-doc['pp'] = """Parameters of selected requests are printed with `pp` command.
-"""
-doc['pr'] = """Use `pr` or `pro` commands to get an overview of all captured request-response pairs, or `pt`, `ptr`, `ptro`, respectively, for template overview. There are optional parameters 'e', 's', 't', 'u'. You can additionaly specify RRIDs of entries to show, separated by commas and hyphens (e.g. 1,2,4-7).
+doc['rp'] = (
+"""Parameters of selected requests are printed with `rp` command.
+""")
+doc['r'] = (
+    """Use `r` or `ro` commands to get an overview of all captured 
+request-response pairs. 
+There are optional parameters 'e', 's', 't', 'u'. 
+You can additionaly specify RRIDs of entries to show, separated by 
+commas and hyphens (e.g. 1,2,4-7).
 
 You can see various columns:
-    Time     - Time of request being forwarded to the remote server
-             - shown if overview.show_time is set to True or 't' is used as argument
-    EID      - Event ID for this request-response pair
-             - shown if overview.show_event is set to True or 'e' is used as argument
-    RRID     - ID of request-response pair
+    Time     = Time of request being forwarded to the remote server
+             - shown if overview.show_time is set to True or 't' 
+               is used as argument
+    EID      = Event ID for this request-response pair
+             - shown if overview.show_event is set to True or 'e' 
+               is used as argument
+    RRID     = ID of request-response pair
              - always shown
-    Server   - Server the request is sent to (actually URI without the path)
-             - shown if overview.show_uri is set to True or 'u' is used as argument
-    Request  - Request essential data (method and path for HTTP)
+    Server   = URI of the server the request is sent to
+             - shown if overview.show_uri is set to True or 'u' 
+               is used as argument
+    Request  = Request essential data (method and path for HTTP)
              - always shown
-             - path can be ellipsized if overview.short_request is set to True
-    Response - Response essential data (status code and status for HTTP)
+             - path can be ellipsized if overview.short_request is set
+    Response = Response essential data (status code and status for HTTP)
              - always shown
-    Size     - size of response data
-             - shown if overview.show_size is set to True or 's' is used as argument
+    Size     = size of response data
+             - shown if overview.show_size is set to True or 's' is 
+               used as argument
 
-Entries are shown in real-time if overview.realtime is set to True.
-Request and responses with [T] prepended are tampered and must be forwarded manually. See `t` for more information.
-Entries with emphasized RRID were marked as interesting by analysis processes. Use `par` to see the reason.
+Entries are shown in real-time if integration.realtime_overview is set.
+Request and responses with [T] prepended are tampered and must be 
+forwarded manually. See `rqt` or `rst` for more information.
 
-You can use `proa` to see only entries with analysis notes.
-You can use `prol` and `ptrol`, respectively, to see only last 10 entries.
-You can use `prot` to see only entries with active tampering.
+Entries with emphasized RRID were marked as interesting by analysis 
+processes. Use `ar` to see the reason.
+
+You can use `roa` to see only entries with analysis notes.
+You can use `rol` to see only last 10 entries.
+You can use `rot` to see only entries with active tampering.
+""")
+
+doc['rX'] = (
+    """Commands `ra`, `rh`, `rd`, `rq`, `rqh`, `rqd`, `rs`, `rsh`, `rsd`
+are used to show request and/or response headers and/or data in detail. 
+Use `ra` to print everything.
+
+If the commands end with 'x', the result is printed as hexdump. 
+This is usefull for checking for special characters.
+""")
+
+# TODO move to weber part
+doc['w'] = """Commands starting with `w` are designed to show and set
+Weber-related info. Sometimes, they have shorter aliases with regards 
+to the functionality.
 """
 
-doc['prX'] = """Commands starting with `pr` are used to show request and/or response headers and/or data in more detail. Use `pra` to print everything.
-
-If the commands ends with an 'x', the result is printed as hexdump. This is usefull for checking for special characters.
-"""
-
-doc['pw'] = """Commands starting with `pw` are designed to show Weber-related info. Sometimes, they have shorter aliases with regards to the functionality (e.g. `pwo` -> `o`).
-
-"""
-
+'''
 doc['pwm'] = """The `pwm` command shows local -> remote URI mapping. The translation is done tranparently by Weber.
 """
-doc['pwt'] = """For debugging purposes, you can show alive Weber threads with `pwt` command.
-"""
+'''
 
-doc['pws'] = """Spoofing feature allows you to alter the requested content on the fly:
-- by specifying the file which should be used instead the real response (`sf`),
-- by modifying the response with regular expressions (`sr`).
+doc['wt'] = (
+"""For debugging purposes, you can show alive Weber threads 
+with `wt` command.
+""")
 
-Use `s` or `pws` command to show current spoofing settings.
-"""
+doc['ws'] = (
+"""Spoofing feature allows you to alter the requested content 
+on the fly:
+- by specifying the file which should be used instead the real 
+  response (`rssf`),
+- by modifying the request with regular expressions (`rqs`),
+- by modifying the response with regular expressions (`rss`).
 
-doc['pwsf'] = """If file spoofing has been configured with `sfa` command, you can print the mapping with `pwsf` command.
-"""
-doc['pwsr'] = """If regex spoofing has been configured with `srqa` or `srsa` command, you can print the mapping with `pwsr`, `pwsrq` or `pwsrs` commands, or their aliases (`sr`, `srq`, `srs`, respectively).
-"""
+Use `ws` command to show current spoofing settings.
+""")
+
+doc['rssf'] = (
+    """If file spoofing has been configured with `sfa` command, you can
+print the mapping with `rssf` command.
+
+Use `rssfa` and `rssfD` commands to configure/delete file spoofing.
+""")
+doc['rXs'] = (
+    """Use `rqsa`, `rqsD`, `rssa` and `rssD` commands to configure
+regular expression spoofing. Use `rqs` and `rss` commands to see the
+actual configuration.
+""")
 
 # quit
 doc['q'] = """Quit. What do you expect?"""
 
 # spoofing
-doc['sf'] = """File can be spoofed with `sfa` command. After that, when Weber detects a request for that file, it quietly replaces the content with local file of your choosing. This is especially useful when you are testing a page and you need a modified version of Javascript code to see crucial control information.
+doc['sf'] = (
+    """File can be spoofed with `rssfa` command. After that, when Weber
+detects a request for that file, it quietly replaces the content with 
+local file of your choosing. This is especially useful when you are 
+testing a page and you need a modified version of Javascript code to 
+see crucial control information.
 
 Example: 
-   sfa https://www.cia.gov/++theme++contextual.agencytheme/images/logo.png /tmp/anonymous.png
+   rssfa https://www.cia.gov/++theme++contextual.agencytheme/images/logo.png /tmp/anonymous.png
 
-Note: The request is sent to remote server anyway to get valid HTML headers.
+Note: The request is sent to remote server anyway to get valid 
+      HTML headers.
 
-The `sfd` command is used to delete a file spoofing entry.
-"""
+The `rssfD` command is used to delete a file spoofing entry.
+""")
 
-doc['sr'] = """ Commands starting with `sr` are used to define regular expressions which are used on received requests or responses. For adding a new rule, use `srqa` (requests) or `srsa` (responses) command. To delete a rule, use `srqd` (requests) or `srsd` (responses) command.
+doc['sr'] = (
+    """Commands starting with `rqs` or `rss` are used to define regular 
+expressions which are used on received requests or responses. For 
+adding a new rule, use `rqsa` (requests) or `rssa` (responses) command. 
+To delete a rule, use `rqsD` (requests) or `rssD` (responses) command.
+""")
 
-"""
-doc['srXa'] = """The `srqa` and `srsa` commands are used to define regular expressions which are used on received requests or responses, respectively. The first character is the delimiter.
+doc['rXsa'] = (
+"""The `srqa` and `srsa` commands are used to define regular expressions
+which are used on received requests or responses, respectively. 
+The first character is the delimiter.
+
     Examples:
         srsa /http/https/
         srsa /\/etc\/hostz/\/etc\/hosts/
         srsa |/etc/hostz|/etc/hosts|
-"""
-doc['srXd'] = """ The `srqd` and `srsd` commands are used to remove a regex spoofing entry. Unlike `srqa` and `srsa`, the parameter is not escaped.
-""" 
+""")
+doc['rXsD'] = (
+    """The `rqsD` and `rssD` commands are used to remove a regex spoofing
+entry. Unlike `rqsa` and `rssa`, the parameter is not escaped.
+""") 
 
 # tamper
 doc['t'] = """One of the most essential features of a proxy is to pause the transmission of data between the client and the server. Those data can be reviewed and/or modified before actual transmission.
