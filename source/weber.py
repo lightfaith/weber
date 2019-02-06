@@ -61,14 +61,14 @@ config['brute.set_separator'] =   Option('\n', str)   # separator between value 
 config['crawl.save_path'] = Option('', str) # where to store received files
 
 # debug settings
-config['debug.analysis'] =   Option(True, bool)   # stuff relevant to analysis
+config['debug.analysis'] =   Option(False, bool)   # stuff relevant to analysis
 config['debug.chunks'] =     Option(True, bool)   # stuff relevant to Transfer-Encoding: chunked parsing
-config['debug.command'] =    Option(True, bool)   # stuff relevant to user commands
-config['debug.config'] =     Option(True, bool)   # stuff relevant to configuration
+config['debug.command'] =    Option(False, bool)   # stuff relevant to user commands
+config['debug.config'] =     Option(False, bool)   # stuff relevant to configuration
 config['debug.flow'] =       Option(True, bool)   # stuff relevant to program flow
 config['debug.mapping'] =    Option(True, bool)   # stuff relevant to local-remote URL mapping
 config['debug.parsing'] =    Option(True, bool)   # stuff relevant to request/response parsing
-config['debug.protocol'] =   Option(True, bool)   # stuff relevant to protocol decisioning
+config['debug.protocol'] =   Option(False, bool)   # stuff relevant to protocol decisioning
 config['debug.server'] =     Option(True, bool)   # stuff relevant to server management
 config['debug.socket'] =     Option(True, bool)   # stuff relevant to socket communication
 config['debug.tampering'] =  Option(True, bool)   # stuff relevant to tampering

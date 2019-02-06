@@ -768,11 +768,12 @@ class HTTPResponse():
         """
         if not self.version: 
             """first parse -> from original"""
-            lines = self.original.splitlines()
+            #lines = self.original.splitlines()
+            lines = self.original.split(b'\r\n')
         else:
             """parse after tamper -> from bytes()"""
-            #lines = self.bytes().split(b'\r\n')
-            lines = self.bytes().splitlines()
+            lines = self.bytes().split(b'\r\n')
+            #lines = self.bytes().splitlines()
         """parse first line, spoof response regexs"""
         line0 = ProxyLib.spoof_regex(lines[0], 
                                      weber.spoof_response_regexs.items())
@@ -820,8 +821,11 @@ class HTTPResponse():
                         line_index += 1
                         break
                     if len(tmpchunk) > chunksize: # problem...
+                        print()
                         log.warn('Loaded chunk bigger than advertised: %d > %d'
                                  % (len(tmpchunk), chunksize))
+                        print('HEXDUMP:')
+                        print('\n'.join(hexdump(tmpchunk)))
                         break
                     # chunk spans multiple lines...
                     tmpchunk += b'\r\n'

@@ -1501,6 +1501,7 @@ add_command(Command('rssD <old>',
 """
 TAMPER COMMANDS
 """
+# TODO refactor
 add_command(Command('t', 'tamper', 't', lambda *_: []))
 add_command(Command('tr', 'tamper requests/responses', 't', lambda *_: []))
 
@@ -1587,17 +1588,21 @@ WRITE COMMANDS
 add_command(Command('w', 'write', 'w', lambda *_: []))
 
 
-# wf 
-def wf_function(*args):
+# rsdwa 
+def rsdwa_function(*args):
     csp = weber.config['crawl.save_path']
     try:
-        weber.config['crawl.save_path'] = (args[0], csp[1])
+        weber.config['crawl.save_path'].value = args[0]
         log.info('Downloaded data will be saved at %s.' % args[0])
     except:
-        weber.config['crawl.save_path'][0] = ('', csp[1])
+        weber.config['crawl.save_path'].value = ''
         log.info('Response data will not be autosaved.')
     return []
-add_command(Command('wf [<path>]', 'auto-save response content in given location', 'wf', wf_function))
+
+add_command(Command('rsdwa [<path>]', 
+                    'auto-save response content in given location', 
+                    'rsdwa', 
+                    rsdwa_function))
 
 
 # wr

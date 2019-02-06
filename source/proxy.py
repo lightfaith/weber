@@ -407,7 +407,7 @@ class ConnectionThread(threading.Thread):
                     weber.config['crawl.save_path'].value,
                     self.full_uri.tostring()) 
                 with open(file_path, 'wb') as f:
-                    f.write(b'\r\n'.join(self.response.bytes(headers=False)))
+                    f.write(self.response.bytes(headers=False))
 
         """tamper/forward response"""
         if not self.can_forward_response:

@@ -383,8 +383,13 @@ doc['w'] = """Commands starting with `w` are designed to write gathered informat
 
 Currently, request and response writing is supported. See documentation for `wr` command for more information.
 """
-doc['wf'] = """Use `wf` command to specify path where received files will be stored in tree structure while browsing or crawling. Alternatively, you can set the path in \'crawl.save_path\' option.
-"""
+doc['rsdwa'] = (
+"""Use `rsdwa` command to specify path where received files will be 
+stored in tree structure while browsing or crawling. Alternatively, 
+you can set the path in \'crawl.save_path\' option.
+
+Leaving the path empty means data storing is not desired.
+""")
 
 doc['wr'] = """You can use `wr` commands to store gathered requests and/or responses. This is useful for web crawling or when a file is to be modified and spoofed later with `sfa` command.
 
