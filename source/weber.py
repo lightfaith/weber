@@ -39,7 +39,13 @@ class Option():
 config['analysis.immediate'] = Option(True, bool) # should analysis be done immediately?
 config['analysis.ignored_tests'] = Option('', str) # list of analysis test name to NOT perform; space-separated
 
-# settings
+# brute settings
+config['brute.placeholder'] = ('###', str) # placeholder start and end, e.g. ###0###
+config['brute.value_separator'] =   (';', str)   # separator between values
+config['brute.rps'] =   (20, int)   # maximum requests per second
+config['brute.set_separator'] =   ('\n', str)   # separator between value sets
+
+# crawl settings
 config['crawl.save_path'] = Option('', str) # where to store received files
 
 # debug settings
@@ -78,11 +84,6 @@ config['spoof.arguments'] = Option(False, bool) # should arguments be taken into
 
 '''
 
-# brute settings
-config['brute.placeholder'] = ('###', str) # placeholder start and end, e.g. ###0###
-config['brute.value_separator'] =   (';', str)   # separator between values
-config['brute.rps'] =   (20, int)   # maximum requests per second
-config['brute.set_separator'] =   ('\n', str)   # separator between value sets
 
 
 # edit settings

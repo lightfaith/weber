@@ -365,23 +365,23 @@ add_command(Command('prompt', 'gives python3 shell', '', prompt_function))
 """
 ANALYSIS COMMANDS
 """
-# ap
+add_command(Command('a', 'analysis', 'a', lambda *_: []))
+
+"""ap - print analysis packs"""
 def ap_function(*args):
     result = []
     for k, v in weber.analysis.items():
+        """mark enabled/disabled"""
         result.append('    %s %s' % ('+' if v['enabled'] else '-', k))
-        # rr_tests
+        """print rr_tests"""
         if 'rr_tests' in v.keys():
             result.append('       RR tests:')
             for testname, info, *_ in v['rr_tests']:
                 result.append('        %s: %s' % (testname, info[1]))
     return result
+add_command(Command('ap', 'print analysis packs', 'ap', ap_function))
 
-add_command(Command('a', 'analysis', 'a', lambda *_: []))
-add_command(Command('ap', 'print analysis packs (alias for `pap`)', 'ap', ap_function))
-add_command(Command('pap', 'print analysis packs', 'ap', ap_function))
-
-# ape, apd
+"""ape, apd - enable/disable analysis pack"""
 def apX_function(*args, enable):
     try:
         weber.analysis[args[0]]['enabled'] = enable
@@ -389,55 +389,82 @@ def apX_function(*args, enable):
         log.err('Invalid analysis pack name.')
     return []
 
-add_command(Command('ape <pack>', 'enable analysis pack', 'ap', lambda *args: apX_function(*args, enable=True)))
-add_command(Command('apd <pack>', 'disable analysis pack', 'ap', lambda *args: apX_function(*args, enable=False)))
+add_command(Command('ape <pack>', 'enable analysis pack', 'ap', 
+                    lambda *args: apX_function(*args, enable=True)))
+add_command(Command('apd <pack>', 'disable analysis pack', 'ap', 
+                    lambda *args: apX_function(*args, enable=False)))
 
-# ar
-def ar_function(_, rr, *__, **___):
+"""arr - run analysis"""
+def arr_function(_, rr, *__, **___):
     result = []
     rr.analyze()
     if rr.analysis_notes:
-       result += par_function(_, rr, *__, **___)
+       result += ar_function(_, rr, *__, **___)
     return result
-add_command(Command('ar [<rrid>[:<rrid>]]', 'run RR analysis on specified request-response pairs', 'ar', lambda *args: foreach_rrs(ar_function, *args)))
+add_command(Command('arr [<rrid>[:<rrid>]]', 
+                    'run RR analysis on specified request-response pairs', 
+                    'arr', 
+                    lambda *args: foreach_rrs(arr_function, *args)))
 
 
 """
 BRUTE COMMANDS
 """
-# b
+"""b - show brute-force settings"""
 def b_function(*args):
     if weber.brute:
-        return ['    %s:  %d values  [%s, ...] ' % (weber.brute[0], len(weber.brute[1]), str(weber.brute[1][0]))]
+        return ['    %s:  %d values  [%s, ...] ' 
+                % (weber.brute[0], 
+                   len(weber.brute[1]), 
+                   str(weber.brute[1][0]))]
     else:
-        log.err('No brute loaded, see `bl`.')
+        log.err('No dictionary loaded, see `bl`.')
         return []
 add_command(Command('b', 'brute-force (alias for `pwb`)', 'b', b_function))
 
-# bl
+"""bl - load dictionary for bruteforce"""
 def bl_function(*args):
     try:
         path = args[0]
         with open(path, 'rb') as f:
-            weber.brute = (path, [line.split(weber.config['brute.value_separator'][0].encode()) for line in f.read().split(weber.config['brute.set_separator'][0].encode())])
+            weber.brute = (
+                path, 
+                [line.split(
+                    weber.config['brute.value_separator'].value.encode()) 
+                 for l in f.read().split(
+                     weber.config['brute.set_separator'].value.encode())])
         return []
     except Exception as e:
         log.err('Cannot open file (%s).' % (str(e)))
         return []
-add_command(Command('bl <path>', 'load file for brute', ('bl', lambda: {'separator': weber.config['brute.value_separator'][0]}), bl_function))
+add_command(Command('bl <path>', 
+                    'load file for brute', 
+                    ('bl', 
+                     lambda: {'separator': 
+                              weber.config['brute.value_separator'].value}), 
+                    bl_function))
 
-# bfi
+"""bfi - fault injection"""
 def bfi_function(_, rr, *__, **___):
     data = rr.__bytes__()
-
     return [] # TODO change
-add_command(Command('bfi [<rrid>[:<rrid>]]', 'brute fault injection from template rrids', 'bfi', lambda *args: foreach_rrs(bfi_function, *args, fromtemplate=True)))
-
-# br
+add_command(Command('bfi [<rrid>[:<rrid>]]', 
+                    'brute fault injection from template rrids', 
+                    'bfi', 
+                    lambda *args: foreach_rrs(bfi_function, 
+                                              *args, 
+                                              fromtemplate=True)))
+"""br - / """
 # NOTE only one bruter at a time can be used
-add_command(Command('br', 'brute from template rrid', ('br', lambda: {'placeholder': weber.config['brute.placeholder'][0]}), lambda *_: []))
+add_command(Command('br', 
+                    'brute from template rrid', 
+                    ('br', 
+                     lambda: {'placeholder': 
+                              weber.config['brute.placeholder'].value}), 
+                    lambda *_: []))
 
-# bra 
+"""bra - brute all sets"""
+# TODO refactor!
 def bra_modifier(data, brute_set):
     placeholder = weber.config['brute.placeholder'][0].encode()
     for i in range(len(brute_set)):
@@ -445,7 +472,7 @@ def bra_modifier(data, brute_set):
     return data
     
 def bra_function(rrid, rr, *__, **___):
-    # run with values
+    """run with values"""
     if weber.brute is None: 
         log.err('No brute loaded, see `bl`.')
         return []
@@ -455,17 +482,32 @@ def bra_function(rrid, rr, *__, **___):
     except:
         sleep = None
     for brute_set in [x for x in weber.brute[1] if len(x) == max_setlen]:
-        weber.proxy.add_connectionthread_from_template(rr, lambda data: bra_modifier(data, brute_set))
+        weber.proxy.add_connectionthread_from_template(
+            rr, 
+            lambda data: bra_modifier(data, brute_set))
         if sleep:
             time.sleep(sleep)
     return []
-add_command(Command('bra [<rrid>[:<rrid>]]', 'brute from template rrids for all sets', 'br', lambda *args: foreach_rrs(bra_function, *args, fromtemplate=True)))
-# TODO brd - brute rrid until difference
+add_command(Command('bra [<rrid>[:<rrid>]]', 
+                    'brute from template rrids for all sets', 
+                    'br', lambda *args: foreach_rrs(bra_function, 
+                                                    *args, 
+                                                    fromtemplate=True)))
+# TODO """brd - brute rrid until difference"""
 
+"""rqf - forward request"""
 def brf_function(_, rr, *__, **___):
+    # TODO refactor
+    # TODO move to rq section
+    # TODO stop tampering OR create duplicate and forward
     weber.proxy.add_connectionthread_from_template(rr, lambda data: data)
     return []
-add_command(Command('brf [<rrid>[:<rrid>]]', 'forward template rrid without modification', 'brf', lambda *args: foreach_rrs(brf_function, *args, fromtemplate=True)))
+add_command(Command('rqf [<rrid>[:<rrid>]]', 
+                    'forward request', 
+                    'rqf', 
+                    lambda *args: foreach_rrs(brf_function, 
+                                              *args, 
+                                              fromtemplate=True)))
 
 """
 COMPARE COMMANDS

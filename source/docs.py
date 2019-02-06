@@ -18,7 +18,7 @@ from source.fd_debug import *
 # # # # ## ## ### #### ###### ############################ ##### #### ### ## ## # # # #
 doc = {}
 doc['help'] = (
-"""Welcome! This is Weber Framework, an open-source protocol proxy.
+    """Welcome! This is Weber Framework, an open-source protocol proxy.
 With Weber you can see the traffic, modify it and more!
 
 Currently, Weber will forward anything sent to '{local}:{port}' but
@@ -58,41 +58,71 @@ HAVE FUN.
 """) # TODO fix commands
 
 # analysis
-doc['a'] = """Weber supports automatic testing of common security weaknesses. Enabled tests can be printed with `ap` command.
+doc['a'] = (
+    """Weber supports automatic testing of common security weaknesses. 
+Enabled tests can be printed with `ap` command.
 
-Currently, request-response tests are supported. If a problem is detected for a RR pair, its ID is emphasized in RR overview (shown with `pro` command). Detailed test results are shown with `par` command. The RR analysis is automatically performed after the response is received if analysis.immediate option is set. You can run analysis manually with `ar` command as well.
+Currently, request-response tests are supported. If a problem is 
+detected for a RR pair, its ID is emphasized in RR overview (shown with
+`ro` command). Detailed test results are shown with `ar` command. 
+The RR analysis is automatically performed after the response is 
+received if 'analysis.immediate' option is set. You can run analysis 
+manually with `arr` command as well.
+""")
+
+doc['ap'] = (
+    """Use `ap` command to show what analysis packages are enabled and what
+tests will be performed.""")
+doc['ar'] = """The `ar` command print analysis result for individual RR
+pairs. See the documentation for `a` command for more information.
 """
-
-doc['ap'] = """Use `ap` command to show what analysis packages are enabled and what tests will be performed."""
-doc['ar'] = """The `ar` command runs analysis on chosen RR pairs. If a security weakness is found, the user is informed."""
+doc['arr'] = """The `arr` command runs analysis on chosen RR pairs. 
+If a security weakness is found, the user is informed."""
 
 # brute
-doc['b'] = """Commands starting with 'b' are designed to send template RRs to the remote server. This allows:
-- manual resending,
-- bruteforcing.
+doc['b'] = (
+    """Commands starting with 'b' are designed to send automatically 
+modified RRs to the remote server. This allows:
+- bruteforcing,
+- fault injection testing (in development).
 
-Use `b` or `pwb` command to show currently loaded dictionary. Dictionary is loaded with `bl` command.
-"""
-doc['bl'] = """The `bl` command imports specified file as bruteforce dictionary. The following format is expected:
+Use `b` command to show currently loaded dictionary. Dictionary is 
+loaded with `bl` command.
+""")
+doc['bl'] = (
+    """The `bl` command imports specified file as bruteforce dictionary. 
+The following format is expected:
 
 index{separator}htm{separator}...
 index{separator}php{separator}...
 ...
 
-The set (line) may contain arbitrary number of values. Separator is specified in brute.value_separator option. Alternatively, brute.set_separator option can specify different set separator than a newline character. Arbitrary number of sets can be specified.
+The set (line) may contain arbitrary number of values. Separator is 
+specified in 'brute.value_separator' option. Alternatively, 
+'brute.set_separator' option can specify different set separator than 
+a newline character. Arbitrary number of sets can be specified.
 
-It is recommended to use `b` or `pwb` command after loading a dictionary to see whether the dictionary has been loaded properly.
-"""
+It is recommended to use `b` command after loading a dictionary to see 
+whether the dictionary has been loaded properly.
+""")
 
 doc['bfi'] = """""" # TODO
-doc['br'] = """After a dictionary is loaded with `bl` command, you can use `bra` command to use it for brutefoce test. Placeholders {placeholder}n{placeholder} in chosen template RRs are replaced with set values on the fly and forwarded to the remote server. The 'n' specifies index of the value.
+doc['br'] = (
+    """After a dictionary is loaded with `bl` command, you can use `bra`
+command to use it for brutefoce test. 
+Placeholders {placeholder}n{placeholder} in chosen template RRs are 
+replaced with set values on the fly and forwarded to the remote server. 
+The 'n' specifies index of the value.
 
-Placeholder is specified in brute.placeholder option.
+Placeholder is specified in 'brute.placeholder' option.
 
-Throttling is adjusted with brute.rps option. It is maximum number of requests per second.
-"""
-doc['brf'] = """Template requests can be forwarded once with `brf` commands. Unlike other `br` commands, no placeholders are modified, and therefore no dictionary loading is required.
-"""
+Throttling is adjusted with brute.rps option. It is maximum number of
+requests per second.
+""")
+doc['rqf'] = (
+    """Requests can be forwarded `rqf` commands. If tampered, request is
+simply forwarded, else a duplicate is created first.
+""") # TODO move to rq section
 
 # compare
 doc['c'] = """Commands starting with 'c' serve for data comparison. Currently, requests or responses (or their parts) can be compared, see documentation for `cr` for more information."""
@@ -153,8 +183,6 @@ doc['os'] = """Active Weber configuration can be changed using the `os` command.
 # print
 doc['p'] = """Commands starting with `p` can be used to print various information. Use documentation for each command.
 """
-doc['par'] = """The `par` command print analysis result for individual RR pairs. See the documentation for `a` command for more information.
-""" # TODO
 doc['pc'] = """Cookies for specific requests are printed with `pc` command. To see Set-Cookie responses, use `pcs` command.
 """
 doc['pcs'] = """Set-Cookie headers can be searched with `pcs` command.
