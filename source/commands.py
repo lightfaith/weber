@@ -349,10 +349,13 @@ TEST COMMANDS
 """
 def test_function(*_):
     result = []
-    for server in weber.servers:
+    for o in weber.config.keys():
+        if o.startswith('debug'):
+            weber.config[o].value = True
+    '''for server in weber.servers:
         result.append(str(server.uri))
         result.append(str(server.rrs))
-        result.append('')
+        result.append('')'''
     return result
 
 add_command(Command('test', 'prints test message', '', test_function))

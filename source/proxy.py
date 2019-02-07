@@ -45,8 +45,8 @@ class ProxyLib():
                     begin = time.time()
             except Exception as e:
                 """no data ready, just continue waiting"""
+                time.sleep(0.1)
                 pass
-            time.sleep(0.1)
 
         result = b''.join(chunks)
         log.debug_socket('Received %d bytes.' % (len(result)))
@@ -161,6 +161,7 @@ class Proxy(threading.Thread):
             r, _, _ = select([self.socket, self.stopper[0]], [], [])
             if self.terminate:
                 """termination request? send signal to all threads"""
+                log.debug_flow('Proxy terminating all ConnectionThreads.')
                 for t in self.threads:
                     t.stop()
                 time.sleep(0.1)
@@ -217,7 +218,6 @@ class ConnectionThread(threading.Thread):
         self.rrid = None # for one loop run only, but accesssed from functions
         self.terminate = False
         self.stopper = os.pipe() # to allow new request
-        #self.ssl = False
         self.server_id = None # TODO not necessary if self.server is used?
         self.server = None
         self.full_uri = None # for one loop run only, but accessed from functions
@@ -265,11 +265,11 @@ class ConnectionThread(threading.Thread):
         first_run = True
         keepalive = False if self.from_weber else True
         """send signal so first request can be processed"""
-        self.send_continuation_signal()
+        #self.send_continuation_signal()
 
         while keepalive or first_run:
             """wait for signal - cause previous request can be tampered"""
-            self.wait_for_continuation_signal()
+            #self.wait_for_continuation_signal()
             if self.terminate: break
             #time.sleep(0.5) # TODO delete after testing recvall loops
             """reset times dictionary for new traffic"""
@@ -293,9 +293,9 @@ class ConnectionThread(threading.Thread):
             self.request = self.protocol.create_request(request_raw)
             if not self.request.integrity:
                 log.debug_protocol('Received request is invalid.')
+                self.send_response(b'HTTP/1.1 400 Bad Request\r\n\r\n!') #TODO all right?
                 #continue
                 break # OK cause 1 ConnectionThread deals with only 1 request
-            self.rrid = weber.rrdb.get_new_rrid()
 
             """provide Weber page with CA if path == /weber"""
             if self.request.path == b'/weber':
@@ -341,6 +341,7 @@ class ConnectionThread(threading.Thread):
                 if self.server.problem:
                     log.debug_server(
                         'Server is a troublemaker, ignoring the request.')
+                    self.send_response(b'HTTP/1.1 418 I\'m a teapot\r\n\r\n!') #TODO all right?
                     break
                 """create socket to server"""
                 self.upstream_socket = socket.socket(socket.AF_INET, 
@@ -394,6 +395,7 @@ class ConnectionThread(threading.Thread):
             '''
             
             """request and server are done, time to play with it"""
+            self.rrid = weber.rrdb.get_new_rrid()
             weber.rrdb.add_request(self.rrid, 
                                    self.request, 
                                    self.server, 
@@ -404,13 +406,15 @@ class ConnectionThread(threading.Thread):
             if not self.can_forward_request:
                 log.debug_tampering('Request is tampered.')
                 self.times['request_tampered'] = datetime.now()
-            else:
-                log.debug_tampering('Forwarding request without tampering.')
                 """tampering; print overview if appropriate"""
                 if positive(
                         weber.config['interaction.realtime_overview'].value):
                     # TODO RRDB overview of this
-                    pass
+                    log.tprint(' '.join(weber.rrdb.overview(
+                                        [str(self.rrid)],
+                                        header=False)))
+            else:
+                log.debug_tampering('Forwarding request without tampering.')
                 self.continue_forwarding()
             """
             following parts are in continue_forwarding method,
@@ -494,8 +498,9 @@ class ConnectionThread(threading.Thread):
             """tampering; print overview if appropriate"""
             if positive(
                     weber.config['interaction.realtime_overview'].value):
-                # TODO RRDB overview of this
-                pass
+                log.tprint(' '.join(weber.rrdb.overview(
+                                   [str(self.rrid)],
+                                   header=False)))
         else:
             log.debug_tampering('Forwarding response without tampering.')
             self.continue_sending_response()
@@ -516,8 +521,9 @@ class ConnectionThread(threading.Thread):
         """print overview if desired"""
         if positive(
                 weber.config['interaction.realtime_overview'].value):
-            # TODO RRDB overview of this
-            pass
+            log.tprint(' '.join(weber.rrdb.overview(
+                               [str(self.rrid)],
+                               header=False)))
         self.send_response(self.response.bytes())
         self.times['response_forwarded'] = datetime.now()
         """allow new request"""
@@ -562,6 +568,9 @@ class ConnectionThread(threading.Thread):
                 log.debug_socket('Response sent.')
             except ssl.SSLZeroReturnError:
                 log.err('SSL Connection to client for %s has been closed.'
+                        % self.full_uri)
+            except BrokenPipeError:
+                log.err('Socket to client for %s has been closed.'
                         % self.full_uri)
         else:
             log.debug_parsing('Response is weird.')
