@@ -353,7 +353,7 @@ class ConnectionThread(threading.Thread):
                     self.upstream_socket.connect((self.server.uri.domain,
                                                   self.server.uri.port))
                 except Exception as e:
-                    print('Upstream connect error for #%d %s:' % (self.rrid, self.full_uri.tostring()), str(e))
+                    print('Upstream connect error for %s:' % (self.full_uri.tostring()), str(e))
 
                 """was it CONNECT?"""
                 if self.request.method == b'CONNECT':
@@ -524,7 +524,7 @@ class ConnectionThread(threading.Thread):
             log.tprint(' '.join(weber.rrdb.overview(
                                [str(self.rrid)],
                                header=False)))
-        self.send_response(self.response.bytes())
+        self.send_response(self.response.bytes(encode=True))
         self.times['response_forwarded'] = datetime.now()
         """allow new request"""
         self.send_continuation_signal()

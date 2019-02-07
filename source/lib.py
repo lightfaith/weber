@@ -12,6 +12,9 @@ import time
 import traceback
 import difflib
 
+import brotli
+import gzip
+
 from gzip import GzipFile
 #from source import weber
 from source import log
@@ -333,6 +336,69 @@ def diff_lines(lines_1, lines_2, form):
         lines = [line for line in lines 
                       if line.startswith(('-', '+'))]
     return lines	
-        
+
+def encode_data(data, encoding):
+    """
+    Encodes data into the specified encoding used in HTTP.
+
+    Args:
+        data (bytes) - data to encode (typically response data)
+        encoding (str) - encoding type (br, compress, deflate, 
+                                        gzip, identity)
+    Returns:
+        encoded data (bytes)
+    """
+    if encoding == 'br':
+        """br encoding"""
+        return brotli.compress(data)
+    elif encoding == 'compress':
+        """compress encoding"""
+        log.err('Not implemented encoding \'%s\'!' % encoding)
+        return b''
+    elif encoding == 'deflate':
+        """deflate encoding"""
+        log.err('Not implemented encoding \'%s\'!' % encoding)
+        return b''
+    elif encoding == 'gzip':
+        """gzip encoding"""
+        return gzip.compress(data)
+    elif encoding == 'identity':
+        """identity encoding - no compression at all"""
+        return data
+    else:
+        log.err('Unknown encoding \'%s\'' % encoding)
+        return b''
+
+def decode_data(data, encoding):
+    """
+    Decodes data from the specified encoding used in HTTP.
+    
+    Args:
+        data (bytes) - data to encode (typically response data)
+        encoding (str) - encoding type (br, compress, deflate, 
+                                        gzip, identity)
+    Returns:
+        decoded data (bytes)
+    """
+    if encoding == 'br':
+        """br encoding"""
+        return brotli.decompress(data)
+    elif encoding == 'compress':
+        """compress encoding"""
+        log.err('Not implemented encoding \'%s\'!' % encoding)
+        return b''
+    elif encoding == 'deflate':
+        """deflate encoding"""
+        log.err('Not implemented encoding \'%s\'!' % encoding)
+        return b''
+    elif encoding == 'gzip':
+        """gzip encoding"""
+        return gzip.decompress(data)
+    elif encoding == 'identity':
+        """identity encoding - no compression at all"""
+        return data
+    else:
+        log.err('Unknown encoding \'%s\'' % encoding)
+        return b''
 # --
 

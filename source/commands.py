@@ -977,8 +977,6 @@ add_command(Command('mrq <rrid>', 'modify request', 'mr', lambda *args: mr_funct
 add_command(Command('mrs <rrid>', 'modify response', 'mr', lambda *args: mr_function('response', *args)))
 add_command(Command('mrq! <rrid>', 'create template from request and modify', 'mr', lambda *args: mr_function('request', *args, force_template_creation=True)))
 add_command(Command('mrs! <rrid>', 'create template from response and modify', 'mr', lambda *args: mr_function('response', *args, force_template_creation=True)))
-add_command(Command('mtrq <rrid>', 'modify template request', 'mr', lambda *args: mr_function('request', *args, fromtemplate=True)))
-add_command(Command('mtrs <rrid>', 'modify template response', 'mr', lambda *args: mr_function('response', *args, fromtemplate=True)))
 '''
 
 
@@ -1375,13 +1373,13 @@ add_command(Command('rssf',
 """rqs - print request regex spoof settings"""
 add_command(Command('rqs', 
                     'print "spoof request regex" settings', 
-                    'rqs', 
+                    'rXs', 
                     lambda *_: get_spoof_regexs(responses=False)))
 
 """rss - print response regex spoof settings"""
 add_command(Command('rss', 
                     'print response "spoof regex" settings', 
-                    'rss', 
+                    'rXs', 
                     lambda *_: get_spoof_regexs(requests=False)))
 
 """wt - print alive threads"""

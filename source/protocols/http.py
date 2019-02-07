@@ -748,6 +748,10 @@ class HTTPResponse():
         self.status = b''
         self.statuscode = 0
         self.version = b''
+        self.headers = OrderedDict()
+        self.data = b''
+        self.encodings = [] # TODO also in requests?
+        # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding
         """parse data"""
         self.parse()
 
@@ -786,7 +790,6 @@ class HTTPResponse():
         self.status = b' '.join(line0.split(b' ')[2:])
         #fd_add_comment(self.forward_stopper, 'Response (%d %s) forward stopper' % (self.statuscode, self.status))
         """parse headers, spoof response regexs"""
-        self.headers = OrderedDict()
         line_index = 1
         for line_index in range(1, len(lines)):
             line = ProxyLib.spoof_regex(lines[line_index], 
@@ -797,10 +800,16 @@ class HTTPResponse():
             self.headers[k.title()] = v.strip()
         
         line_index += 1
-
-        """parse data, spoof response regexs"""
-        """ deal with chunked Transfer-Encoding"""
+        """determine used encodings"""
+        try:
+            self.encodings = (
+                self.headers[b'Content-Encoding'].decode().split(', '))
+        except:
+            pass
+        """parse data, unchunk if needed, decode if needed, 
+           spoof response regexs"""
         data_line_index = line_index # backup the value
+        """first unchunk"""
         try:
             self.data = b''
             while True: # read all chunks
@@ -821,7 +830,6 @@ class HTTPResponse():
                         line_index += 1
                         break
                     if len(tmpchunk) > chunksize: # problem...
-                        print()
                         log.warn('Loaded chunk bigger than advertised: %d > %d'
                                  % (len(tmpchunk), chunksize))
                         break
@@ -831,9 +839,6 @@ class HTTPResponse():
                 #                                  weber.spoof_response_regexs.items())
                 # rather spoof after chunking? # TODO test
                 self.data += tmpchunk
-            self.data = ProxyLib.spoof_regex(
-                            self.data,
-                            weber.spoof_response_regexs.items())
         except Exception as e:
             line_index = data_line_index # restore the value
             log.debug_chunks('unchunking failed:')
@@ -841,9 +846,15 @@ class HTTPResponse():
             #traceback.print_exc()
             log.debug_chunks('treating as non-chunked...')
             # treat as normal data
-            self.data = ProxyLib.spoof_regex(
-                            b'\r\n'.join(lines[line_index:]), 
-                            weber.spoof_response_regexs.items())
+            self.data = b'\r\n'.join(lines[line_index:]) 
+        """unchunked; decode"""
+        for encoding in self.encodings[::-1]: # TODO correct order, right?
+            log.debug_parsing('Decoding %s' % encoding)
+            self.data = decode_data(self.data, encoding) 
+        """decoded; spoof regex"""
+        self.data = ProxyLib.spoof_regex(
+                        self.data,
+                        weber.spoof_response_regexs.items())
             # TODO test for matching Content-Type (HTTP Response-Splitting etc.)
         
     
@@ -878,7 +889,13 @@ class HTTPResponse():
             log.debug_parsing('Computing Content-Length...')
             self.headers[b'Content-Length'] = b'%d' % (len(self.data))
 
-    def lines(self, headers=True, data=True, splitter=b'\r\n', as_string=True):
+    def lines(
+            self, 
+            headers=True, 
+            data=True, 
+            splitter=b'\r\n', 
+            as_string=True, 
+            encode=False):
         """
         
         Args:
@@ -886,16 +903,28 @@ class HTTPResponse():
             data (bool) - if data should be included
             splitter (bytes) - type of line split (\n or \r\n)
             as_string (bool) - if result should be str (else bytes)
+            encoded (bool) - if Content-Encoding values should be used
         Returns:
             parts (obj:list of str/bytes) - list of lines
         """
         parts = []
+        """first deal with encoding (so Content-Length is OK)"""
+        data_encoded = self.data
+        #print('encoding', '' if encode else 'NOT', 'desired')
+        #print('encodings:', self.encodings)
+        if encode:
+            for encoding in self.encodings: # TODO correct order, right?
+                log.debug_parsing('Encoding to %s' % encoding)
+                data_encoded = encode_data(data_encoded, encoding)
+        
         if headers:
             """add first line and headers"""
             self.compute_content_length()
             parts.append(b'%s %d %s' % 
                          (self.version, self.statuscode, self.status))
-            parts += [b'%s: %s' % (k, v if v else '') 
+            parts += [b'%s: %s' % (k, ((v or '') 
+                                       if k != b'Content-Length' 
+                                       else b'%d' % len(data_encoded)))
                       for k, v in self.headers.items()]
             """add header-data newline"""
             if data:
@@ -907,8 +936,7 @@ class HTTPResponse():
                     is_content_type_text(self.headers.get(b'Content-Type')):
                 parts.append(b'--- BINARY DATA ---')
             else:
-                parts += self.data.split(splitter)
-            
+                parts += data_encoded.split(splitter)
         try:
             parts = [x.decode('utf-8', 'replace') 
                      for x in parts] if as_string else parts # not accurate # TODO needed?
@@ -924,15 +952,15 @@ class HTTPResponse():
         """
         return '\n'.join(self.lines(splitter=b'\n'))
 
-    def bytes(self, headers=True, data=True):
+    def bytes(self, headers=True, data=True, encode=False):
         """
         for data sending and storage 
         """
-        # TODO really?
         return b'\r\n'.join(self.lines(headers, 
                                        data, 
                                        splitter=b'\r\n', 
-                                       as_string=False))
+                                       as_string=False,
+                                       encode=encode))
     '''
     def __str__(self):
         return '\n'.join(self.lines())
@@ -1008,6 +1036,10 @@ class HTTPResponse():
                       else full_uri.tostring().partition('?')[0])
         if spoof_path in weber.spoof_files.keys():
             self.spoof(weber.spoof_files[spoof_path])
+        """
+        encoding is done in bytes() method, so the response can
+        still be printed
+        """
         """end of response post_tamper method"""
         log.debug_tampering('Response is ready for forward.')
     
