@@ -65,13 +65,13 @@ config['debug.analysis'] =   Option(False, bool)   # stuff relevant to analysis
 config['debug.chunks'] =     Option(False, bool)   # stuff relevant to Transfer-Encoding: chunked parsing
 config['debug.command'] =    Option(False, bool)   # stuff relevant to user commands
 config['debug.config'] =     Option(False, bool)   # stuff relevant to configuration
-config['debug.flow'] =       Option(True, bool)   # stuff relevant to program flow
-config['debug.mapping'] =    Option(True, bool)   # stuff relevant to local-remote URL mapping
-config['debug.parsing'] =    Option(True, bool)   # stuff relevant to request/response parsing
+config['debug.flow'] =       Option(False, bool)   # stuff relevant to program flow
+config['debug.mapping'] =    Option(False, bool)   # stuff relevant to local-remote URL mapping
+config['debug.parsing'] =    Option(False, bool)   # stuff relevant to request/response parsing
 config['debug.protocol'] =   Option(False, bool)   # stuff relevant to protocol decisioning
-config['debug.server'] =     Option(True, bool)   # stuff relevant to server management
-config['debug.socket'] =     Option(True, bool)   # stuff relevant to socket communication
-config['debug.tampering'] =  Option(True, bool)   # stuff relevant to tampering
+config['debug.server'] =     Option(False, bool)   # stuff relevant to server management
+config['debug.socket'] =     Option(False, bool)   # stuff relevant to socket communication
+config['debug.tampering'] =  Option(False, bool)   # stuff relevant to tampering
 
 config['http.no_cache'] = Option(False, bool) # should caching be forcefully disabled?
 config['http.drop_request_headers'] = Option('', str) # which headers (separated by spaces) should be dropped?
@@ -88,8 +88,9 @@ config['overview.show_size'] =     Option(True, bool)  # show response size in o
 config['overview.show_time'] =     Option(False, bool) # show forwarded time in overview # TODO also relative?
 config['overview.show_uri'] =      Option(True, bool)  # show uri in overview
 
-config['proxy.host'] =     Option('localhost', str, immutable=True)
-config['proxy.port'] =     Option(8555, int, immutable=True)
+config['proxy.host'] =     Option('127.0.0.1', str, immutable=True)
+config['proxy.port'] =     Option(8080, int, immutable=True)
+config['proxy.socket_timeout'] = Option(0.3, float)
 config['proxy.threaded'] = Option(True, bool)
 
 config['spoof.arguments'] = Option(False, bool) # should arguments be taken into consideration for spoofing?

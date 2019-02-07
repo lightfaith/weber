@@ -1016,7 +1016,7 @@ def wos_function(*args):
     except:
         """create user-defined with @"""
         key = key if key.startswith('@') else '@%s' % key
-        weber.config[key] = Option(value, data_type)
+        weber.config[key] = weber.Option(value, str)
     return []
 
 add_command(Command('wos <key> <value>', 
@@ -1386,7 +1386,7 @@ add_command(Command('wt',
                     'print alive threads', 
                     'wt', 
                     lambda *_: ['    %s' 
-                                % (t.server.uri if t.server else '?') 
+                                % (t.full_uri or '?') 
                                 for t in weber.proxy.threads]))
 """
 Quit

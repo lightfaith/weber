@@ -82,13 +82,43 @@ class Server():
         self.certificate_key_path = None
         self.real_certificate = None
         self.ssl = self.uri.scheme.endswith('s') # TODO whitelist? Cause IS-IS
+        self.problem = False
         
         """setup lock"""
         self.setup_lock()
 
         """get certificate if ssl"""
         if self.ssl:
-            """generate fake one"""
+            """download real one"""
+            import ssl
+            from OpenSSL.crypto import FILETYPE_PEM, load_certificate
+            try:
+                x509 = load_certificate(
+                           FILETYPE_PEM, 
+                           ssl.get_server_certificate(
+                               (self.uri.domain, 
+                                self.uri.port)))
+            except ConnectionRefusedError:
+                log.warn('Connection to %s refused.' % self.uri.tostring())
+                self.problem = True
+            except Exception as e:
+                log.err('Unknown error while getting certificate for %s' 
+                         % self.uri.tostring())
+                log.err(str(e))
+                self.problem = True
+            # TODO parse and store important stuff in self.attributes['real_certificate']
+            #print('subject', x509.get_subject())
+            #for i in range(x509.get_extension_count()):
+            #    print('extension', x509.get_extension(i))
+            #print('issuer', x509.get_issuer())
+            #print('nb', x509.get_notBefore())
+            #print('na', x509.get_notAfter())
+            #print('pubkey', x509.get_pubkey())
+            #print('sn', x509.get_serial_number())
+            #print('sigalgo', x509.get_signature_algorithm())
+            #print('expi', x509.has_expired())
+
+            """generate fake one (real one is NOT needed for that)"""
             domain = self.uri.domain
             self.certificate_path = ('ssl/pki/issued/%s.crt' % domain)
             self.certificate_key_path = ('ssl/pki/private/%s.key' % domain)
@@ -106,23 +136,6 @@ class Server():
                     print(o)
                     print(e)
 
-            """download real one"""
-            import ssl
-            from OpenSSL.crypto import FILETYPE_PEM, load_certificate
-            x509 = load_certificate(FILETYPE_PEM, ssl.get_server_certificate(
-                        (self.uri.domain, 
-                         self.uri.port)))
-            # TODO parse and store important stuff in self.attributes['real_certificate']
-            #print('subject', x509.get_subject())
-            #for i in range(x509.get_extension_count()):
-            #    print('extension', x509.get_extension(i))
-            #print('issuer', x509.get_issuer())
-            #print('nb', x509.get_notBefore())
-            #print('na', x509.get_notAfter())
-            #print('pubkey', x509.get_pubkey())
-            #print('sn', x509.get_serial_number())
-            #print('sigalgo', x509.get_signature_algorithm())
-            #print('expi', x509.has_expired())
     
     def setup_lock(self):
         self.lock = threading.Lock()
