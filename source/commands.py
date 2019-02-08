@@ -349,9 +349,14 @@ TEST COMMANDS
 """
 def test_function(*_):
     result = []
-    for o in weber.config.keys():
+    '''for o in weber.config.keys():
         if o.startswith('debug'):
             weber.config[o].value = True
+    '''
+    print('random in threads:', [t.request.random_number for t in weber.proxy.threads])
+    print(weber.proxy.threads[0].request.lines())
+    print('random in rrdb:   ', [rr.request.random_number for rr in weber.rrdb.rrs.values()])
+    print(list(weber.rrdb.rrs.values())[0].request.lines())
     '''for server in weber.servers:
         result.append(str(server.uri))
         result.append(str(server.rrs))
@@ -534,22 +539,6 @@ add_command(Command('bra [<rrid>[:<rrid>]]',
                     'br', lambda *args: foreach_rrs(bra_function, 
                                                     *args, 
                                                     fromtemplate=True)))
-# TODO """brd - brute rrid until difference"""
-
-"""rqf - forward request"""
-def brf_function(_, rr, *__, **___):
-    # TODO refactor
-    # TODO move to rq section
-    # TODO stop tampering OR create duplicate and forward
-    weber.proxy.add_connectionthread_from_template(rr, lambda data: data)
-    return []
-
-add_command(Command('rqf [<rrid>[:<rrid>]]', 
-                    'forward request', 
-                    'rqf', 
-                    lambda *args: foreach_rrs(brf_function, 
-                                              *args, 
-                                              fromtemplate=True)))
 
 """
 COMPARE COMMANDS
@@ -1212,7 +1201,7 @@ def rx_function(_, rr, *__, **kwargs):
     showheaders = bool(kwargs['mask'] & 0x2)
     showdata = bool(kwargs['mask'] & 0x1)
     usehexdump = kwargs.get('hexdump') or False
-
+    print(rr.request.headers)
     """deal with requests"""
     if showrequest:
         result += (rr.request.lines(headers=showheaders, data=showdata) 
@@ -1503,23 +1492,142 @@ add_command(Command('rssD <old>',
 TAMPER COMMANDS
 """
 # TODO refactor
+'''
 add_command(Command('t', 'tamper', 't', lambda *_: []))
 add_command(Command('tr', 'tamper requests/responses', 't', lambda *_: []))
+'''
 
-# trf
-def trf_function(_, rr, *__, **___):
-    # responses first so race condition won't occur
-    try:
-        rr.response_upstream.forward()
-    except:
-        pass
-    try:
-        rr.request_upstream.forward()
-    except:
-        pass
+"""rXf - forward requests/responses"""
+def rXf_function(*args, requests=True, responses=True):
+    # TODO rqf to also duplicate and resend
+    """find all rrids to forward"""
+    desired_rrs, noproblem = weber.rrdb.get_desired_rrs(None 
+                                                        if len(args)<1 
+                                                        else args[0])
+    rrids = desired_rrs.keys()
+    """for all connection threads with matching rrid:"""
+    for t in [t for t in weber.proxy.threads if t.rrid in rrids]:
+        """responses first so race condition won't occur"""
+        try:
+            if responses and t.waiting_for_response_forward:
+                t.continue_sending_response()
+        except:
+            traceback.print_exc()
+            pass
+        try:
+            if requests and t.waiting_for_request_forward:
+                t.continue_forwarding()
+        except:
+            traceback.print_exc()
+            pass
     return []
-add_command(Command('trf [<rrid>[:<rrid>]]', 'forward tampered requests and responses', 'trf', lambda *args: foreach_rrs(trf_function, *args)))
 
+add_command(Command('rf [<rrid>[:<rrid>]]', 
+                    'forward tampered requests and responses', 
+                    'tamper', 
+                    lambda *args: rXf_function(*args)))
+
+add_command(Command('rqf [<rrid>[:<rrid>]]', 
+                    'forward tampered requests', 
+                    'tamper', 
+                    lambda *args: rXf_function(*args, responses=False)))
+
+add_command(Command('rsf [<rrid>[:<rrid>]]', 
+                    'forward tampered responses', 
+                    'tamper', 
+                    lambda *args: rXf_function(*args, requests=False)))
+
+"""rXtN - tamper (N) requests/responses) / stop tampering"""
+def rXtN_function(
+        *args, 
+        stop=False, 
+        only1=False, 
+        requests=True, 
+        responses=True):
+    if stop:
+        """stop tampering"""
+        if requests:
+            weber.config['tamper.requests'].value = False
+            weber.proxy.tamper_controller.set_tamper_request_count(0)
+            log.info('Requests are no longer tampered.')
+        if responses:
+            weber.config['tamper.responses'].value = False
+            weber.proxy.tamper_controller.set_tamper_response_count(0)
+            log.info('Responses are no longer tampered.')
+    else:
+        """set tampering"""
+        """get count"""
+        count = 0
+        if only1:
+            count = 1
+        elif args:
+            try:
+                count = int(args[0])
+            except:
+                log.err('Invalid tamper count.')
+                return []
+        if count:
+            """tamper first N requests/responses"""
+            """disable default tampering"""
+            if requests:
+                weber.config['tamper.requests'].value = False
+                weber.proxy.tamper_controller.set_tamper_request_count(count)
+                log.info('First %d requests will be TAMPERED.' % count)
+            if responses:
+                weber.config['tamper.responses'].value = False
+                weber.proxy.tamper_controller.set_tamper_response_count(count)
+                log.info('First %d responses will be TAMPERED.' % count)
+        else:
+            """tamper all; set option and threads"""
+            """disable tampering by count"""
+            if requests:
+                weber.config['tamper.requests'].value = True
+                weber.proxy.tamper_controller.set_tamper_request_count(0)
+                log.info('Requests will be TAMPERED by default.')
+            if responses:
+                weber.config['tamper.responses'].value = True
+                weber.proxy.tamper_controller.set_tamper_response_count(0)
+                log.info('Responses will be TAMPERED by default.')
+            '''
+            """set all active threads"""
+            for t in weber.threads:
+                if requests:
+                    t.can_forward_request = False
+                if responses:
+                    t.can_forward_response = False
+            ''' # not necessary, cause check is done at the right moment
+    return []
+
+add_command(Command('rqt [<N>]', 
+                    'tamper next N or all requests', 
+                    'tamper', 
+                    lambda *args: rXtN_function(*args, responses=False)))
+    
+add_command(Command('rqt1 [<N>]', 
+                    'tamper next 1 request', 
+                    'tamper', 
+                    lambda *args: rXtN_function(*args, 
+                                                only1=True, 
+                                                responses=False)))
+add_command(Command('rqt- [<N>]', 
+                    'stop tampering requests', 
+                    'tamper', 
+                    lambda *args: rXtN_function(*args, 
+                                                stop=True,
+                                                responses=False)))
+add_command(Command('rst [<N>]', 
+                    'tamper next N or all responses', 
+                    'tamper', 
+                    lambda *args: rXtN_function(*args, requests=False)))
+    
+add_command(Command('rst1 [<N>]', 
+                    'tamper next 1 response', 
+                    'tamper', 
+                    lambda *args: rXtN_function(*args, 
+                                                only1=True, 
+                                                requests=False)))
+    
+'''
 # trq
 def trq_function(*args):
     try:
@@ -1536,7 +1644,6 @@ def trqa_function(*_):
     trq = not(positive(weber.config['tamper.requests'][0]))
     weber.config['tamper.requests'] = (trq, weber.config['tamper.requests'][1])
     weber.proxy.tamper_request_counter = 0
-    log.info('Requests will be %s by default.' % ('TAMPERED' if trq else 'FORWARDED'))
     return []
 add_command(Command('trqa', 'toggle default request tamper behavior', 'trqa', trqa_function))
 
@@ -1559,7 +1666,6 @@ def trsa_function(*_):
     log.info('Responses will be %s by default.' % ('TAMPERED' if trs else 'FORWARDED'))
     return []
 add_command(Command('trsa', 'toggle default response tamper behavior', 'trsa', trsa_function))
-
 # trqf
 def trqf_function(_, rr, *__, **___):
     try:
@@ -1577,7 +1683,7 @@ def trsf_function(_, rr, *__, **___):
         log.info('No response is available.')
     return []
 add_command(Command('trsf [<rrid>[:<rrid>]]', 'forward tampered response', 'trsf', lambda *args: foreach_rrs(trsf_function, *args)))
-
+'''
 
 
 

@@ -12,10 +12,13 @@ import time
 import traceback
 import difflib
 
-import brotli
 import gzip
+import zlib # for deflate
+from io import StringIO
 
-from gzip import GzipFile
+import brotli
+
+#from gzip import GzipFile
 #from source import weber
 from source import log
 
@@ -353,12 +356,14 @@ def encode_data(data, encoding):
         return brotli.compress(data)
     elif encoding == 'compress':
         """compress encoding"""
-        log.err('Not implemented encoding \'%s\'!' % encoding)
-        return b''
+        # TODO not tested
+        print('encoding compress (lzw)')
+        return lzw_compress(data)
     elif encoding == 'deflate':
         """deflate encoding"""
-        log.err('Not implemented encoding \'%s\'!' % encoding)
-        return b''
+        #TODO not tested
+        print('encoding deflate')
+        return zlib.compress(data)
     elif encoding == 'gzip':
         """gzip encoding"""
         return gzip.compress(data)
@@ -385,12 +390,14 @@ def decode_data(data, encoding):
         return brotli.decompress(data)
     elif encoding == 'compress':
         """compress encoding"""
-        log.err('Not implemented encoding \'%s\'!' % encoding)
-        return b''
+        print('decoding compress (lzw)')
+        return lzw_decompress(data)
+        # TODO not tested
     elif encoding == 'deflate':
         """deflate encoding"""
-        log.err('Not implemented encoding \'%s\'!' % encoding)
-        return b''
+        # TODO not tested
+        print('decoding deflate')
+        return zlib.decompress(data)
     elif encoding == 'gzip':
         """gzip encoding"""
         return gzip.decompress(data)
@@ -400,5 +407,64 @@ def decode_data(data, encoding):
     else:
         log.err('Unknown encoding \'%s\'' % encoding)
         return b''
+
+def lzw_compress(data):
+    """
+    Implementation of LZW compression, used in 'compress' 
+    Content-Encoding method in HTTP.
+    Source: https://rosettacode.org/wiki/LZW_compression#Python
+
+    Args:
+        data (bytes): normal data
+    Returns:
+        compressed data (bytes)
+    """
+    dict_size = 256
+    dictionary = {chr(i):i for i in range(dict_size)}
+    w = ""
+    result = []
+    for c in data:
+        wc = w + c
+        if wc in dictionary:
+            w = wc
+        else:
+            result.append(bytes([dictionary[w]]))
+            dictionary[wc] = dict_size
+            dict_size += 1
+            w = c
+    if w:
+        result.append(bytes([dictionary[w]]))
+    return b''.join(result)
+    
+
+def lzw_decompress(data):
+    """
+    Implementation of LZW decompression, used in 'compress' 
+    Content-Encoding method in HTTP.
+    Source: https://rosettacode.org/wiki/LZW_compression#Python
+
+    Args:
+        data (bytes): compressed data
+    Returns:
+        decompressed data (bytes)
+    """
+    dict_size = 256
+    dictionary = {i: chr(i) for i in range(dict_size)}
+    result = StringIO()
+    w = chr(data.pop(0))
+    result.write(w)
+    for c in data:
+        if c in dictionary.keys():
+            entry = dictionary[c]
+        elif c == dict_size:
+            entry = w + w[0]
+        else:
+            raise ValueError('Bad LZW compression.')
+        result.write(entry)
+        dictionary[dict_size] = w + entry[0]
+        dict_size += 1
+    return result.getvalue()
+
+    
 # --
 

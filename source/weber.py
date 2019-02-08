@@ -95,6 +95,10 @@ config['proxy.threaded'] = Option(True, bool)
 
 config['spoof.arguments'] = Option(False, bool) # should arguments be taken into consideration for spoofing?
 
+# tamper
+config['tamper.requests'] =  Option(False, bool) # should all requests be tampered by default?
+config['tamper.responses'] = Option(False, bool) # should all responses be tampered by default?
+
 '''
 
 
@@ -117,9 +121,6 @@ config['proxy.default_protocol'] = ('http', str)
 
 # spoof
 
-# tamper
-config['tamper.requests'] =  (False, bool) # should all requests be tampered by default?
-config['tamper.responses'] = (False, bool) # should all responses be tampered by default?
 '''
 
 

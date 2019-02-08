@@ -354,29 +354,29 @@ entry. Unlike `rqsa` and `rssa`, the parameter is not escaped.
 """) 
 
 # tamper
-doc['t'] = """One of the most essential features of a proxy is to pause the transmission of data between the client and the server. Those data can be reviewed and/or modified before actual transmission.
+doc['tamper'] = (
+    """One of the most essential features of a proxy is to pause the 
+transmission of data between the client and the server. Those data can
+be reviewed and/or modified before actual transmission.
 
-Default behaviour is to forward everything immediately. This can be toggled by setting tamper.requests and tamper.responses options, or, more conveniently, using `trqa` and `trsa` commands. If `trq` and `trs` commands are used instead, only first N requests/responses (default = 1) are tampered.
+Default behaviour is to forward everything immediately. This can be 
+toggled by setting tamper.requests and tamper.responses options, or, 
+more conveniently, using `rqt` and `rst` commands. Number of 
+requests/responses to tamper can be specified, by default all 
+requests/responses are to be tampered. 
+If `rqt1` and `rst1` commands are used instead, only first 
+request/response is tampered.
 
-Forward tampered requests and responses with `trqf`, `trsf` or `trf` commands.
+Forward tampered requests and responses with `rf` (both requests and
+responses), `rqf` (only requests) or `rsf` (only responses) commands.
+Specific requests/responses to be forwarded can be specified.
 
-For data modification, check `m` commands. For bulk data modification with regular expression, check `sr` commands.
-"""
+To stop tampering, use `rqt-` or `rst-` command.
 
-doc['trf'] = """Use `trf` command to forward all tampered requests and responses.
-"""
-doc['trq'] = """Use `trq` command to tamper next N requests. Default value is 1.
-"""
-doc['trqa'] = """Toggle tamper.requests value with the `trqa` command.
-"""
-doc['trs'] = """Use `trs` command to tamper next N responses. Default value is 1.
-"""
-doc['trsa'] = """Toggle tamper.responses value with the `trsa` command.
-"""
-doc['trqf'] = """Use `trqf` command to forward all tampered requests. Tampered responses are not forwarded.
-"""
-doc['trsf'] = """Use `trsf` command to forward all tampered responses. Tampered requests are not forwarded.
-"""
+For data modification, check `rqm` and `rsm` commands. For bulk data 
+modification with regular expression, check `rqs` and `rss` commands.
+""")
+
 
 # write
 doc['w'] = """Commands starting with `w` are designed to write gathered information into files. 

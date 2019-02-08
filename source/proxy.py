@@ -21,6 +21,8 @@ from source.lib import *
 from source.fd_debug import *
 from source.protocols import protocols
 
+from source.watcher import Watcher # TODO for debugging
+
 class ProxyLib():
     """
 
@@ -110,6 +112,66 @@ class ProxyLib():
             data = re.sub(old.encode(), new.encode(), data)
         return data
 
+class TamperController():
+    """
+    Thread-safe mechanism to choose requests/responses to be tampered.
+    Created and set in proxy, sent to ConnectionThreads as init arg.
+    """
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.tamper_request_count = 0
+        self.tamper_response_count = 0
+
+    def set_tamper_request_count(self, count):
+        with self.lock:
+            log.debug_tampering('Setting new tamper request count value: %d' 
+                                % count)
+            self.tamper_request_count = count
+            
+    def set_tamper_response_count(self, count):
+        with self.lock:
+            log.debug_tampering('Setting new tamper response count value: %d' 
+                                % count)
+            self.tamper_response_count = count
+            
+    def ask_for_request_tamper(self):
+        """
+        Returns:
+            whether default_tamper OR tamper counter allows it (bool)
+        """
+        if positive(weber.config['tamper.requests'].value):
+            """default tamper? allow it"""
+            log.debug_tampering('Tampering request because of default value.')
+            return True
+        """count OK?"""
+        with self.lock:
+            result = self.tamper_request_count > 0
+            if result:
+                self.tamper_request_count -= 1
+                log.debug_tampering(
+                    'Tampering request because of count (%d remaining)'
+                    % self.tamper_request_count)
+        return result
+
+    def ask_for_response_tamper(self):
+        """
+        Returns:
+            whether default_tamper OR tamper counter allows it (bool)
+        """
+        if positive(weber.config['tamper.responses'].value):
+            """default tamper? allow it"""
+            log.debug_tampering('Tampering response because of default value.')
+            return True
+        """count OK?"""
+        with self.lock:
+            result = self.tamper_response_count > 0
+            if result:
+                self.tamper_response_count -= 1
+                log.debug_tampering(
+                    'Tampering response because of count (%d remaining)'
+                    % self.tamper_response_count)
+        return result
+
 
 class Proxy(threading.Thread):
     """
@@ -120,6 +182,7 @@ class Proxy(threading.Thread):
 
         """
         threading.Thread.__init__(self)
+        self.tamper_controller = TamperController()
         self.listen_host = listen_host
         self.listen_port = listen_port
         self.stopper = os.pipe()
@@ -173,7 +236,7 @@ class Proxy(threading.Thread):
                                      % client)
                     log.debug_flow('Proxy creating new ConnectionThread.')
                     """run new thread with accepted socket"""
-                    t = ConnectionThread(conn)
+                    t = ConnectionThread(conn, self.tamper_controller)
                     t.start()
                     """add thread to array OR wait for it"""
                     if weber.config['proxy.threaded'].value:
@@ -206,11 +269,12 @@ class ConnectionThread(threading.Thread):
         downstream_socket () - socket from browser
         
     """
-    def __init__(self, downstream_socket, from_weber=False):
+    def __init__(self, downstream_socket, tamper_controller, from_weber=False):
         """
         
         """
         threading.Thread.__init__(self)
+        self.tamper_controller = tamper_controller
         self.downstream_socket = downstream_socket
         self.from_weber = from_weber
         self.request = None
@@ -223,19 +287,25 @@ class ConnectionThread(threading.Thread):
         self.full_uri = None # for one loop run only, but accessed from functions
         self.upstream_socket = None
         self.connect_method = False
-        self.can_forward_request = True # TODO from option
-        self.can_forward_response = True # TODO from option
+        #self.can_forward_request = True # TODO from option
+        #self.can_forward_response = True # TODO from option
         self.protocol = weber.protocols['http']
         self.times = {} # for one loop run only, but accessed from functions
+        self.waiting_for_request_forward = False # for `rqf`
+        self.waiting_for_response_forward = False # for `rsf`
+        self.watcher = Watcher(self.request, 'path', '/tmp/log.txt') # TODO for debugging
+        sys.settrace(self.watcher.trace_command)
     
     def send_continuation_signal(self):
         if self.stopper:
             os.write(self.stopper[1], b'1')
+        #print('sending signal')
     
     def wait_for_continuation_signal(self):
         """
 
         """
+        #print('waiting for signal')
         r, _, _ = select([self.stopper[0]], [], [])
 
     def stop(self):
@@ -254,6 +324,7 @@ class ConnectionThread(threading.Thread):
         Args:
             request (): 
         """
+        print('ADDING REQUEST MANUALLY!!!!!!!!!!!!!')
         self.request = request
         # TODO not fully implemented / tested
 
@@ -263,7 +334,8 @@ class ConnectionThread(threading.Thread):
 
         """
         first_run = True
-        keepalive = False if self.from_weber else True
+        #keepalive = False if self.from_weber else True
+        keepalive = False # new ConnectionThread for every request (excluding CONNECT and stuff)
         """send signal so first request can be processed"""
         #self.send_continuation_signal()
 
@@ -387,13 +459,6 @@ class ConnectionThread(threading.Thread):
                 if self.request.method == b'CONNECT':
                     continue
                     
-            '''
-            # TODO test; del
-            print('sending test response')
-            self.send_response(b'HTTP/1.1 200 OK\r\nContent-Length: 17\r\n\r\nWeber page WORKS!')
-            continue
-            '''
-            
             """request and server are done, time to play with it"""
             self.rrid = weber.rrdb.get_new_rrid()
             weber.rrdb.add_request(self.rrid, 
@@ -403,16 +468,17 @@ class ConnectionThread(threading.Thread):
             if self.terminate: break
             self.request.pre_tamper()
             """tamper/forward request"""
-            if not self.can_forward_request:
+            if self.tamper_controller.ask_for_request_tamper():
                 log.debug_tampering('Request is tampered.')
                 self.times['request_tampered'] = datetime.now()
+                self.waiting_for_request_forward = True
                 """tampering; print overview if appropriate"""
                 if positive(
                         weber.config['interaction.realtime_overview'].value):
                     # TODO RRDB overview of this
                     log.tprint(' '.join(weber.rrdb.overview(
-                                        [str(self.rrid)],
-                                        header=False)))
+                        [str(self.rrid)],
+                        header=False)))
             else:
                 log.debug_tampering('Forwarding request without tampering.')
                 self.continue_forwarding()
@@ -421,13 +487,14 @@ class ConnectionThread(threading.Thread):
             as those can happen much later
             """
             """terminate loop - no keepalive"""  # TODO is that normal?
-            keepalive = False
+            first_run = False
         """
         wait for tampered request to be processed if keepalive
         is off, ignore if termination is in effect.
         """
         if not self.terminate:
             self.wait_for_continuation_signal()
+
         """cleanup"""
         log.debug_flow('Closing sockets and stopper for ConnectionThread.')
         if self.upstream_socket:
@@ -445,6 +512,7 @@ class ConnectionThread(threading.Thread):
         """
 
         """
+        self.waiting_for_request_forward = False
         # TODO if from weber and brute is set: replace; maybe in post_tamper method
         if not self.request:
             log.err('Tried to forward non-existent request.')
@@ -492,9 +560,10 @@ class ConnectionThread(threading.Thread):
                         break
 
         """tamper/forward response"""
-        if not self.can_forward_response:
+        if self.tamper_controller.ask_for_response_tamper():
             log.debug_tampering('Response is tampered.')
             self.times['response_tampered'] = datetime.now()
+            self.waiting_for_response_forward = True
             """tampering; print overview if appropriate"""
             if positive(
                     weber.config['interaction.realtime_overview'].value):
@@ -513,6 +582,7 @@ class ConnectionThread(threading.Thread):
         """
 
         """
+        self.waiting_for_response_forward = False
         if not self.response:
             log.err('Tried to forward non-existent response.')
             return
@@ -575,118 +645,3 @@ class ConnectionThread(threading.Thread):
         else:
             log.debug_parsing('Response is weird.')
         
-
-'''
-class ConnectionThread(threading.Thread):
-    def __init__(self, conn, local_port, rrid, tamper_request, tamper_response, template_rr=None, request_modifier=None, Protocol=None):
-        # conn - socket to browser, None if from template
-        # local_port - port of conn socket
-        # rrid - index of request-response pair
-        # tamper_request - should the request forwarding be delayed?
-        # tamper_response - should the response forwarding be delayed?
-        # template_rr - known request (e.g. copy of existing for bruteforcing) - don't communicate with browser if not None
-        # request_modifier - function to alter request (e.g. fault injection, brute values)
-        threading.Thread.__init__(self)
-        self.Protocol = Protocol
-
-        self.conn = conn
-        self.local_port = local_port
-        self.host = b'?'  # for thread printing
-        self.port = 0      # for thread printing
-        self.rrid = rrid
-        self.path = '' # parsed from request, for `pt` command
-        self.tamper_request = tamper_request
-        self.tamper_response = tamper_response
-        self.template_rr = template_rr
-        self.request_modifier = request_modifier
-        #print('New ConnectionThread, tampering request', self.tamper_request, ', response', self.tamper_response)
-        self.stopper = os.pipe() # if Weber is terminated while tampering
-        fd_add_comment(self.stopper, 'CT (RRID %d) stopper' % (rrid))
-        #print('new thread: uri', uri, type(uri))
-        self.localuri = None
-        self.remoteuri = None
-
-        self.keepalive = True
-        self.terminate = False
-        
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    def stop(self):
-        self.terminate = True
-        if self.stopper:
-            os.write(self.stopper[1], b'1')
-
-    def run(self):
-        # implemented for each specific protocol
-        pass 
-
-
-    def receive_request(self, request_modifier=None):
-        if not self.Protocol:
-            log.debug_socket('Receiving request for unknown protocol, aborting.')
-            return None
-        try:
-            # set request_modifier to do nothing if not defined
-            request = self.Protocol.create_request(ProxyLib.recvall(self.conn), self.tamper_request, request_modifier)
-            if not request.integrity:
-                log.debug_socket('Request integrity failure...')
-                self.conn.close()
-                return None
-            return request
-        except IOError:
-            log.debug_socket('Request socket is not accessible anymore - terminating thread.')
-            #log.err('See traceback:')
-            #traceback.print_exc()
-            return None
-        except Exception as e:
-            log.err('Proxy receive error: '+str(e))
-            log.err('See traceback:')
-            traceback.print_exc()
-            return None
-
-        log.debug_socket('Request received.') 
-    
-
-    def forward(self, uri, data):
-        if not self.Protocol:
-            return None
-        try:
-            self.client_socket.connect((uri.domain, uri.port))
-        except socket.gaierror:
-            log.err('Cannot connect to %s:%d' % (uri.domain, uri.port))
-            return None
-        except ConnectionRefusedError:
-            log.err('Cannot connect to %s:%d (connection refused)' % (uri.domain, uri.port))
-            return None
-        except TimeoutError:
-            log.err('Site is not accessible (timeout).')
-            return None
-
-        if uri.scheme == self.Protocol.ssl_scheme:
-            try:
-                self.client_socket = ssl.wrap_socket(self.client_socket)
-            except Exception as e:
-                #log.err('Cannot create SSL socket for %s: %s' % (uri.get_value(), str(e)))
-                #log.err('See traceback:')
-                #traceback.print_exc()
-                #return None
-                log.debug_socket('Cannot create SSL socket for %s, using plaintext transmission instead.' % (uri.get_value()))
-                # recreate socket, run forward with HTTP
-                self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                uri.scheme = self.Protocol.scheme # TODO uri changed everywhere? (mapping?)
-                self.client_socket.connect((uri.domain, uri.port))
-                #return self.forward(uri, data)
-        log.debug_socket('Forwarding request to server...')
-        self.client_socket.send(data)
-        try:
-            response = self.Protocol.create_response(ProxyLib.recvall(self.client_socket), self.tamper_response)
-            self.client_socket.close()
-            return response
-        except Exception as e:
-            log.err(e)
-            log.err('See traceback:')
-            traceback.print_exc()
-            return None
-
-    
- '''

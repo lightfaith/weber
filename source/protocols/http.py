@@ -35,11 +35,7 @@ class HTTP():
     ] # TODO more
 
     fault_injection_delimiters = tuple(' \r\n:;/&?')
-    '''
-    @staticmethod
-    def create_connection_thread(conn, local_port, rrid, tamper_request, tamper_response, template_rr=None, request_modifier=None):
-        return HTTPConnectionThread(conn, local_port, rrid, tamper_request, tamper_response, template_rr, request_modifier)
-    '''
+    
     @staticmethod
     #def create_request(data, should_tamper, no_stopper=False, request_modifier=None):
     #    return HTTPRequest(data, should_tamper, no_stopper, request_modifier)
@@ -113,367 +109,8 @@ class HTTP():
             return '%s%s%s%s%d %s%s%s' % (log.COLOR_YELLOW, tamperstring, log.COLOR_NONE, color, res.statuscode, res.status.decode(), size_string, log.COLOR_NONE)
         except:
             return log.COLOR_YELLOW+log.COLOR_NONE+log.COLOR_GREY+'...'+log.COLOR_NONE
-    
-
 
 weber.protocols['http'] = HTTP
-
-
-
-
-
-
-'''
-class HTTPConnectionThread(ConnectionThread):
-    """
-    Class for dealing with HTTP communication.
-    Most stuff is done in parent generic ConnectionThread (source.proxy).
-    """
-    def __init__(self, conn, local_port, rrid, tamper_request, tamper_response, template_rr=None, request_modifier=None):
-        super().__init__(conn, local_port, rrid, tamper_request, tamper_response, template_rr, request_modifier)
-        # conn - socket to browser, None if from template
-        # rrid - index of request-response pair
-        # tamper_request - should the request forwarding be delayed?
-        # tamper_response - should the response forwarding be delayed?
-        # known_rr - known request (e.g. copy of existing for bruteforcing) - don't communicate with browser if not None
-        # request_modifier - function to alter request (e.g. fault injection, brute values)
-        self.Protocol = HTTP
-        log.debug_flow('HTTP ConnectionThread created.')
-
-    
-    def run(self):
-        log.debug_flow('HTTP ConnectionThread started.')
-        request = None
-        response = None
-        while self.keepalive:
-            # receive request from browser / copy from template RR
-            if self.template_rr is None:
-                request = self.receive_request(self.request_modifier)
-            else:
-                request = self.template_rr.request_upstream.clone(self.tamper_request, no_stopper=False, request_modifier=self.request_modifier)
-                request.compute_content_length()
-            
-            if request is None: # socket closed? socket problem?
-                log.debug_parsing('Request is broken, ignoring...') # TODO comment, 
-                break
-            log.debug_flow('Request of integrity received.')
-
-            if self.template_rr is None:
-                self.keepalive = (request.headers.get(b'Connection') == b'Keep-Alive')
-            else:
-                self.keepalive = False # whole template request used; do not repeat
-            # get URI() from request
-            log.debug_flow('Getting localuri from request.')
-            downstream_referer = None
-            if self.template_rr is None:
-                try:
-                    self.host, _, port = request.headers[b'Host'].partition(b':')
-                    self.port = int(port)
-                except:
-                    self.host = b''
-                    self.port = self.Protocol.port
-                self.localuri = URI(URI.build_str(self.host, self.port, request.path, Protocol=HTTP))
-                if request.headers.get(b'Referer'):
-                    downstream_referer = URI(request.headers.get(b'Referer'))
-            else:
-                self.localuri = self.template_rr.uri_upstream.clone() # TODO not downstream?
-
-            # localuri had problems in the past? give up...
-
-            if str(self.localuri) in weber.forward_fail_uris:
-                log.debug_mapping('URI failed in past.')
-                log.debug_flow('Terminating ConnectionThread.')
-                break
-
-            log.debug_mapping('request source: %s ' % (str(self.localuri)))
-            log.debug_parsing('\n'+'-'*15+'\n'+str(request)+'\n'+'='*20)
-            self.path = request.path.decode()
-            
-            # create request backup, move into RRDB
-            log.debug_flow('Saving request downstream.')
-            request_downstream = request.clone()
-            request.sanitize()
-            weber.rrdb.add_request(self.rrid, request_downstream, request, HTTP)
-            weber.rrdb.rrs[self.rrid].uri_downstream = self.localuri
-            
-            
-            # change outgoing links (useless if from template)
-            if self.template_rr is None:
-                log.debug_flow('Changing outgoing links.')
-                log.debug_flow('Getting remote URI from local.')
-                self.remoteuri = weber.mapping.get_remote(self.localuri)
-                if self.remoteuri is None:
-                    log.err('Cannot forward - local URI \'%s\'is not mapped. Terminating thread...' % self.localuri)
-                    weber.forward_fail_uris.append(str(self.localuri))
-                    break
-
-
-                # referer (not mandatory)
-                log.debug_flow('Getting Referer remote URI from local.')
-                try:
-                    upstream_referer = weber.mapping.get_remote(downstream_referer)
-                except:
-                    log.debug_flow('Referer not altered.')
-                    upstream_referer = None
-
-                request.path = self.remoteuri.path.encode()
-                request.parse_method() # TODO why here?
-                request.headers[b'Host'] = self.remoteuri.domain.encode() if self.remoteuri.port in [self.Protocol.port, self.Protocol.ssl_port] else b'%s:%d' % (self.remoteuri.domain.encode(), self.remoteuri.port)
-                if upstream_referer:
-                    request.headers[b'Referer'] = upstream_referer.get_value().encode()
-                log.debug_parsing('\n'+str(request)+'\n'+'#'*20)
-
-                # use only cookies for given domain, strip mapping ID
-                cookie_header = request.headers.get(b'Cookie')
-                if cookie_header:
-                    log.debug_flow('Stripping Mapping IDs from Cookies.')
-                    try:
-                        request.headers[b'Cookie'] = b'; '.join(cookie[cookie.find(b'_', 1)+1:] for cookie in cookie_header.split(b'; ') if cookie.startswith(b'_%d_' % weber.mapping.get_mapping_id(self.localuri)))
-                    except:
-                        traceback.print_exc()
-                        print(cookie_header)
-            else:
-                self.remoteuri = self.localuri.clone() # as we are working with upstream rr already
-            
-            weber.rrdb.rrs[self.rrid].uri_upstream = self.remoteuri
-            
-            """
-            # change brute placeholders
-            if self.brute_set is not None:
-                log.debug_flow('Changing brute placeholders.')
-                brute_bytes = request.bytes()
-                placeholder = weber.config['brute.placeholder'][0].encode()
-                for i in range(len(self.brute_set)):
-                    brute_bytes = brute_bytes.replace(b'%s%d%s' % (placeholder, i, placeholder), self.brute_set[i])
-                request.parse(brute_bytes)
-            """
-            # remove undesired headers
-            log.debug_flow('Attempting to remove undesired headers.')
-            for undesired in weber.config['http.drop_request_headers'][0].encode().split(b' '):
-                try:
-                    del request.headers[undesired]
-                except:
-                    pass
-            
-            # remove cache headers if not desired
-            if weber.config['http.no_cache'][0]:
-                log.debug_flow('Attempting to remove cache headers.')
-                for undesired in (b'If-Modified-Since', b'If-None-Match'):
-                    try:
-                        del request.headers[undesired]
-                    except:
-                        pass
-            # tamper request
-            log.debug_flow('Attempting to tamper the request.')
-            if request.tampering and positive(weber.config['overview.realtime'][0]):
-                log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
-            r, _, _ = select([request.forward_stopper[0], self.stopper[0]], [], [])
-            if self.stopper[0] in r:
-                # Weber is terminating
-                break
-
-            # compute content-length - for POST only?
-            log.debug_flow('Attempting to re-compute Content-Length.')
-            request.compute_content_length()
-
-            # forward request to server
-            log.debug_flow('Forwarding request to server.')
-            log.debug_socket('Forwarding request... (%d B)' % (len(request.data)))
-            response = self.forward(self.remoteuri, request.bytes())
-            
-            if response is None:
-                weber.forward_fail_uris.append(str(self.localuri))
-                break
-            log.debug_flow('Response received from server.')
-            
-            # add RR to Server instance
-            remoteuri_nopath = self.remoteuri.clone()
-            remoteuri_nopath.path = '/'
-            matching_servers = [s for s in weber.servers if s.uri.get_value() == remoteuri_nopath.get_value()]
-            if not matching_servers:
-                log.debug_flow('Creating new Server instance: \'%s\'' % (remoteuri_nopath))
-                matching_servers.append(Server(remoteuri_nopath))
-                server = matching_servers[0]
-                weber.servers.append(server)
-                server.add_rr(weber.rrdb.rrs[self.rrid])
-            elif len(matching_servers) == 1:
-                log.debug_flow('Adding RR to already existing Server instance.')
-                server = matching_servers[0]
-                server.add_rr(weber.rrdb.rrs[self.rrid])
-            else:
-                log.err('Found multiple Server instance candidates.')
-                for server in weber.servers:
-                    log.err('  '+server.uri+'\n  '+str(server.rrs))
-            
-            # TODO parse cookies for Server
-
-            ###############################################################################
-
-            log.debug_parsing('\n'+str(response)+'\n'+'='*30)
-            
-            # move response into RRDB
-            response.sanitize()
-            weber.rrdb.add_response(self.rrid, response, None, allow_analysis=False)
-            
-            # remove undesired headers
-            log.debug_flow('Attempting to remove undesired headers.')
-            for undesired in weber.config['http.drop_response_headers'][0].encode().split(b' '):
-                try:
-                    del response.headers[undesired]
-                except:
-                    pass
-
-            # remove cache headers if not desired
-            if weber.config['http.no_cache'][0]:
-                log.debug_flow('Attempting to remove cache headers.')
-                for undesired in (b'Expires',):
-                    try:
-                        del response.headers[undesired]
-                    except:
-                        pass
-                response.headers[b'Cache-Control'] = b'no-cache, no-store, must-revalidate'
-                response.headers[b'Pragma'] = b'no-cache'
-
-            # store response data if desired
-            if weber.config['crawl.save_path'][0]:
-                if response.statuscode >= 200 and response.statuscode < 300:
-                    # TODO what about custom error pages? but probably not...
-                    # TODO test content-length and 0 -> directory? 
-                    log.debug_flow('Saving response data into file.')
-                    file_path = create_folders_from_uri(weber.config['crawl.save_path'][0], self.remoteuri)
-                    with open(file_path, 'wb') as f:
-                        f.write(b'\n'.join(response.lines(headers=False, as_string=False)))
-
-
-            # tamper response
-            log.debug_flow('Attempting to tamper the response.')
-            if response.tampering and positive(weber.config['overview.realtime'][0]):
-                log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
-            r, _, _ = select([response.forward_stopper[0], self.stopper[0]], [], [])
-            if self.stopper[0] in r:
-                # Weber is terminating
-                break
-
-
-            # spoof files if desired (with or without GET arguments)
-            log.debug_flow('Spoofing files.')
-            spoof_path = self.remoteuri.get_value() if positive(weber.config['spoof.arguments'][0]) else self.remoteuri.get_value().partition('?')[0]
-            if spoof_path in weber.spoof_files.keys():
-                response.spoof(weber.spoof_files[spoof_path])
-
-
-            # set response as downstream, create backup (upstream), update RRDB and do the analysis
-            log.debug_flow('Saving response upstream.')
-            response_upstream = response.clone()
-            response_upstream.tampering = False
-            weber.rrdb.add_response(self.rrid, response_upstream, response, allow_analysis=True)
-            
-
-            # alter redirects, useless if from template # TODO test 302, 303, # TODO more?
-            if self.template_rr is None:
-                if response.statuscode in [301, 302, 303]:
-                    log.debug_flow('Altering redirect links.')
-                    location = response.headers[b'Location']
-                    if location.startswith((b'http://', b'https://')): # absolute redirect
-                        newremote = URI(response.headers[b'Location'])
-                        newlocal = weber.mapping.get_local(newremote)
-                        response.headers[b'Location'] = newlocal.__bytes__()
-                    else: # relative redirect
-                        pass
-                    # no permanent redirection # TODO for which 3xx's?
-                    response.statuscode = 302
-                # Set-Cookie?
-                if response.headers.get(b'Set-Cookie'):
-                    cookie_parameters = [x.strip() for x in response.headers[b'Set-Cookie'].split(b';')]
-                    
-                    # prepend mapping ID to the first cookie parameter - the name
-                    log.debug_flow('Prepending Mapping ID to new Cookie.')
-                    cookie_parameters[0] = b'_%d_' % (weber.mapping.get_mapping_id(self.localuri)) + cookie_parameters[0]
-                    # prepare Set-Cookie path if needed (WEBER-MAPPING in place)
-                    enforce_cookie_path = None
-                    if self.localuri.path.startswith('/WEBER-MAPPING/'):
-                        enforce_cookie_path = self.localuri.path[:self.localuri.path.find('/', 15)].encode()
-
-                    for i in range(len(cookie_parameters)):
-                        key, _, value = cookie_parameters[i].partition(b'=')
-                        # domain in Set-Cookie?
-                        if key.lower() == b'domain' and value:
-                            log.debug_flow('Altering Set-Cookie domain value.')
-                            # is this wildcard cookie?
-                            prepend = b'.' if value.startswith(b'.') else b''
-                            newlocal = prepend + weber.mapping.get_local(value.lstrip(b'.')).domain.encode()
-                            cookie_parameters[i] = b'%s=%s' % (key, newlocal)
-                        elif key.lower() == b'path' and enforce_cookie_path:
-                            cookie_parameters[i] = b'%s=%s' % (key, enforce_cookie_path + value)
-                            enforce_cookie_path = None
-                    
-                    # enforce cookie path if not specified and WEBER-MAPPING
-                    if enforce_cookie_path:
-                        log.debug_parsing('Adding cookie path.')
-                        cookie_parameters.append(b'path=%s/' % enforce_cookie_path)
-
-                    response.headers[b'Set-Cookie'] = b'; '.join(cookie_parameters)
-
-
-                log.debug_flow('Changing response data links.')
-                # change incoming links, useless if from template
-                for starttag, endtag, attr in HTTP.link_tags:
-                        response.replace_links(starttag, endtag, attr, prepend=self.localuri.get_mapping_path().encode())
-
-                log.debug_parsing('\n'+str(response)+'\n'+'-'*30)
-
-            # send response to browser if not from template
-            if self.template_rr is None:
-                log.debug_flow('Sending response to client.')
-                try:
-                    self.send_response(response)
-                except socket.error as e:
-                    if isinstance(e.args, tuple):
-                        if e.args[0] == errno.EPIPE:
-                            log.err('Connection closed for #%d, response not forwarded.' % (self.rrid))
-                        else:
-                            raise e
-                    else:
-                        raise e
-                except Exception as e:
-                    log.err('Failed to forward response (#%d): %s' % (self.rrid, str(e)))
-                    log.err('See traceback:')
-                    traceback.print_exc()
-            else:
-                log.debug_flow('Response not sent to client (generated from template request).')
-
-            # print if desired
-            if positive(weber.config['overview.realtime'][0]):
-                log.tprint('\n'.join(weber.rrdb.overview(['%d' % self.rrid], header=False)))
-        
-        log.debug_flow('Terminating HTTP ConnectionThread.')
-        # close connection if not None (from template)
-        if self.conn:
-            self.conn.close()
-
-        # close stoppers
-        for r in [request, response]:
-            if r:
-                for fd in [0, 1]:
-                    if r.forward_stopper:
-                        os.close(r.forward_stopper[fd])
-                r.forward_stopper = None
-        for fd in [0, 1]:
-            if self.stopper:
-                os.close(self.stopper[fd])
-        self.stopper = None
-        log.debug_flow('HTTP ConnectionThread terminated.')
-        
-'''
-
-
-
- 
-
-
-
-
-
 
 
 class HTTPRequest():
@@ -489,37 +126,21 @@ class HTTPRequest():
             no_stopper = should stopper IPC be created (e.g. no for cloning for downstream)
             request_modifier = function to alter request bytes before parsing
         """
-        self.integrity = False
-        if not data:
-            return
-        
-        #if request_modifier:
-        #    data = request_modifier(data)
-
-        # set up tampering mechanism
-        #self.should_tamper = should_tamper
-        #self.forward_stopper = None if no_stopper else os.pipe()
-        #self.forward_stopper = os.pipe()
-        #self.tampering = self.should_tamper
         self.tampering = False # just flag so we can filter; set in ConnectionThread
-        #self.onlypath = '' 
-
         """set default values"""
         self.original = data
         self.method = b''
         self.path = b''
         self.version = b''
         self.headers = OrderedDict()
-        
         self.data = b''
         self.parameters = {}
+        self.integrity = False
+        """no data? return"""
+        if not data:
+            return
         """parse received data"""
         self.parse()
-
-        # allow forwarding immediately?
-        #if not self.should_tamper:
-        #    self.forward()
-
 
     def parse(self):
         """
@@ -575,19 +196,13 @@ class HTTPRequest():
         self.headers.pop(b'Range', None)
         self.headers.pop(b'If_Range', None)
         '''
+        pass
 
 
     #def clone(self, should_tamper=False, no_stopper=True, request_modifier=None):
     def clone(self):
         #return HTTP.create_request(self.bytes(), should_tamper, no_stopper, request_modifier)
         return HTTP.create_request(self.bytes())
-
-    '''def forward(self):
-        self.tampering = False
-        if self.forward_stopper:
-            os.write(self.forward_stopper[1], b'1')
-        self.time_forwarded = datetime.now()
-    '''
 
     def parse_method(self):
         # GET, HEAD method
@@ -616,7 +231,8 @@ class HTTPRequest():
         """
 
         """
-        if weber.config['http.recompute_request_length'].value and self.data:
+        if (positive(weber.config['http.recompute_request_length'].value)
+            and self.data):
             log.debug_parsing('Computing Content-Length...')
             self.headers[b'Content-Length'] = b'%d' % (len(self.data))
 
@@ -647,7 +263,7 @@ class HTTPRequest():
             """turn to str if desired"""
             parts = [x.decode() for x in parts] if as_string else parts
         except Exception as e:
-            log.warn('Response encoding problem occured: '+str(e))
+            log.warn('Response encoding problem occured (as_string): '+str(e))
             parts = []
         return parts
         
