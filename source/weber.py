@@ -73,6 +73,10 @@ config['debug.server'] =     Option(False, bool)   # stuff relevant to server ma
 config['debug.socket'] =     Option(False, bool)   # stuff relevant to socket communication
 config['debug.tampering'] =  Option(False, bool)   # stuff relevant to tampering
 
+# edit settings
+config['edit.command'] = Option('vim %s', str)
+
+
 config['http.no_cache'] = Option(False, bool) # should caching be forcefully disabled?
 config['http.drop_request_headers'] = Option('', str) # which headers (separated by spaces) should be dropped?
 config['http.drop_response_headers'] = Option('Content-Security-Policy Expect-CT', str) # which headers (separated by spaces) should be dropped?
@@ -102,9 +106,6 @@ config['tamper.responses'] = Option(False, bool) # should all responses be tampe
 '''
 
 
-
-# edit settings
-config['edit.command'] = ('vim %s', str)
 
 # http settings
 config['http.show_password'] = (False, bool) # should password fields be visible? # TODO implement

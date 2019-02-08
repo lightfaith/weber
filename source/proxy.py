@@ -466,7 +466,7 @@ class ConnectionThread(threading.Thread):
             if self.terminate: break
             self.request.pre_tamper()
             """tamper/forward request"""
-            if self.tamper_controller.ask_for_request_tamper():
+            if self.tamper_controller.ask_for_request_tamper(): # TODO or force tamper (from modification)
                 log.debug_tampering('Request is tampered.')
                 self.times['request_tampered'] = datetime.now()
                 self.waiting_for_request_forward = True

@@ -891,82 +891,96 @@ MODIFY COMMANDS
 '''
 add_command(Command('m', 'modify', 'm', lambda *_: []))
 add_command(Command('mt', 'modify template', 'mr', lambda *_: []))
-add_command(Command('mtr', 'modify template request/response', 'mr', lambda *_: []))
 add_command(Command('mr', 'modify request/response', 'mr', lambda *_: []))
-def mr_function(*args, fromtemplate=False, force_template_creation=False):
-    # parse command arguments
+'''
+def mr_function(*args):
+    """parse command arguments"""
+    #TODO not working...
+    duplicate = False
     try:
-        tid = None
         rrid = int(args[1])
-        #source = weber.tdb if fromtemplate else weber.rrdb
-
-        if fromtemplate:
-            # modify existing template
-            source = weber.tdb.rrs[rrid]
-        else:
-            # work with real RRs
-            source = weber.rrdb.rrs[rrid]
+        rr = weber.rrdb.rrs[rrid]
         if args[0] == 'request':
-            r = source.request_upstream
+            r = rr.request
+            if not r.tampering:
+                duplicate = True
         elif args[0] == 'response':
-            r = source.response_upstream
+            r = rr.response
+            if not r.tampering:
+                log.err('Cannot modify finished response.')
+                return []
         else:
             log.err('Invalid type.')
-            return []
-
-        if (not r.tampering and not fromtemplate) or force_template_creation:
-            # create template from RR
-            tid = weber.tdb.add_rr(weber.rrdb.rrs[rrid].clone(), update_rr_rrid=True)
-            log.info('Creating template #%d from RR #%d...' % (tid, rrid))
-            source = weber.tdb.rrs[tid]
-            if args[0] == 'request':
-                r = source.request_upstream
-            elif args[0] == 'response':
-                r = source.response_upstream
-
-        if r is None:
-            log.err('Non-existent %s for RRID #%d.' % (args[0], rrid))
             return []
     except:
         log.err('Invalid RRID.')
         #traceback.print_exc()
         return []
-    # suppress debugs and realtime overview
-    oldconfig = {k:weber.config[k] for k in weber.config.keys() if k.startswith('debug.') or k == 'overview.realtime'}
+    if not r:
+        log.err('Non-existent %s for RRID #%d.' % (args[0], rrid))
+        return []
+
+    """duplicate?"""
+    if duplicate:
+        rr = weber.proxy.duplicate(rrid, tamper=True) # TODO
+        r = rr.request
+        # TODO but destroy if no change - or let user do it??
+
+    # TODO allow to change server if duplicate
+    """suppress debugs and realtime overview"""
+    oldconfig = {k:weber.config[k].value 
+                 for k in weber.config.keys() 
+                 if k.startswith('debug.') 
+                 or k == 'interaction.realtime_overview'}
     for k, _ in oldconfig.items():
-        weber.config[k] = (False, weber.config[k][1])
-    # write into temp file, open with desired editor
+        weber.config[k].value = False
+    """write into temp file, open with desired editor"""
     with tempfile.NamedTemporaryFile() as f:
         f.write(r.bytes())
         f.flush()
-        subprocess.call((weber.config['edit.command'][0] % (f.name)).split())
+        subprocess.call((weber.config['edit.command'].value % (f.name)).split())
         f.seek(0)
-        
-        # read back
+        """read back"""
         changes = f.read()
+    """restore debug and realtime overview settings"""
+    for k, v in oldconfig.items():
+        weber.config[k].value = v
+    return []
 
-    # write if changed
-    if changes != r.bytes() or force_template_creation:
-        if args[0] == 'request':
-            source.request_upstream.parse(changes)
-        elif args[0] == 'response':
-            source.response_upstream.parse(changes)
+    """write if changed"""
+    if changes != r.bytes():
+        log.debug_tampering('%s has been edited.' % args[0])
+        r.original = changes
+        r.parse()
+        """skip pre_tamper, which just removes undesired content"""
+        r.post_tamper() # TODO Response needs full_uri...
     else:
-        # delete template if just created
+        log.debug_tampering('No change in the %s.' % args[0])
+        """delete template if just created""" 
+        #- or let user do it? TODO
+        '''
         if tid is not None:
             log.info('Template cancelled.')
             del weber.tdb.rrs[tid]
-                
-    # restore debug and realtime overview settings
-    for k, v in oldconfig.items():
-        weber.config[k] = v
-    return []
+        '''
         
-add_command(Command('mrq <rrid>', 'modify request', 'mr', lambda *args: mr_function('request', *args)))
-add_command(Command('mrs <rrid>', 'modify response', 'mr', lambda *args: mr_function('response', *args)))
-add_command(Command('mrq! <rrid>', 'create template from request and modify', 'mr', lambda *args: mr_function('request', *args, force_template_creation=True)))
-add_command(Command('mrs! <rrid>', 'create template from response and modify', 'mr', lambda *args: mr_function('response', *args, force_template_creation=True)))
-'''
+add_command(Command('rqm <rrid>', 
+                    'modify request', 
+                    'mr', # TODO
+                    lambda *args: mr_function('request', *args)))
+add_command(Command('rsm <rrid>', 
+                    'modify response', 
+                    'mr',  # TODO
+                    lambda *args: mr_function('response', *args)))
+
+"""rD - delete RRs"""
+def rD_function(rrid, rr, *_, **__):
+    # TODO
+    pass
+add_command(Command('rD [<rrid>[:<rrid>]]', 
+                    'delete requests/responses', 
+                    'rD', 
+                    lambda *_: foreach_rrs(rD_function, *_))) # TODO by event
 
 
 

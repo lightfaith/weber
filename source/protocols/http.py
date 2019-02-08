@@ -481,25 +481,18 @@ class HTTPResponse():
         """
         
         # strip Transfer-Encoding...
-        self.headers.pop(b'Transfer-Encoding', None)
+        #self.headers.pop(b'Transfer-Encoding', None)
         
         # no wild upgrading (HTTP/2)
-        self.headers.pop(b'Upgrade', None)
+        #self.headers.pop(b'Upgrade', None)
 
 
     #def clone(self, should_tamper=True, no_stopper=True):
     #    return HTTP.create_response(self.bytes(), should_tamper, no_stopper)
     def clone(self):
         return HTTP.create_response(self.bytes())
-    '''
-    def forward(self):
-        self.tampering = False
-        if self.forward_stopper:
-            os.write(self.forward_stopper[1], b'1')
-    '''
-    
 
-    def compute_content_length(self): # TODO also optional?
+    def compute_content_length(self): # TODO also with option?
         #if b'Content-Length' not in self.headers.keys() and len(self.data)>0:
         if self.data: # TODO added; test it
             log.debug_parsing('Computing Content-Length...')
@@ -652,10 +645,6 @@ class HTTPResponse():
                       else full_uri.tostring().partition('?')[0])
         if spoof_path in weber.spoof_files.keys():
             self.spoof(weber.spoof_files[spoof_path])
-        """
-        encoding is done in bytes() method, so the response can
-        still be printed
-        """
         """end of response post_tamper method"""
         log.debug_tampering('Response is ready for forward.')
     
