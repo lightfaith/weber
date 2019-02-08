@@ -86,7 +86,7 @@ def run_command(fullcommand):
         """help, not command"""
         lines = []
         for k, v in sorted(weber.commands.items(), key=lambda x:x[0]):
-            length = 40
+            length = 50
             if k == '':
                 """empty command - just print long description"""
                 continue
@@ -1712,12 +1712,13 @@ add_command(Command('rsdwa [<path>]',
                     rsdwa_function))
 
 
+'''
 # wr
 add_command(Command('wr', 'write requests/responses into file', 'wr', lambda *_: []))
-
-# wrX
-def wrx_function(rrid, rr, *args, **kwargs): # write headers/data/both of desired requests/responses/both into file
-    data = []
+'''
+"""rXw - write content to file"""
+def rXw_function(rrid, rr, *args, **kwargs): # write headers/data/both of desired requests/responses/both into file
+    data = b''
     try:
         if kwargs.get('rr_count') == 1:
             path = args[0]
@@ -1732,47 +1733,60 @@ def wrx_function(rrid, rr, *args, **kwargs): # write headers/data/both of desire
     showdata = bool(kwargs['mask'] & 0x1)
     # deal with requests
     if showrequest:
-        r = rr.request_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.request_downstream
-        data += r.lines(headers=showheaders, data=showdata, as_string=False)
+        data += rr.request.bytes(headers=showheaders, data=showdata)
         if showresponse:
-            data.append(b'')
+            data += b'\n'
     # deal with responses
     if showresponse:
-        r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
+        r = rr.response
         if r is None:
             data.append(b'Response not received yet...')
         else:
-            data += r.lines(headers=showheaders, data=showdata, as_string=False)
+            data += r.bytes(headers=showheaders, data=showdata)
     try:
         with open(path, 'wb') as f:
-            f.write(b'\n'.join(data))
+            f.write(data)
     except Exception as e:
         log.err('Cannot write into file \'%s\'.' % (str(path)))
-        print(e)
+        log.tprint(str(e))
     return []
 
-add_command(Command('wra <file> [<rrid>[:<rrid>]]', 'write requests and responses', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0xf)))
-add_command(Command('wrh <file> [<rrid>[:<rrid>]]', 'write request and response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0xe)))
-add_command(Command('wrd <file> [<rrid>[:<rrid>]]', 'write request and response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0xd)))
-add_command(Command('wrq <file> [<rrid>[:<rrid>]]', 'write requests verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0xb)))
-add_command(Command('wrqh <file> [<rrid>[:<rrid>]]', 'write request headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0xa)))
-add_command(Command('wrqd <file> [<rrid>[:<rrid>]]', 'write request data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0x9)))
-add_command(Command('wrs <file> [<rrid>[:<rrid>]]', 'write responses verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0x7)))
-add_command(Command('wrsh <file> [<rrid>[:<rrid>]]', 'write response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0x6)))
-add_command(Command('wrsd <file> [<rrid>[:<rrid>]]', 'write response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, mask=0x5)))
-
-add_command(Command('wtra <file> [<rrid>[:<rrid>]]', 'write template requests and responses', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0xf)))
-add_command(Command('wtrh <file> [<rrid>[:<rrid>]]', 'write template request and response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0xe)))
-add_command(Command('wtrd <file> [<rrid>[:<rrid>]]', 'write template request and response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0xd)))
-add_command(Command('wtrq <file> [<rrid>[:<rrid>]]', 'write template requests verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0xb)))
-add_command(Command('wtrqh <file> [<rrid>[:<rrid>]]', 'write template request headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0xa)))
-add_command(Command('wtrqd <file> [<rrid>[:<rrid>]]', 'write template request data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0x9)))
-add_command(Command('wtrs <file> [<rrid>[:<rrid>]]', 'write template responses verbose', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0x7)))
-add_command(Command('wtrsh <file> [<rrid>[:<rrid>]]', 'write template response headers', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0x6)))
-add_command(Command('wtrsd <file> [<rrid>[:<rrid>]]', 'write template response data', 'wr', lambda *args: foreach_rrs(wrx_function, *args, fromtemplate=True, mask=0x5)))
-
-
-
+add_command(Command('raw <file> [<rrid>[:<rrid>]]', 
+                    'write requests and responses into file', 
+                    'rXw', 
+                    lambda *args: foreach_rrs(rXw_function, *args, mask=0xf)))
+add_command(Command('rhw <file> [<rrid>[:<rrid>]]', 
+                    'write request and response headers into file', 
+                    'rXw', 
+                    lambda *args: foreach_rrs(rXw_function, *args, mask=0xe)))
+add_command(Command('rdw <file> [<rrid>[:<rrid>]]', 
+                    'write request and response data into file', 
+                    'rXw', 
+                    lambda *args: foreach_rrs(rXw_function, *args, mask=0xd)))
+add_command(Command('rqw <file> [<rrid>[:<rrid>]]', 
+                    'write requests into file', 
+                    'rXw', 
+                    lambda *args: foreach_rrs(rXw_function, *args, mask=0xb)))
+add_command(Command('rqhw <file> [<rrid>[:<rrid>]]', 
+                    'write request headers into file', 
+                    'rXw', 
+                    lambda *args: foreach_rrs(rXw_function, *args, mask=0xa)))
+add_command(Command('rqdw <file> [<rrid>[:<rrid>]]', 
+                    'write request data into file', 
+                    'rXw', 
+                    lambda *args: foreach_rrs(rXw_function, *args, mask=0x9)))
+add_command(Command('rsw <file> [<rrid>[:<rrid>]]', 
+                    'write responses into file', 
+                    'rXw', 
+                    lambda *args: foreach_rrs(rXw_function, *args, mask=0x7)))
+add_command(Command('rshw <file> [<rrid>[:<rrid>]]', 
+                    'write response headers into file', 
+                    'rXw', 
+                    lambda *args: foreach_rrs(rXw_function, *args, mask=0x6)))
+add_command(Command('rsdw <file> [<rrid>[:<rrid>]]', 
+                    'write response data into file', 
+                    'rXw', 
+                    lambda *args: foreach_rrs(rXw_function, *args, mask=0x5)))
 
 # ww
 def ww_function(*args):

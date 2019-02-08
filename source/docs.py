@@ -391,12 +391,17 @@ you can set the path in \'crawl.save_path\' option.
 Leaving the path empty means data storing is not desired.
 """)
 
-doc['wr'] = """You can use `wr` commands to store gathered requests and/or responses. This is useful for web crawling or when a file is to be modified and spoofed later with `sfa` command.
+doc['rXw'] = (
+    """You can commands ending with 'w' to store gathered requests and/or
+responses. This is useful for manual web crawling or when a file is to 
+be modified and spoofed later with `rssf` command.
 
-If multiple RR ids are specified, The '_<rrid>' string is appended to the given filename to distinct between them.
+If multiple RR ids are specified, The '_<rrid>' string is appended to 
+the given filename to distinct between them.
 
-To store exact response data, use `wrsd` command.
-"""
+To manually store exact (decoded) response data, use `rsdw` command. 
+For automatic saving consider using `rsdwa` command.
+""")
 
 doc['ww'] = """If you need to store your Weber session for later use, take advantage of the`ww` command. This dumps essential Weber structures into a file in binary format. The dump can be later restored with --restore argument.
 

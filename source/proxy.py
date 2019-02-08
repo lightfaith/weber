@@ -287,14 +287,12 @@ class ConnectionThread(threading.Thread):
         self.full_uri = None # for one loop run only, but accessed from functions
         self.upstream_socket = None
         self.connect_method = False
-        #self.can_forward_request = True # TODO from option
-        #self.can_forward_response = True # TODO from option
         self.protocol = weber.protocols['http']
         self.times = {} # for one loop run only, but accessed from functions
         self.waiting_for_request_forward = False # for `rqf`
         self.waiting_for_response_forward = False # for `rsf`
-        self.watcher = Watcher(self.request, 'path', '/tmp/log.txt') # TODO for debugging
-        sys.settrace(self.watcher.trace_command)
+        #self.watcher = Watcher(self.request, 'path', '/tmp/log.txt') # TODO for debugging
+        #sys.settrace(self.watcher.trace_command)
     
     def send_continuation_signal(self):
         if self.stopper:
