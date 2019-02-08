@@ -1128,7 +1128,7 @@ if 'source.protocols.http' in sys.modules.keys():
 def rp_function(_, rr, *__, **___):
     maxlen = max([0]+[len(k) for k in rr.request.parameters.keys()])
     return ['%*s: %s' % (maxlen, k.decode(), v.decode() if v else '') 
-            for k, v in r.parameters.items()]
+            for k, v in rr.request.parameters.items()]
 
 add_command(Command('rp [<rrid>[:<rrid>]]', 
                     'print HTTP parameters', 
@@ -1201,7 +1201,6 @@ def rx_function(_, rr, *__, **kwargs):
     showheaders = bool(kwargs['mask'] & 0x2)
     showdata = bool(kwargs['mask'] & 0x1)
     usehexdump = kwargs.get('hexdump') or False
-    print(rr.request.headers)
     """deal with requests"""
     if showrequest:
         result += (rr.request.lines(headers=showheaders, data=showdata) 
@@ -1522,7 +1521,7 @@ def rXf_function(*args, requests=True, responses=True):
             pass
     return []
 
-add_command(Command('rf [<rrid>[:<rrid>]]', 
+add_command(Command('raf [<rrid>[:<rrid>]]', 
                     'forward tampered requests and responses', 
                     'tamper', 
                     lambda *args: rXf_function(*args)))

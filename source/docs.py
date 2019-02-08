@@ -119,10 +119,8 @@ Placeholder is specified in 'brute.placeholder' option.
 Throttling is adjusted with brute.rps option. It is maximum number of
 requests per second.
 """)
-doc['rqf'] = (
-    """Requests can be forwarded `rqf` commands. If tampered, request is
-simply forwarded, else a duplicate is created first.
-""") # TODO move to rq section
+
+
 
 # compare
 doc['compare_rr'] = (
@@ -372,6 +370,9 @@ responses), `rqf` (only requests) or `rsf` (only responses) commands.
 Specific requests/responses to be forwarded can be specified.
 
 To stop tampering, use `rqt-` or `rst-` command.
+
+If forwarding request already having a response, the request is
+duplicated and forwarded again.
 
 For data modification, check `rqm` and `rsm` commands. For bulk data 
 modification with regular expression, check `rqs` and `rss` commands.
