@@ -311,7 +311,7 @@ def run_command(command):
     (out, err) = p.communicate()
     return (p.returncode, out, err)
 
-def diff_lines(lines_1, lines_2, form):
+def diff_lines(lines_1, lines_2, form='D'):
     """
     Diffs 2 sets of lines. 
 

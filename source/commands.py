@@ -581,7 +581,7 @@ def cmp_rr_function(*args, **kwargs):
             rrs_lines.append(
                 rr.request.lines(headers=showheaders, data=showdata))
         """diff them"""
-        result += diff_lines(rrs_lines[0], rrs_lines[1])
+        result += diff_lines(rrs_lines[0], rrs_lines[1], form)
         if showresponse:
             result.append('')
 
@@ -589,13 +589,13 @@ def cmp_rr_function(*args, **kwargs):
         """get response lines"""
         rrs_lines = []
         for rr in (rr1, rr2):
-            r = rr.response_upstream if positive(weber.config['interaction.show_upstream'][0]) else rr.response_downstream
+            r = rr.response
             if r is None:
                 rrs_lines.append(['Response not received yet...'])
             else:
                 rrs_lines.append(r.lines(headers=showheaders, data=showdata))
         """diff them"""
-        result += diff_lines(rrs_lines[0], rrs_lines[1])
+        result += diff_lines(rrs_lines[0], rrs_lines[1], form)
     return result
 
 """rac* - compare full RRs"""
