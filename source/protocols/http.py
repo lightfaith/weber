@@ -152,6 +152,7 @@ class HTTPRequest():
         else:
             """parse after tamper -> from bytes()"""
             lines = self.bytes().splitlines()
+        #lines = self.original.splitlines()
         """parse first line, spoof request regexs"""
         line0 = ProxyLib.spoof_regex(lines[0], 
                                      weber.spoof_request_regexs.items())
@@ -184,20 +185,6 @@ class HTTPRequest():
         self.integrity = True
 
     
-    def sanitize(self):
-        """
-        alter the Request so we don't have to deal with problematic 
-        options, e.g. encoding
-        """
-        '''
-        # disable encoding
-        self.headers.pop(b'Accept-Encoding', None)
-        # disable Range
-        self.headers.pop(b'Range', None)
-        self.headers.pop(b'If_Range', None)
-        '''
-        pass
-
 
     #def clone(self, should_tamper=False, no_stopper=True, request_modifier=None):
     def clone(self):
@@ -251,7 +238,7 @@ class HTTPRequest():
         if headers:
             """add first line and headers"""
             parts.append(b'%s %s %s' % (self.method, self.path, self.version))
-            parts += [b'%s: %s' % (k, (v if v else ''))
+            parts += [b'%s: %s' % (k, (v if v else b''))
                       for k,v in self.headers.items()]
             """add header-data newline"""
             if data:
@@ -512,7 +499,7 @@ class HTTPResponse():
             data (bool) - if data should be included
             splitter (bytes) - type of line split (\n or \r\n)
             as_string (bool) - if result should be str (else bytes)
-            encoded (bool) - if Content-Encoding values should be used
+            encoded (bool) - if Content-Encoding should be used
         Returns:
             parts (obj:list of str/bytes) - list of lines
         """
@@ -594,8 +581,11 @@ class HTTPResponse():
         """
         log.debug_tampering('Running pre_tamper for the response.')
         self.sanitize()
-        
-        # remove undesired headers
+        """Drop Transfer-Encoding header"""
+        if self.headers.get(b'Transfer-Encoding') == b'chunked':
+            log.debug_flow('Dropping Transfer-Encoding header.')
+            del self.headers[b'Transfer-Encoding']
+        """remove undesired headers"""
         log.debug_flow('Attempting to remove undesired headers.')
         undesired = weber.config['http.drop_response_headers'].value.encode()
         for u in undesired.split(b' '):
@@ -603,8 +593,7 @@ class HTTPResponse():
                 del self.headers[u]
             except:
                 pass
-
-        # remove cache headers if not desired
+        """remove cache headers if not desired"""
         if positive(weber.config['http.no_cache'].value):
             log.debug_flow('Attempting to remove cache headers.')
             for undesired in (b'Expires',):

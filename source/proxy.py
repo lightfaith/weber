@@ -423,7 +423,8 @@ class ConnectionThread(threading.Thread):
                     self.upstream_socket.connect((self.server.uri.domain,
                                                   self.server.uri.port))
                 except Exception as e:
-                    print('Upstream connect error for %s:' % (self.full_uri.tostring()), str(e))
+                    log.err('Upstream connect error for %s: %s' 
+                            % (self.full_uri.tostring(), str(e)))
 
                 """was it CONNECT?"""
                 if self.request.method == b'CONNECT':

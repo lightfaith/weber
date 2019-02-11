@@ -353,10 +353,14 @@ def test_function(*_):
         if o.startswith('debug'):
             weber.config[o].value = True
     '''
-    print('random in threads:', [t.request.random_number for t in weber.proxy.threads])
-    print(weber.proxy.threads[0].request.lines())
-    print('random in rrdb:   ', [rr.request.random_number for rr in weber.rrdb.rrs.values()])
-    print(list(weber.rrdb.rrs.values())[0].request.lines())
+    #print('random in threads:', [t.request.random_number for t in weber.proxy.threads])
+    #print(weber.proxy.threads[0].request.lines())
+    #print('random in rrdb:   ', [rr.request.random_number for rr in weber.rrdb.rrs.values()])
+    #print(list(weber.rrdb.rrs.values())[0].request.lines())
+    for rr in weber.rrdb.rrs.values():
+        print(rr.rrid)
+        print(rr.times)
+        print()
     '''for server in weber.servers:
         result.append(str(server.uri))
         result.append(str(server.rrs))
@@ -912,6 +916,7 @@ def mr_function(*args):
         else:
             log.err('Invalid type.')
             return []
+        print(r)
     except:
         log.err('Invalid RRID.')
         #traceback.print_exc()
@@ -945,15 +950,17 @@ def mr_function(*args):
     """restore debug and realtime overview settings"""
     for k, v in oldconfig.items():
         weber.config[k].value = v
-    return []
-
+    print('original:', r.bytes())
+    print('changes:', changes)
     """write if changed"""
     if changes != r.bytes():
         log.debug_tampering('%s has been edited.' % args[0])
         r.original = changes
+        print('new original:', r.original)
         r.parse()
-        """skip pre_tamper, which just removes undesired content"""
-        r.post_tamper() # TODO Response needs full_uri...
+        print(r.path)
+        #"""skip pre_tamper, which just removes undesired content"""
+        #r.post_tamper() # TODO Response needs full_uri...
     else:
         log.debug_tampering('No change in the %s.' % args[0])
         """delete template if just created""" 
@@ -963,6 +970,7 @@ def mr_function(*args):
             log.info('Template cancelled.')
             del weber.tdb.rrs[tid]
         '''
+    return []
         
 add_command(Command('rqm <rrid>', 
                     'modify request', 
