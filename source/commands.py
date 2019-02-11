@@ -889,17 +889,11 @@ MODIFY COMMANDS
 """
 # TODO refactor
 #rD     delete RR 
-#rqC     clone rq
 #rqm   - as mrq; duplicate if not tamper
 #rsm   - as mrs; only if tamper
-'''
-add_command(Command('m', 'modify', 'm', lambda *_: []))
-add_command(Command('mt', 'modify template', 'mr', lambda *_: []))
-add_command(Command('mr', 'modify request/response', 'mr', lambda *_: []))
-'''
+# TODO rqms - change server
 def mr_function(*args):
     """parse command arguments"""
-    #TODO not working...
     duplicate = False
     try:
         rrid = int(args[1])
@@ -916,7 +910,6 @@ def mr_function(*args):
         else:
             log.err('Invalid type.')
             return []
-        print(r)
     except:
         log.err('Invalid RRID.')
         #traceback.print_exc()
@@ -927,11 +920,9 @@ def mr_function(*args):
 
     """duplicate?"""
     if duplicate:
-        rr = weber.proxy.duplicate(rrid, tamper=True) # TODO
-        r = rr.request
-        # TODO but destroy if no change - or let user do it??
+        rrid, r = weber.proxy.duplicate(rrid, force_tamper_request=True)
+        print('duplicated,', r.random)
 
-    # TODO allow to change server if duplicate
     """suppress debugs and realtime overview"""
     oldconfig = {k:weber.config[k].value 
                  for k in weber.config.keys() 
@@ -951,7 +942,12 @@ def mr_function(*args):
     for k, v in oldconfig.items():
         weber.config[k].value = v
     """write if changed"""
-    if changes != r.bytes():
+    log.debug_tampering('%s has been edited.' % args[0].title())
+    r.original = changes
+    r.parse()
+    r.pre_tamper()
+    log.tprint(' '.join(weber.rrdb.overview([str(rrid)], header=False)))
+    '''if changes != r.bytes():
         log.debug_tampering('%s has been edited.' % args[0].title())
         r.original = changes
         r.parse()
@@ -961,11 +957,7 @@ def mr_function(*args):
         log.debug_tampering('No change in the %s.' % args[0])
         """delete template if just created""" 
         #- or let user do it? TODO
-        '''
-        if tid is not None:
-            log.info('Template cancelled.')
-            del weber.tdb.rrs[tid]
-        '''
+    '''
     return []
         
 add_command(Command('rqm <rrid>', 
@@ -1769,7 +1761,7 @@ def rXw_function(rrid, rr, *args, **kwargs): # write headers/data/both of desire
         if r is None:
             data.append(b'Response not received yet...')
         else:
-            data += r.bytes(headers=showheaders, data=showdata, splitter=b'\n')
+            data += r.bytes(headers=showheaders, data=showdata)
     try:
         with open(path, 'wb') as f:
             f.write(data)

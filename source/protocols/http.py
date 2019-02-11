@@ -118,7 +118,6 @@ class HTTPRequest():
     HTTP Request class
 
     """
-    #def __init__(self, data, should_tamper, no_stopper=False, request_modifier=None):
     def __init__(self, data):
         """
             data = request data (bytes)
@@ -127,6 +126,8 @@ class HTTPRequest():
             request_modifier = function to alter request bytes before parsing
         """
         self.tampering = False # just flag so we can filter; set in ConnectionThread
+        import random
+        self.random = random.random()
         """set default values"""
         self.original = data
         self.method = b''
@@ -146,6 +147,7 @@ class HTTPRequest():
         """
         parse given bytes
         """
+        self.headers = OrderedDict()
         lines = self.original.splitlines()
         """parse first line, spoof request regexs"""
         line0 = ProxyLib.spoof_regex(lines[0], 
@@ -261,7 +263,8 @@ class HTTPRequest():
         """
         return b'\r\n'.join(self.lines(headers,
                                        data,
-                                       splitter=b'\r\n', as_string=False))
+                                       splitter=b'\r\n', 
+                                       as_string=False))
         # TODO is that a good replacement for: ?
         '''
         result = b''
@@ -282,6 +285,14 @@ class HTTPRequest():
         NOTE: request_regexs have spoofed in parse() method already.
         """
         log.debug_tampering('Running pre_tamper for the request.')
+        '''
+        """not connect -> remove server from req path"""
+        print('removing server from req path (%f)' % self.random)
+        print('before', self.path)
+        self.path = self.path[
+            self.path.find(b'/', self.path.find(b'/')+2):]
+        print('after', self.path)
+        '''
         """remove undesired headers"""
         log.debug_flow('Attempting to remove undesired headers.')
         undesired = weber.config['http.drop_request_headers'].value.encode()

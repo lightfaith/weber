@@ -49,60 +49,10 @@ class ProxyLib():
                 """no data ready, just continue waiting"""
                 time.sleep(0.1)
                 pass
-
         result = b''.join(chunks)
         log.debug_socket('Received %d bytes.' % (len(result)))
         return result
 
-        '''
-        """
-
-        """
-        timeout = None # for the first recv
-        chunks = []
-        # TODO fix looping
-        while True:
-            #print('sleeping for a while')
-            #time.sleep(1) # TODO delete after testing
-            conn.settimeout(timeout)
-            try:
-                recv_size = 65536
-                #r, _, _ = select([conn], [], [], timeout)
-                log.debug_socket('Getting %d bytes from %s...' 
-                                 % (recv_size, comment))
-                #if conn in r:
-                if True:
-                    buf = conn.recv(recv_size)
-                #else:
-                #    print('select timeout.')
-                #    break
-                #print('Got', len(buf), 'B')
-                #print('BUF:', buf, type(buf), bool(buf))
-                if not buf:
-                    print('Nothing loaded in this recvall iteration, returning (not buf)')
-                    break
-                    ''''''
-                    # TODO test so no spams
-                    """nothing loaded? wait for new input"""
-                    if not chunks:
-                        print("Waiting for new input")
-                        r, _, _ = select([conn, stopper], [], [])
-                        """or terminate if asked"""
-                        if stopper in r:
-                            print('Recvall is terminating.')
-                            break
-                        elif conn in r:
-                            print('Connection awoken the recvall select.')
-                    ''''''
-                chunks.append(buf)
-            except socket.timeout:
-                """no more data recently, return what we have"""
-                print('recvall stopping (socket.timeout)')
-                break
-            """set timeout for the next round"""
-            timeout = 0.4
-        return b''.join(chunks)
-        '''
     @staticmethod
     def spoof_regex(data, translations):
         """
@@ -239,7 +189,7 @@ class Proxy(threading.Thread):
                     t = ConnectionThread(conn, self.tamper_controller)
                     t.start()
                     """add thread to array OR wait for it"""
-                    if weber.config['proxy.threaded'].value:
+                    if positive(weber.config['proxy.threaded'].value):
                         self.threads.append(t)
                     else:
                         t.join()
@@ -260,6 +210,33 @@ class Proxy(threading.Thread):
         """end of main proxy loop"""
         log.debug_flow('Proxy stopped.')
 
+    def duplicate(self, rrid, force_tamper_request=False):
+        """
+        Duplicates request of given RRID and runs it as 
+        new ConnectionThread (with from_weber set to True).
+
+        Returns:
+            RRID (int)
+            reference to Request (Request)
+        """
+        """run new ConnectionThread"""
+        t = ConnectionThread(None, 
+                             self.tamper_controller, 
+                             from_weber=True, 
+                             force_tamper_request=force_tamper_request)
+        """set the cloned request"""
+        t.request = weber.rrdb.rrs[rrid].request.clone()
+        """add server to the path"""
+        full_uri = weber.rrdb.rrs[rrid].server.uri.clone()
+        full_uri.path = t.request.path.decode()
+        t.request.path = full_uri.tostring().encode()
+        """run the thread"""
+        t.start()
+        self.threads.append(t)
+        """wait until new RRID is assigned"""
+        while not t.rrid:
+            time.sleep(0.1)
+        return (t.rrid, t.request)
 
 class ConnectionThread(threading.Thread):
     """
@@ -269,7 +246,11 @@ class ConnectionThread(threading.Thread):
         downstream_socket () - socket from browser
         
     """
-    def __init__(self, downstream_socket, tamper_controller, from_weber=False):
+    def __init__(self, 
+                 downstream_socket, 
+                 tamper_controller, 
+                 from_weber=False,
+                 force_tamper_request=False):
         """
         
         """
@@ -277,12 +258,13 @@ class ConnectionThread(threading.Thread):
         self.tamper_controller = tamper_controller
         self.downstream_socket = downstream_socket
         self.from_weber = from_weber
+        self.force_tamper_request = force_tamper_request
         self.request = None
         self.response = None
         self.rrid = None # for one loop run only, but accesssed from functions
         self.terminate = False
         self.stopper = os.pipe() # to allow new request
-        self.server_id = None # TODO not necessary if self.server is used?
+        #self.server_id = None # TODO not necessary if self.server is used?
         self.server = None
         self.full_uri = None # for one loop run only, but accessed from functions
         self.upstream_socket = None
@@ -313,7 +295,7 @@ class ConnectionThread(threading.Thread):
         self.terminate = True
         """send continuation signal in case we are tampering"""
         self.send_continuation_signal()
-
+    '''
     def add_request(self, request):
         """Adds request bytes manually.
 
@@ -325,7 +307,7 @@ class ConnectionThread(threading.Thread):
         print('ADDING REQUEST MANUALLY!!!!!!!!!!!!!')
         self.request = request
         # TODO not fully implemented / tested
-
+    '''
 
     def run(self):
         """
@@ -350,22 +332,16 @@ class ConnectionThread(threading.Thread):
                 request_raw = ProxyLib.recvall(self.downstream_socket, 
                                                comment='downstream')
                 self.times['request_received'] = datetime.now()
-                '''
-                if not self.request.integrity:
-                    log.debug_socket('Request integrity failure.')
-                    self.downstream_socket.close()
-                else:
-                '''
                 log.debug_socket('Request received.')
             
-            if self.terminate: break
-            """convert to protocol-specific object"""
-            self.request = self.protocol.create_request(request_raw)
-            if not self.request.integrity:
-                log.debug_protocol('Received request is invalid.')
-                self.send_response(b'HTTP/1.1 400 Bad Request\r\n\r\n!') #TODO all right?
-                #continue
-                break # OK cause 1 ConnectionThread deals with only 1 request
+                if self.terminate: break
+                """convert to protocol-specific object"""
+                self.request = self.protocol.create_request(request_raw)
+                if not self.request.integrity:
+                    log.debug_protocol('Received request is invalid.')
+                    self.send_response(b'HTTP/1.1 400 Bad Request\r\n\r\n!') #TODO all right?
+                    #continue
+                    break # OK cause 1 ConnectionThread deals with only 1 request
 
             """provide Weber page with CA if path == /weber"""
             if self.request.path == b'/weber':
@@ -373,22 +349,6 @@ class ConnectionThread(threading.Thread):
                 # TODO return CA and stuff
                 break
 
-            '''
-            # TEST SSL # WORKS!!!!!!
-            if self.request.path == b'seznam.cz:443':
-                self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
-                self.downstream_socket = ssl.wrap_socket(
-                        self.downstream_socket, 
-                        certfile='ssl/pki/issued/seznam.cz.crt',
-                        keyfile='ssl/pki/private/seznam.cz.key',
-                        do_handshake_on_connect=True,
-                        server_side=True,
-                        )
-                print(ProxyLib.recvall(self.downstream_socket, 'downstream'))
-                self.send_response(b'HTTP/1.1 200 OK\r\n\r\nWeber page WORKS!')
-                # TODO return CA and stuff
-                break
-            '''
             """get actual full_uri"""
             if self.connect_method:
                 self.full_uri = self.server.uri.clone()
@@ -411,14 +371,11 @@ class ConnectionThread(threading.Thread):
                 if self.server.problem:
                     log.debug_server(
                         'Server is a troublemaker, ignoring the request.')
-                    self.send_response(b'HTTP/1.1 418 I\'m a teapot\r\n\r\n!') #TODO all right?
+                    self.send_response(b'HTTP/1.1 418 I\'m a teapot\r\n\r\n') #TODO all right?
                     break
                 """create socket to server"""
                 self.upstream_socket = socket.socket(socket.AF_INET, 
                                                      socket.SOCK_STREAM)
-                #self.upstream_socket.setsockopt(socket.SOL_SOCKET, 
-                #                                socket.SO_KEEPALIVE, 
-                #                                1)
                 try:
                     self.upstream_socket.connect((self.server.uri.domain,
                                                   self.server.uri.port))
@@ -433,11 +390,12 @@ class ConnectionThread(threading.Thread):
                     log.debug_flow('Accepting CONNECTion.')
                     self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
                 else:
-                    """not connect -> remove server from req path"""
+                    """ not connect -> remove server from req path"""
                     self.request.path = self.request.path[
                          self.request.path.find(
                              b'/', 
                              len(self.server.uri.scheme)+3):]
+
                 """upgrade both sockets if SSL"""
                 if self.server.ssl:
                     log.debug_socket('Upgrading sockets to SSL.')
@@ -467,13 +425,14 @@ class ConnectionThread(threading.Thread):
             if self.terminate: break
             self.request.pre_tamper()
             """tamper/forward request"""
-            if self.tamper_controller.ask_for_request_tamper(): # TODO or force tamper (from modification)
+            if (self.tamper_controller.ask_for_request_tamper() 
+                    or self.force_tamper_request): 
                 log.debug_tampering('Request is tampered.')
                 self.times['request_tampered'] = datetime.now()
                 self.waiting_for_request_forward = True
                 """tampering; print overview if appropriate"""
-                if positive(
-                        weber.config['interaction.realtime_overview'].value):
+                if (not self.force_tamper_request and positive(
+                    weber.config['interaction.realtime_overview'].value)):
                     # TODO RRDB overview of this
                     log.tprint(' '.join(weber.rrdb.overview(
                         [str(self.rrid)],
