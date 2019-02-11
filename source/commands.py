@@ -950,16 +950,12 @@ def mr_function(*args):
     """restore debug and realtime overview settings"""
     for k, v in oldconfig.items():
         weber.config[k].value = v
-    print('original:', r.bytes())
-    print('changes:', changes)
     """write if changed"""
     if changes != r.bytes():
-        log.debug_tampering('%s has been edited.' % args[0])
+        log.debug_tampering('%s has been edited.' % args[0].title())
         r.original = changes
-        print('new original:', r.original)
         r.parse()
-        print(r.path)
-        #"""skip pre_tamper, which just removes undesired content"""
+        r.pre_tamper()
         #r.post_tamper() # TODO Response needs full_uri...
     else:
         log.debug_tampering('No change in the %s.' % args[0])
@@ -1225,7 +1221,9 @@ def rx_function(_, rr, *__, **kwargs):
     usehexdump = kwargs.get('hexdump') or False
     """deal with requests"""
     if showrequest:
-        result += (rr.request.lines(headers=showheaders, data=showdata) 
+        result += (rr.request.lines(headers=showheaders, 
+                                    data=showdata, 
+                                    splitter=b'\n') 
                    if not usehexdump else 
                    hexdump(rr.request.bytes(headers=showheaders, 
                                             data=showdata)))
@@ -1236,7 +1234,9 @@ def rx_function(_, rr, *__, **kwargs):
         if not rr.response:
             result.append('Response not received yet...')
         else:
-            result += (rr.response.lines(headers=showheaders, data=showdata) 
+            result += (rr.response.lines(headers=showheaders, 
+                                         data=showdata,
+                                         splitter=b'\n') 
                        if not usehexdump 
                        else hexdump(rr.response.bytes(headers=showheaders, 
                                                       data=showdata)))
@@ -1647,6 +1647,12 @@ add_command(Command('rst1 [<N>]',
                     lambda *args: rXtN_function(*args, 
                                                 only1=True, 
                                                 requests=False)))
+add_command(Command('rst- [<N>]', 
+                    'stop tampering responses', 
+                    'tamper', 
+                    lambda *args: rXtN_function(*args, 
+                                                stop=True,
+                                                requests=False)))
     
 '''
 # trq
@@ -1763,7 +1769,7 @@ def rXw_function(rrid, rr, *args, **kwargs): # write headers/data/both of desire
         if r is None:
             data.append(b'Response not received yet...')
         else:
-            data += r.bytes(headers=showheaders, data=showdata)
+            data += r.bytes(headers=showheaders, data=showdata, splitter=b'\n')
     try:
         with open(path, 'wb') as f:
             f.write(data)

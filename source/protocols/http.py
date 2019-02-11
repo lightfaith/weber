@@ -144,15 +144,9 @@ class HTTPRequest():
 
     def parse(self):
         """
-        parse given bytes (from socket, editor, file, ...)
+        parse given bytes
         """
-        if not self.version: # TODO test; correct? necessary?
-            """first parse -> from original"""
-            lines = self.original.splitlines()
-        else:
-            """parse after tamper -> from bytes()"""
-            lines = self.bytes().splitlines()
-        #lines = self.original.splitlines()
+        lines = self.original.splitlines()
         """parse first line, spoof request regexs"""
         line0 = ProxyLib.spoof_regex(lines[0], 
                                      weber.spoof_request_regexs.items())
@@ -371,16 +365,9 @@ class HTTPResponse():
     '''
     def parse(self):
         """
-        parse given bytes (from socket, editor, file, ...)
+        parse given bytes
         """
-        if not self.version: 
-            """first parse -> from original"""
-            #lines = self.original.splitlines()
-            lines = self.original.split(b'\r\n')
-        else:
-            """parse after tamper -> from bytes()"""
-            lines = self.bytes().split(b'\r\n')
-            #lines = self.bytes().splitlines()
+        lines = self.original.split(b'\r\n')
         """parse first line, spoof response regexs"""
         line0 = ProxyLib.spoof_regex(lines[0], 
                                      weber.spoof_response_regexs.items())
