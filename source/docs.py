@@ -298,7 +298,7 @@ Use `ws` command to show current spoofing settings.
 """)
 
 doc['rssf'] = (
-    """If file spoofing has been configured with `sfa` command, you can
+    """If file spoofing has been configured with `rssfa` command, you can
 print the mapping with `rssf` command.
 
 Use `rssfa` and `rssfD` commands to configure/delete file spoofing.

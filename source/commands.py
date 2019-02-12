@@ -1423,7 +1423,7 @@ def rssfa_function(*args):
         traceback.print_exc()
         log.err('Cannot read file.')
         return []
-    weber.spoof_files[uri.get_value()] = args[1]
+    weber.spoof_files[uri.tostring()] = args[1]
     return []
 add_command(Command('rssfa <uri> <file>', 
                     'add/modify file spoof', 
