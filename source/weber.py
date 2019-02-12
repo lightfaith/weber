@@ -171,7 +171,7 @@ spoof_response_regexs = {}
 """
 (path, list of lists (values for bruteforcing))
 """
-brute = None
+brute = []
 
 """
 List of local URIs that could not be forwarded

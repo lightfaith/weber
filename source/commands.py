@@ -476,7 +476,7 @@ def bl_function(*args):
         with open(path, 'rb') as f:
             weber.brute = (
                 path, 
-                [line.split(
+                [l.split(
                     weber.config['brute.value_separator'].value.encode()) 
                  for l in f.read().split(
                      weber.config['brute.set_separator'].value.encode())])
@@ -513,6 +513,7 @@ add_command(Command('br',
                     lambda *_: []))
 
 """bra - brute all sets"""
+'''
 # TODO refactor!
 def bra_modifier(data, brute_set):
     placeholder = weber.config['brute.placeholder'][0].encode()
@@ -536,6 +537,14 @@ def bra_function(rrid, rr, *__, **___):
             lambda data: bra_modifier(data, brute_set))
         if sleep:
             time.sleep(sleep)
+    return []
+'''
+
+def bra_function(rrid, rr, *__, **___):
+    #if not weber.brute:
+    #    log.err('No brute loaded, see `bl`.')
+    #    return []
+    weber.proxy.brute(rrid)
     return []
 
 add_command(Command('bra [<rrid>[:<rrid>]]', 
@@ -921,7 +930,6 @@ def mr_function(*args):
     """duplicate?"""
     if duplicate:
         rrid, r = weber.proxy.duplicate(rrid, force_tamper_request=True)
-        print('duplicated,', r.random)
 
     """suppress debugs and realtime overview"""
     oldconfig = {k:weber.config[k].value 
@@ -1542,6 +1550,8 @@ def rXf_function(*args, requests=True, responses=True):
                                                         if len(args)<1 
                                                         else args[0])
     rrids = desired_rrs.keys()
+    """duplicate all not tampered"""
+    
     """for all connection threads with matching rrid:"""
     for t in [t for t in weber.proxy.threads if t.rrid in rrids]:
         """responses first so race condition won't occur"""

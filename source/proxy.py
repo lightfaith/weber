@@ -248,6 +248,56 @@ class Proxy(threading.Thread):
             time.sleep(0.1)
         return (t.rrid, t.request)
 
+    def brute(self, rrid):
+        """
+        Duplicates request of given RRID and replaces the placeholders.
+        This is done in ConnectionThreads (each taking care of portion
+        of brute values).
+        """
+        if not weber.brute:
+            log.err('Load your dictionary first with `bl` command.')
+            return
+        """guess number of threads to process this"""
+        thread_count = 1
+        if len(weber.brute[1]) > 256:
+            thread_count = 8
+        if len(weber.brute[1]) > 32:
+            thread_count = 4
+        elif len(weber.brute[1]) > 8:
+            thread_count = 2
+        """get standard set size to stuff incomplete sets"""
+        normal_set_size = len(weber.brute[1][0])
+        """
+        separate brute dictionary into chunks for each thread,
+        add stuffing if necessary
+        """
+        brute_set_chunks = [[x if len(x) == normal_set_size 
+                               else list(x) + [b''] * (normal_set_size - len(x))
+                             for x in weber.brute[1][i::thread_count]]
+                            for i in range(thread_count)]
+        original_request = weber.rrdb.rrs[rrid].request
+        """is in original_request at least one placeholder?"""
+        placeholder_regex = '{0}[0-9]+{0}'.format(
+            weber.config['brute.placeholder'].value)
+        if not re.search(placeholder_regex.encode(), original_request.bytes()):
+            log.err('No placeholder in selected request.')
+            return
+        """run threads"""
+        for i in range(thread_count):
+            t = ConnectionThread(None,
+                                 self.tamper_controller,
+                                 from_weber=True,
+                                 brute_sets=brute_set_chunks[i])
+            """set the cloned request"""
+            t.request = original_request.clone()
+            """add server to the path"""
+            full_uri = weber.rrdb.rrs[rrid].server.uri.clone()
+            full_uri.path = t.request.path.decode()
+            t.request.path = full_uri.tostring().encode()
+            """run the thread"""
+            t.start()
+            self.threads.append(t)
+
 class ConnectionThread(threading.Thread):
     """
     
@@ -260,7 +310,8 @@ class ConnectionThread(threading.Thread):
                  downstream_socket, 
                  tamper_controller, 
                  from_weber=False,
-                 force_tamper_request=False):
+                 force_tamper_request=False,
+                 brute_sets=None):
         """
         
         """
@@ -283,6 +334,7 @@ class ConnectionThread(threading.Thread):
         self.times = {} # for one loop run only, but accessed from functions
         self.waiting_for_request_forward = False # for `rqf`
         self.waiting_for_response_forward = False # for `rsf`
+        self.brute_sets = brute_sets
         #self.watcher = Watcher(self.request, 'path', '/tmp/log.txt') # TODO for debugging
         #sys.settrace(self.watcher.trace_command)
     
@@ -328,24 +380,30 @@ class ConnectionThread(threading.Thread):
         keepalive = False # new ConnectionThread for every request (excluding CONNECT and stuff)
         """send signal so first request can be processed"""
         #self.send_continuation_signal()
-
-        while keepalive or first_run:
+        
+        request_raw = None
+        if self.brute_sets:
+            request_raw = self.request.bytes()
+        while keepalive or first_run or self.brute_sets:
             """wait for signal - cause previous request can be tampered"""
             #self.wait_for_continuation_signal()
             if self.terminate: break
-            #time.sleep(0.5) # TODO delete after testing recvall loops
             """reset times dictionary for new traffic"""
             self.times = {}
           
-            """read request from socket if needed"""
             if not self.from_weber:
+                """read request from socket if needed"""
                 request_raw = ProxyLib.recvall(self.downstream_socket, 
                                                comment='downstream')
+                if not request_raw:
+                    break # TODO OK?
                 self.times['request_received'] = datetime.now()
                 log.debug_socket('Request received.')
             
-                if self.terminate: break
-                """convert to protocol-specific object"""
+            if self.terminate: break
+            if request_raw:
+                """convert to protocol-specific object if needed"""
+                """new request or from brute template"""
                 self.request = self.protocol.create_request(request_raw)
                 if not self.request.integrity:
                     log.debug_protocol('Received request is invalid.')
@@ -354,7 +412,7 @@ class ConnectionThread(threading.Thread):
                     break # OK cause 1 ConnectionThread deals with only 1 request
 
             """provide Weber page with CA if path == /weber"""
-            if self.request.path == b'/weber':
+            if self.request and self.request.path == b'/weber':
                 self.send_response(b'HTTP/1.1 200 OK\r\n\r\nWeber page WORKS!')
                 # TODO return CA and stuff
                 break
@@ -409,7 +467,7 @@ class ConnectionThread(threading.Thread):
                 """upgrade both sockets if SSL"""
                 if self.server.ssl:
                     log.debug_socket('Upgrading sockets to SSL.')
-                    self.downstream_socket.setblocking(True)
+                    self.downstream_socket.setblocking(True) # TODO fails when `rqm` ssl stuff...
                     #self.upstream_socket.setblocking(True)
                     self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
                     try:
@@ -433,6 +491,31 @@ class ConnectionThread(threading.Thread):
                                    self.server, 
                                    self.times)
             if self.terminate: break
+            """fill brute values if necessary"""
+            if self.brute_sets:
+                placeholder = weber.config['brute.placeholder'].value.encode()
+                #if request_original:
+                #    """use original with placeholders"""
+                #    self.request.original = request_original
+                #else:
+                #    """first run -> store placeholder version"""
+                #    request_original = self.request.original
+                """replace each placeholder occurence of each index"""
+                for i, value in enumerate(self.brute_sets[0]):
+                    #print('replacing', value)
+                    #print('before:', self.request.original[:50])
+                    self.request.original = self.request.original.replace(
+                        b'%s%d%s' % (placeholder, i, placeholder),
+                        value)
+                    #print('after:', self.request.original[:50])
+                self.request.parse()
+                """and fix path after that"""
+                self.request.path = self.request.path[
+                     self.request.path.find(
+                         b'/', 
+                         len(self.server.uri.scheme)+3):]
+                self.brute_sets = self.brute_sets[1:]
+            """run pre_tamper operations"""        
             self.request.pre_tamper()
             """tamper/forward request"""
             if (self.tamper_controller.ask_for_request_tamper() 
@@ -443,7 +526,6 @@ class ConnectionThread(threading.Thread):
                 """tampering; print overview if appropriate"""
                 if (not self.force_tamper_request and positive(
                     weber.config['interaction.realtime_overview'].value)):
-                    # TODO RRDB overview of this
                     log.tprint(' '.join(weber.rrdb.overview(
                         [str(self.rrid)],
                         header=False)))
@@ -456,6 +538,8 @@ class ConnectionThread(threading.Thread):
             """
             """terminate loop - no keepalive"""  # TODO is that normal?
             first_run = False
+            """end of main loop"""
+
         """
         wait for tampered request to be processed if keepalive
         is off, ignore if termination is in effect.
@@ -481,7 +565,6 @@ class ConnectionThread(threading.Thread):
 
         """
         self.waiting_for_request_forward = False
-        # TODO if from weber and brute is set: replace; maybe in post_tamper method
         if not self.request:
             log.err('Tried to forward non-existent request.')
             return
