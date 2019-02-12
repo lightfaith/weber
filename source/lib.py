@@ -107,67 +107,93 @@ def reload_config():
             log.debug_config('  parsed: %s = %s (%s)' % (k, v, str(type(v))))
 
 
-
-"""
-# for some reason does not work with responses: [-] Not a gzipped file (b'7a')
-def gzip(i): # bytes -> gzip
-    o = io.BytesIO()
-    with GzipFile(fileobj=o, mode='w') as g:
-        g.write(i)
-    return o.getvalue()
-    
-def gunzip(data): # gzip -> bytes
-    i = io.BytesIO()
-    i.write(data)
-    i.seek(0)
-    with GzipFile(fileobj=i,mode='rb') as g:
-       o = g.read()
-    return o
-"""
-
 def find_between(data, startbytes, endbytes, startpos=0, endpos=0, inner=False):
-    # this function goes through data[startpos:endpos] and locates substrings 'startbytes.*endbytes'
-    # returns list of (absolute_position, match_string)
-    # inner specifies whether startbytes and endbytes should be included in match_string
+    """
+    This function goes through data[startpos:endpos] and locates 
+    substrings 'startbytes.*endbytes'.
+    
+    inner specifies whether startbytes and endbytes should be 
+    included in match_string.
+
+    Returns:
+        list of (absolute_position, match_string)
+    """
     if endpos == 0:
         endpos = len(data)
     result = []
     while True:
         try:
+            """set up start, find end from it"""
             offset = data.index(startbytes, startpos)
             start = offset+(len(startbytes) if inner else 0)
             end = data.index(endbytes, start)+(0 if inner else len(endbytes))
-            if end>endpos: # behind the endpos limit?
+            if end>endpos:
+                """stop if outside the scope"""
                 break
             result.append((offset, data[start:end]))
-            # prepare for next search
+            """prepare for next search"""
             startpos = end
         except ValueError: # out of bounds (no more matches)?
             break
     return result
 
 def get_color_from_extension(path):
+    """
+
+    """
     color = log.COLOR_NONE
-    if path.endswith((b'/', b'.htm', b'.html', b'.php', b'.xhtml', b'.aspx')):
+    if path.endswith((b'/', 
+                      b'.htm', 
+                      b'.html', 
+                      b'.php', 
+                      b'.xhtml', 
+                      b'.aspx')):
         color = log.MIMECOLOR_HTML
-    elif path.endswith((b'.jpg', b'.svg', b'.png', b'.gif', b'.ico')):
+    elif path.endswith((b'.jpg', 
+                        b'.svg', 
+                        b'.png', 
+                        b'.gif', 
+                        b'.ico')):
         color = log.MIMECOLOR_IMAGE
-    elif path.endswith((b'.mp3', b'.ogg', b'.mp4', b'.wav')):
+    elif path.endswith((b'.mp3', 
+                        b'.ogg', 
+                        b'.mp4', 
+                        b'.wav')):
         color = log.MIMECOLOR_MULTIMEDIA
-    elif path.endswith((b'.js', b'.vbs', b'.swf')):
+    elif path.endswith((b'.js', 
+                        b'.vbs', 
+                        b'.swf')):
         color = log.MIMECOLOR_SCRIPT
-    elif path.endswith((b'.css')):
+    elif path.endswith((b'.css',)):
         color = log.MIMECOLOR_CSS
-    elif path.endswith((b'.pdf', b'.doc', b'.docx', b'.xls', b'.xlsx', b'.ppt', b'.pptx', b'.pps', b'.ppsx')):
+    elif path.endswith((b'.pdf', 
+                        b'.doc', 
+                        b'.docx', 
+                        b'.xls', 
+                        b'.xlsx', 
+                        b'.ppt', 
+                        b'.pptx', 
+                        b'.pps', 
+                        b'.ppsx')):
         color = log.MIMECOLOR_DOCUMENT
-    elif path.endswith(b'.txt'):
+    elif path.endswith((b'.txt',)):
         color = log.MIMECOLOR_PLAINTEXT
-    elif path.endswith((b'.zip', b'.7z', b'.rar', b'.gz', b'.bz2', b'.jar', b'.bin', b'.iso')):
+    elif path.endswith((b'.zip', 
+                        b'.7z', 
+                        b'.rar', 
+                        b'.gz', 
+                        b'.bz2', 
+                        b'.jar', 
+                        b'.bin', 
+                        b'.iso')):
         color = log.MIMECOLOR_ARCHIVE
     return color
 
 
 def get_color_from_content_type(content_type=None):
+    """
+
+    """
     color = log.COLOR_NONE
     if content_type is None:
         return color
@@ -186,13 +212,24 @@ def get_color_from_content_type(content_type=None):
         ct_part = content_type[12:]
         if ct_part.startswith((b'xhtml')):
             color = log.MIMECOLOR_HTML
-        elif ct_part.startswith((b'javascript', b'x-javascript', b'x-shockwave')): # scripts
+        elif ct_part.startswith((b'javascript', 
+                                 b'x-javascript', 
+                                 b'x-shockwave')): # scripts
             color = log.MIMECOLOR_SCRIPT
         elif ct_part.startswith(b'octet-stream'): # binary
             color = log.MIMECOLOR_BINARY
-        elif ct_part.startswith((b'x-bzip', b'x-rar-compressed', b'x-tar', b'x-7z-compressed', b'zip')): # archives
+        elif ct_part.startswith((b'x-bzip', 
+                                 b'x-rar-compressed', 
+                                 b'x-tar', 
+                                 b'x-7z-compressed', 
+                                 b'zip')): # archives
             color = log.MIMECOLOR_ARCHIVE
-        elif ct_part.startswith((b'msword', b'vnd.ms-powerpoint', b'vnd.ms-excel', b'vnd.openxmlformats-officedocument', b'vnd.oasis.opendocument', b'pdf')): # documents
+        elif ct_part.startswith((b'msword', 
+                                 b'vnd.ms-powerpoint', 
+                                 b'vnd.ms-excel', 
+                                 b'vnd.openxmlformats-officedocument', 
+                                 b'vnd.oasis.opendocument', 
+                                 b'pdf')): # documents
             color = log.MIMECOLOR_DOCUMENT
         elif ct_part.startswith((b'ogg')): # ogg
             color = log.MIMECOLOR_MULTIMEDIA
@@ -204,16 +241,26 @@ def get_color_from_content_type(content_type=None):
     elif content_type.startswith(b'image/'): # images
         color = log.MIMECOLOR_IMAGE
 
-    elif content_type.startswith((b'audio/', b'video/')): # multimedia
+    elif content_type.startswith((b'audio/', 
+                                  b'video/')): # multimedia
         color = log.MIMECOLOR_MULTIMEDIA
     
-    elif content_type.startswith((b'message/')): # multimedia
+    elif content_type.startswith((b'message/')): # message
         color = log.MIMECOLOR_MESSAGE
     return color
  
 
 def is_content_type_text(content_type):
-    return get_color_from_content_type(content_type) in (log.MIMECOLOR_PLAINTEXT, log.MIMECOLOR_HTML, log.MIMECOLOR_SCRIPT, log.MIMECOLOR_CSS, log.MIMECOLOR_DATATRANSFER, log.MIMECOLOR_MESSAGE)
+    """
+
+    """
+    return (get_color_from_content_type(content_type)
+            in (log.MIMECOLOR_PLAINTEXT, 
+                log.MIMECOLOR_HTML, 
+                log.MIMECOLOR_SCRIPT, 
+                log.MIMECOLOR_CSS, 
+                log.MIMECOLOR_DATATRANSFER, 
+                log.MIMECOLOR_MESSAGE))
 
 
 def split_escaped(string, delimiter):
@@ -237,6 +284,9 @@ def split_escaped(string, delimiter):
 chunks = lambda data,size: [data[x:x+size] for x in range(0, len(data), size)]
 
 def get_colored_printable(b):
+    """
+
+    """
     color = log.COLOR_BROWN
     if b in (0x9, 0xa, 0xd):
         color = log.COLOR_DARK_GREEN
@@ -247,6 +297,9 @@ def get_colored_printable(b):
     return color+chr(b)+log.COLOR_NONE
 
 def get_colored_printable_hex(b):
+    """
+
+    """
     color = log.COLOR_NONE
     if b>=0x20 and b<0x7f:
         color = log.COLOR_BROWN
@@ -255,21 +308,27 @@ def get_colored_printable_hex(b):
     return color + '%02x' % b + log.COLOR_NONE
 
 def hexdump(data):
-    # prints data as with `hexdump -C` command
+    """
+    Prints data as with `hexdump -C` command.
+    """
     result = []
     line_count = 0
     for chunk in chunks(data, 16):
-        hexa = ' '.join(''.join(get_colored_printable_hex(b) for b in byte) for byte in [chunk[start:start+2] for start in range(0, 16, 2)])
+        hexa = ' '.join(''.join(get_colored_printable_hex(b) for b in byte) 
+                        for byte in [chunk[start:start+2] 
+                                     for start in range(0, 16, 2)])
         
-        # add none with coloring - for layout
+        """add none with coloring - for layout"""
         if len(hexa)<199:
             hexa += (log.COLOR_NONE+'  '+log.COLOR_NONE)*(16-len(chunk))
 
-        result.append(log.COLOR_DARK_GREEN + '%08x' % (line_count*16) + log.COLOR_NONE +'  %-160s' % (hexa) + ' |' + ''.join(get_colored_printable(b) for b in chunk) + '|')
+        result.append(log.COLOR_DARK_GREEN 
+                      + '%08x' % (line_count*16) 
+                      + log.COLOR_NONE 
+                      + '  %-160s' % (hexa) 
+                      + ' |' 
+                      + ''.join(get_colored_printable(b) for b in chunk) + '|')
         line_count += 1
-    #if result: # if request matches and response not, 2 headers are printed...
-    #    result.insert(0, '{grepignore}-offset-   0 1  2 3  4 5  6 7  8 9  A B  C D  E F   0123456789ABCDEF')
-    
     return result
 
     

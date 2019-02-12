@@ -637,17 +637,28 @@ class HTTPResponse():
     
 
     def find_html_attr(self, tagstart, tagend, attr):
-        # TODO refactor
-        # this method uses find_between() method to locate attributes and their values for specified tag
-        # returns list of (absolute_position, match_string) of attributes
+        """
+        This method uses find_between() method to locate attributes 
+        and their values for specified tag.
+
+        Returns:
+            list of (absolute_position, match_string) of attributes
+        """
+        """find matches with context"""
         tagmatches = find_between(self.data, tagstart, tagend)
         result = []
         for pos, _ in tagmatches:
-            # find the end of the tagstart
+            """find the end of the tagstart"""
             endpos = self.data.index(b'>', pos)
-            linkmatches = find_between(self.data, b'%s="' % (attr), b'"', startpos=pos, endpos=endpos, inner=True)
-            #if not linkmatches: # try without '"' # TODO should be done, but how to get good loffset in self.replace_links()?
-            #    linkmatches = find_between(self.data, b'%s=' % (attr), b' ', startpos=pos, endpos=endpos, inner=True)
+            """find value between 'attr="' and '"' """
+            linkmatches = find_between(self.data, 
+                                       b'%s="' % (attr), 
+                                       b'"', 
+                                       startpos=pos, 
+                                       endpos=endpos, 
+                                       inner=True)
+            # TODO what if "'s are not used?
+            #   in context -> maybe just find attr occurence in tag...
             result += linkmatches
         return result
     '''
@@ -675,14 +686,23 @@ class HTTPResponse():
     '''
     
     def find_tags(self, startends, attrs=None, valueonly=False):
-        # TODO test/refactor
         result = []
-        if attrs is None:
+        if not attrs or not valueonly:
+            """no href and other attributes OR with context; 
+            just simple find_between"""
             for startbytes, endbytes in startends:
-                result += [x[1].decode() for x in find_between(self.data, startbytes, endbytes, inner=valueonly)]
+                result += [x[1].decode() 
+                           for x in find_between(self.data, 
+                                                 startbytes, 
+                                                 endbytes, 
+                                                 inner=valueonly)]
         else:
+            """get value from specific attribute"""
             for (startbytes, endbytes), attr in zip(startends, attrs):
-                result += [x[1].decode() for x in self.find_html_attr(startbytes, endbytes, attr)]
+                result += [x[1].decode() 
+                           for x in self.find_html_attr(startbytes, 
+                                                        endbytes, 
+                                                        attr)]
         return result
 
 
