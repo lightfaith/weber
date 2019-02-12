@@ -199,16 +199,26 @@ class Proxy(threading.Thread):
                     log.err('Proxy error.')
                     traceback.print_exc()
             """clean terminated threads"""
-            threads_todel = [t for t in self.threads if not t.isAlive()]
-            for t in threads_todel:
-                t.join()
-                self.threads.remove(t)
+            self.clean_threads()
             """terminate and all threads joined?"""
             if self.terminate and not self.threads:
                 self.socket.shutdown(socket.SHUT_RDWR)
                 break
         """end of main proxy loop"""
         log.debug_flow('Proxy stopped.')
+
+    def clean_threads(self):
+        """
+        Clean all terminated threads.
+        """
+        threads_todel = [t for t in self.threads if not t.isAlive()]
+        for t in threads_todel:
+            try:
+                t.join()
+                self.threads.remove(t)
+            except:
+                """race condition; ignore"""
+                pass
 
     def duplicate(self, rrid, force_tamper_request=False):
         """

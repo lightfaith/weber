@@ -969,10 +969,23 @@ add_command(Command('rsm <rrid>',
                     'mr',  # TODO
                     lambda *args: mr_function('response', *args)))
 
-"""rD - delete RRs"""
+"""rD - delete RRs in event"""
+# TODO what about delete in server?
 def rD_function(rrid, rr, *_, **__):
-    # TODO
-    pass
+    """stop if running thread"""
+    matching_threads = [t for t in weber.proxy.threads if t.rrid == rrid]
+    for t in matching_threads:
+        t.stop()
+    """force clean"""
+    weber.proxy.clean_threads()
+    """delete from RRDB"""
+    # TODO only for actual event
+    try:
+        del weber.rrdb.rrs[rrid]
+    except:
+        log.err('No RR #%d in database.' % rrid)
+    return []
+
 add_command(Command('rD [<rrid>[:<rrid>]]', 
                     'delete requests/responses', 
                     'rD', 
@@ -1344,7 +1357,7 @@ def get_spoof_regexs(requests=True, responses=True):
 
 def ws_function(*args):
     result = []
-    files = ['    %s' % (x) for x in weber.commands['pwsf'].run()]
+    files = ['    %s' % (x) for x in weber.commands['rssf'].run()]
     if files:
         result.append('    Files:')
         result += files
