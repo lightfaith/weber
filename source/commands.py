@@ -1158,6 +1158,17 @@ add_command(Command('rp [<rrid>[:<rrid>]]',
                     'rp', 
                     lambda *args: foreach_rrs(rp_function, *args)))
 
+"""rt - print timelines"""
+def rt_function(_, rr, *__, **___):
+    result = ['%20s %s' % (k+':', v) for k,v in rr.times.items()]
+    # TODO some style, maybe delta?
+    # or more statistics? (server, MIME, size, ...)
+    return result
+add_command(Command('rt [<rrid>[:<rrid>]]', 
+                    'print request/response timeline', 
+                    'rt', # TODO 
+                    lambda *args: foreach_rrs(rt_function, *args)))
+
 """overview
 overview is defined in structures.py because it is also used by proxy 
 (realtime overview)"""
