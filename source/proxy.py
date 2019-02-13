@@ -596,7 +596,7 @@ class ConnectionThread(threading.Thread):
         self.times['request_forwarded'] = datetime.now()
         response_raw = self.forward(self.request.bytes())
         if not response_raw:
-            log.err('Response is empty! You can try to increase'
+            log.err('Response is empty! You can try to increase '
                     'proxy.socket_timeout value.')
             return # TODO what to do exactly?
         self.times['response_received'] = datetime.now()
