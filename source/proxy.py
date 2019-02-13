@@ -511,11 +511,6 @@ class ConnectionThread(threading.Thread):
                     """and continue accepting requests"""
                     continue
                 
-                """ not connect -> remove server from req path"""
-                self.request.path = self.request.path[
-                     self.request.path.find(
-                         b'/', 
-                         len(self.server.uri.scheme)+3):]
                 """
                 Upgrade both sockets if SSL
                 CONNECT traffic is solved, this is only for first run 
@@ -528,6 +523,13 @@ class ConnectionThread(threading.Thread):
                         log.err('Upgrading to SSL failed: %s' % str(e))
                         continue
                     
+            if not self.connect_method:
+                """ not connect -> remove server from req path"""
+                self.request.path = self.request.path[
+                     self.request.path.find(
+                         b'/', 
+                         len(self.server.uri.scheme)+3):]
+
             """request and server are done, time to play with it"""
             self.rrid = weber.rrdb.get_new_rrid()
             weber.rrdb.add_request(self.rrid, 
@@ -594,7 +596,8 @@ class ConnectionThread(threading.Thread):
         self.times['request_forwarded'] = datetime.now()
         response_raw = self.forward(self.request.bytes())
         if not response_raw:
-            log.err('Response is empty!')
+            log.err('Response is empty! You can try to increase'
+                    'proxy.socket_timeout value.')
             return # TODO what to do exactly?
         self.times['response_received'] = datetime.now()
         if self.terminate: return

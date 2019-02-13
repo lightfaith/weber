@@ -94,7 +94,7 @@ config['overview.show_uri'] =      Option(True, bool)  # show uri in overview
 
 config['proxy.host'] =     Option('127.0.0.1', str, immutable=True)
 config['proxy.port'] =     Option(8080, int, immutable=True)
-config['proxy.socket_timeout'] = Option(0.3, float)
+config['proxy.socket_timeout'] = Option(0.4, float)
 config['proxy.threaded'] = Option(True, bool)
 
 config['spoof.arguments'] = Option(False, bool) # should arguments be taken into consideration for spoofing?
