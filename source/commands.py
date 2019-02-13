@@ -1417,12 +1417,13 @@ add_command(Command('rss',
                     lambda *_: get_spoof_regexs(requests=False)))
 
 """wt - print alive threads"""
+def wt_function(*_):
+    weber.proxy.clean_threads()
+    return ['    %s' % (t.full_uri or '?') for t in weber.proxy.threads]
 add_command(Command('wt', 
                     'print alive threads', 
                     'wt', 
-                    lambda *_: ['    %s' 
-                                % (t.full_uri or '?') 
-                                for t in weber.proxy.threads]))
+                    wt_function))
 """
 Quit
 """

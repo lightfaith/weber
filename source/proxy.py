@@ -310,6 +310,7 @@ class Proxy(threading.Thread):
             t.start()
             self.threads.append(t)
 
+
 class ConnectionThread(threading.Thread):
     """
     
@@ -387,6 +388,7 @@ class ConnectionThread(threading.Thread):
         """
 
         """
+        thread_started = datetime.now()
         first_run = True
         #keepalive = False if self.from_weber else True
         keepalive = False # new ConnectionThread for every request (excluding CONNECT and stuff)
@@ -395,15 +397,20 @@ class ConnectionThread(threading.Thread):
         
         request_raw = None
         if self.brute_sets:
+            """set up raw request with placeholders"""
             request_raw = self.request.bytes()
+
         while keepalive or first_run or self.brute_sets:
             """wait for signal - cause previous request can be tampered"""
             #self.wait_for_continuation_signal()
             if self.terminate: break
             """reset times dictionary for new traffic"""
-            self.times = {}
+            self.times = {'thread_started': thread_started}
           
-            if not self.from_weber:
+            if self.from_weber:
+                """either duplicate or brute-force; store time"""
+                self.times['request_received'] = datetime.now()
+            else:
                 """read request from socket if needed"""
                 request_raw = ProxyLib.recvall(self.downstream_socket, 
                                                comment='downstream')
@@ -423,6 +430,30 @@ class ConnectionThread(threading.Thread):
                     #continue
                     break # OK cause 1 ConnectionThread deals with only 1 request
 
+            """fill brute values if necessary"""
+            if self.brute_sets:
+                placeholder = weber.config['brute.placeholder'].value.encode()
+                #if request_original:
+                #    """use original with placeholders"""
+                #    self.request.original = request_original
+                #else:
+                #    """first run -> store placeholder version"""
+                #    request_original = self.request.original
+                """replace each placeholder occurence of each index"""
+                for i, value in enumerate(self.brute_sets[0]):
+                    #print('replacing', value)
+                    #print('before:', self.request.original[:50])
+                    self.request.original = self.request.original.replace(
+                        b'%s%d%s' % (placeholder, i, placeholder),
+                        value)
+                    #print('after:', self.request.original[:50])
+                self.request.parse()
+                #"""and fix path after that"""
+                #self.request.path = self.request.path[
+                #     self.request.path.find(
+                #         b'/', 
+                #         len(self.server.uri.scheme)+3):]
+                self.brute_sets = self.brute_sets[1:]
             """provide Weber page with CA if path == /weber"""
             if self.request and self.request.path == b'/weber':
                 self.send_response(b'HTTP/1.1 200 OK\r\n\r\nWeber page WORKS!')
@@ -504,30 +535,6 @@ class ConnectionThread(threading.Thread):
                                    self.server, 
                                    self.times)
             if self.terminate: break
-            """fill brute values if necessary"""
-            if self.brute_sets:
-                placeholder = weber.config['brute.placeholder'].value.encode()
-                #if request_original:
-                #    """use original with placeholders"""
-                #    self.request.original = request_original
-                #else:
-                #    """first run -> store placeholder version"""
-                #    request_original = self.request.original
-                """replace each placeholder occurence of each index"""
-                for i, value in enumerate(self.brute_sets[0]):
-                    #print('replacing', value)
-                    #print('before:', self.request.original[:50])
-                    self.request.original = self.request.original.replace(
-                        b'%s%d%s' % (placeholder, i, placeholder),
-                        value)
-                    #print('after:', self.request.original[:50])
-                self.request.parse()
-                """and fix path after that"""
-                self.request.path = self.request.path[
-                     self.request.path.find(
-                         b'/', 
-                         len(self.server.uri.scheme)+3):]
-                self.brute_sets = self.brute_sets[1:]
             """run pre_tamper operations"""        
             self.request.pre_tamper()
             """tamper/forward request"""
