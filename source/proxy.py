@@ -230,16 +230,21 @@ class Proxy(threading.Thread):
             reference to Request (Request)
         """
         """run new ConnectionThread"""
+        log.debug_flow('Creating new ConnectionThread from Weber (duplicate).')
         t = ConnectionThread(None, 
                              self.tamper_controller, 
                              from_weber=True, 
                              force_tamper_request=force_tamper_request)
         """set the cloned request"""
+        log.debug_flow('Cloning request (duplicate).')
         t.request = weber.rrdb.rrs[rrid].request.clone()
         """add server to the path"""
+        log.debug_flow(
+            'Stripping server portion from request path (duplicate).')
         full_uri = weber.rrdb.rrs[rrid].server.uri.clone()
         full_uri.path = t.request.path.decode()
         t.request.path = full_uri.tostring().encode()
+        log.debug_flow('Starting duplicate ConnectionThread.')
         """run the thread"""
         t.start()
         self.threads.append(t)
@@ -271,6 +276,9 @@ class Proxy(threading.Thread):
         separate brute dictionary into chunks for each thread,
         add stuffing if necessary
         """
+        log.debug_flow(
+            'Preparing dictionary chunks for brute-force (%d threads).' 
+            % thread_count)
         brute_set_chunks = [[x if len(x) == normal_set_size 
                                else list(x) + [b''] * (normal_set_size - len(x))
                              for x in weber.brute[1][i::thread_count]]
@@ -284,17 +292,21 @@ class Proxy(threading.Thread):
             return
         """run threads"""
         for i in range(thread_count):
+            log.debug_flow('Creating new ConnectionThread from Weber (brute).')
             t = ConnectionThread(None,
                                  self.tamper_controller,
                                  from_weber=True,
                                  brute_sets=brute_set_chunks[i])
             """set the cloned request"""
+            log.debug_flow('Cloning request (brute).')
             t.request = original_request.clone()
             """add server to the path"""
+            log.debug_flow('Stripping server portion of request path (brute).')
             full_uri = weber.rrdb.rrs[rrid].server.uri.clone()
             full_uri.path = t.request.path.decode()
             t.request.path = full_uri.tostring().encode()
             """run the thread"""
+            log.debug_flow('Starting brute ConnectionThread.')
             t.start()
             self.threads.append(t)
 
@@ -441,15 +453,17 @@ class ConnectionThread(threading.Thread):
                         'Server is a troublemaker, ignoring the request.')
                     self.send_response(b'HTTP/1.1 418 I\'m a teapot\r\n\r\n') #TODO all right?
                     break
-                """create socket to server"""
-                self.upstream_socket = socket.socket(socket.AF_INET, 
-                                                     socket.SOCK_STREAM)
-                try:
-                    self.upstream_socket.connect((self.server.uri.domain,
-                                                  self.server.uri.port))
-                except Exception as e:
-                    log.err('Upstream connect error for %s: %s' 
-                            % (self.full_uri.tostring(), str(e)))
+                """create socket to server if None"""
+                if not self.upstream_socket:
+                    log.debug_socket('Creating upstream socket.')
+                    self.upstream_socket = socket.socket(socket.AF_INET, 
+                                                         socket.SOCK_STREAM)
+                    try:
+                        self.upstream_socket.connect((self.server.uri.domain,
+                                                      self.server.uri.port))
+                    except Exception as e:
+                        log.err('Upstream connect error for %s: %s' 
+                                % (self.full_uri.tostring(), str(e)))
 
                 """was it CONNECT?"""
                 if self.request.method == b'CONNECT':
@@ -457,32 +471,31 @@ class ConnectionThread(threading.Thread):
                     self.connect_method = True
                     log.debug_flow('Accepting CONNECTion.')
                     self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
-                else:
-                    """ not connect -> remove server from req path"""
-                    self.request.path = self.request.path[
-                         self.request.path.find(
-                             b'/', 
-                             len(self.server.uri.scheme)+3):]
-
-                """upgrade both sockets if SSL"""
-                if self.server.ssl:
-                    log.debug_socket('Upgrading sockets to SSL.')
-                    self.downstream_socket.setblocking(True) # TODO fails when `rqm` ssl stuff...
-                    #self.upstream_socket.setblocking(True)
-                    self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
+                    """upgrade to SSL if necessary (probably always)"""
+                    if self.server.ssl:
+                        try:
+                            self.ssl_wrap()
+                        except Exception as e:
+                            log.err('Upgrading to SSL failed: %s' % str(e))
+                    """and continue accepting requests"""
+                    continue
+                
+                """ not connect -> remove server from req path"""
+                self.request.path = self.request.path[
+                     self.request.path.find(
+                         b'/', 
+                         len(self.server.uri.scheme)+3):]
+                """
+                Upgrade both sockets if SSL
+                CONNECT traffic is solved, this is only for first run 
+                of resend and brute
+                """
+                if self.server.ssl and first_run:
                     try:
-                        self.downstream_socket = ssl.wrap_socket(
-                            self.downstream_socket, 
-                            certfile=self.server.certificate_path,
-                            keyfile=self.server.certificate_key_path,
-                            #do_handshake_on_connect=True,
-                            server_side=True)
+                        self.ssl_wrap()
                     except Exception as e:
                         log.err('Upgrading to SSL failed: %s' % str(e))
                         continue
-                """continue listening if it was CONNECT"""
-                if self.request.method == b'CONNECT':
-                    continue
                     
             """request and server are done, time to play with it"""
             self.rrid = weber.rrdb.get_new_rrid()
@@ -695,4 +708,23 @@ class ConnectionThread(threading.Thread):
                         % self.full_uri)
         else:
             log.debug_parsing('Response is weird.')
-        
+       
+    def ssl_wrap(self):
+        """
+
+
+        Run this in try-catch.
+        """
+        if self.downstream_socket:
+            log.debug_socket('Upgrading downstream socket to SSL.')
+            self.downstream_socket.setblocking(True) # TODO fails when `rqm` ssl stuff...
+            self.downstream_socket = ssl.wrap_socket(
+                self.downstream_socket, 
+                certfile=self.server.certificate_path,
+                keyfile=self.server.certificate_key_path,
+                #do_handshake_on_connect=True,
+                server_side=True)
+        if self.upstream_socket:
+            log.debug_socket('Upgrading upstream socket to SSL.')
+            self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
+

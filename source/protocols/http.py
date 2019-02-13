@@ -240,13 +240,23 @@ class HTTPRequest():
             if data:
                 parts.append(b'')
         if data:
-            """add data"""
-            parts += self.data.split(splitter)
+            """test if data is to be printed and cannot"""
+            if as_string:
+                try:
+                    _ = self.data.decode() # TODO not tested (e.g. ocsp.digicert.com)
+                    parts += self.data.split(splitter)
+                except:
+                    parts.append(b'--- BINARY DATA ---')
+                    
+            else:
+                """add data"""
+                parts += self.data.split(splitter)
         try:
             """turn to str if desired"""
             parts = [x.decode() for x in parts] if as_string else parts
         except Exception as e:
-            log.warn('Response encoding problem occured (as_string): '+str(e))
+            log.warn('Request encoding problem occured (as_string): '+str(e))
+            print(parts)
             parts = []
         return parts
         
