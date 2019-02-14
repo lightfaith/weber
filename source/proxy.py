@@ -35,10 +35,11 @@ class ProxyLib():
         begin = time.time()
         timeout = weber.config['proxy.socket_timeout'].value
         log.debug_socket('Trying to receive data from %s...' % (comment))
+        wait_value = 10 if comment == 'upstream' else 2
         while True:
             if chunks and time.time()-begin > timeout:
                 break
-            elif time.time()-begin > 2*timeout:
+            elif time.time()-begin > wait_value * timeout:
                 break
             try:
                 buf = conn.recv(65536)
@@ -414,6 +415,7 @@ class ConnectionThread(threading.Thread):
                 """read request from socket if needed"""
                 request_raw = ProxyLib.recvall(self.downstream_socket, 
                                                comment='downstream')
+                #print(request_raw)
                 if not request_raw:
                     break # TODO OK?
                 self.times['request_received'] = datetime.now()
