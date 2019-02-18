@@ -502,6 +502,7 @@ class ConnectionThread(threading.Thread):
                     self.connect_method = True
                     log.debug_flow('Accepting CONNECTion.')
                     self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
+                    self.ssl_wrap('downstream')
 #                """upgrade to SSL if necessary (probably always)"""
 #                    if self.server.ssl:
 #                        try:
@@ -516,7 +517,8 @@ class ConnectionThread(threading.Thread):
 #                CONNECT traffic is solved, this is only for first run 
 #                of resend and brute
 #                """
-#                if self.server.ssl and first_run:
+                if self.server.ssl and first_run:
+                    self.ssl_wrap('downstream')
 #                    try:
 #                        self.ssl_wrap()
 #                    except Exception as e:
@@ -690,7 +692,7 @@ class ConnectionThread(threading.Thread):
             if not self.upstream_socket:
                 self.connect_upstream()
                 if self.server.ssl:
-                    self.ssl_wrap()
+                    self.ssl_wrap('upstream')
             log.debug_flow('Forwarding request to server.')
             log.debug_socket('Forwarding request... (%d B)' 
                              % (len(data)))
@@ -750,13 +752,13 @@ class ConnectionThread(threading.Thread):
                 log.err('Upstream connect error for %s: %s' 
                         % (self.full_uri.tostring(), str(e)))
 
-    def ssl_wrap(self):
+    def ssl_wrap(self, direction):
         """
 
 
         Run this in try-catch.
         """
-        if self.downstream_socket:
+        if direction == 'downstream' and self.downstream_socket:
             log.debug_socket('Upgrading downstream socket to SSL.')
             self.downstream_socket.setblocking(True) # TODO fails when `rqm` ssl stuff...
             self.downstream_socket = ssl.wrap_socket(
@@ -765,7 +767,7 @@ class ConnectionThread(threading.Thread):
                 keyfile=self.server.certificate_key_path,
                 #do_handshake_on_connect=True,
                 server_side=True)
-        if self.upstream_socket:
+        if direction == 'upstream' and self.upstream_socket:
             log.debug_socket('Upgrading upstream socket to SSL.')
             self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
 
