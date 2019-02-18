@@ -71,7 +71,7 @@ def run_command(fullcommand):
     modifier = weber.config['interaction.command_modifier'].value
     log.debug_command('  Fullcmd: \'%s\'' % (fullcommand))
     """split by command modifier and greppers"""
-    parts = list(filter(None, re.split('(~~|~|\%s)' % (modifier), fullcommand)))
+    parts = list(filter(None, re.split(r'(~~|~|\%s)' % (modifier), fullcommand)))
     command = parts[0]
     phase = {'~': False, '~~': False, modifier: False} # actual parsing phase
     
@@ -929,7 +929,7 @@ def mr_function(*args):
 
     """duplicate?"""
     if duplicate:
-        rrid, r = weber.proxy.duplicate(rrid, force_tamper_request=True)
+        _, rrid, r = weber.proxy.duplicate(rrid, force_tamper_request=True)
 
     """suppress debugs and realtime overview"""
     oldconfig = {k:weber.config[k].value 
@@ -960,11 +960,9 @@ def mr_function(*args):
         r.original = changes
         r.parse()
         r.pre_tamper()
-        #r.post_tamper() # TODO Response needs full_uri...
     else:
         log.debug_tampering('No change in the %s.' % args[0])
         """delete template if just created""" 
-        #- or let user do it? TODO
     '''
     return []
         
@@ -1535,24 +1533,47 @@ add_command(Command('rssD <old>',
 
 
 """
+REPLAY COMMANDS
+"""
+def rqr_function(rrid, _, *__, **___):
+    weber.proxy.duplicate(rrid)
+    return []
+
+add_command(Command('rqr [<rrid>[:<rrid>]]', 
+                    'replay request', 
+                    'rqr',  # TODO
+                    lambda *args: foreach_rrs(rqr_function, *args)))
+
+def rqrm_function(rrid, rr, *__, **___):
+    for method in weber.config['http.replay_methods'].value.encode().split():
+        if rr.request.method == method:
+            continue
+        t, rrid, r = weber.proxy.duplicate(rrid, force_tamper_request=True)
+        r.method = method
+        t.force_tamper_request = False
+        t.try_forward_tamper()
+    return []
+
+add_command(Command('rqrm [<rrid>[:<rrid>]]', 
+                    'replay request with different methods',
+                    'rqrm', # TODO
+                    lambda *args: foreach_rrs(rqrm_function, *args)))
+
+"""
 TAMPER COMMANDS
 """
-# TODO refactor
-'''
-add_command(Command('t', 'tamper', 't', lambda *_: []))
-add_command(Command('tr', 'tamper requests/responses', 't', lambda *_: []))
-'''
 
 """rXf - forward requests/responses"""
 def rXf_function(*args, requests=True, responses=True):
-    # TODO rqf to also duplicate and resend
+    # TODO rqf to also duplicate and resend - or use rqr?
     """find all rrids to forward"""
     desired_rrs, noproblem = weber.rrdb.get_desired_rrs(None 
                                                         if len(args)<1 
                                                         else args[0])
     rrids = desired_rrs.keys()
     """duplicate all not tampered"""
-    
+    # TODO
+
     """for all connection threads with matching rrid:"""
     for t in [t for t in weber.proxy.threads if t.rrid in rrids]:
         """responses first so race condition won't occur"""

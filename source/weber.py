@@ -81,6 +81,7 @@ config['http.no_cache'] = Option(False, bool) # should caching be forcefully dis
 config['http.drop_request_headers'] = Option('', str) # which headers (separated by spaces) should be dropped?
 config['http.drop_response_headers'] = Option('Content-Security-Policy Expect-CT', str) # which headers (separated by spaces) should be dropped?
 config['http.recompute_request_length'] = Option(True, bool) # whether request Content-Length should be recomputed before sending to server
+config['http.replay_methods'] = Option('GET POST', str) # what methods should be used with `rqrm` ?
 
 config['interaction.realtime_overview'] = Option(True, bool)  # show request/response communication on the fly
 config['interaction.command_modifier'] = Option('$', str) # which character would start special sequences (line intervals, less)

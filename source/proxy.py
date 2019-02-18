@@ -228,6 +228,7 @@ class Proxy(threading.Thread):
         new ConnectionThread (with from_weber set to True).
 
         Returns:
+            reference to thread (ConnectionThread)
             RRID (int)
             reference to Request (Request)
         """
@@ -253,7 +254,7 @@ class Proxy(threading.Thread):
         """wait until new RRID is assigned"""
         while not t.rrid:
             time.sleep(0.1)
-        return (t.rrid, t.request)
+        return (t, t.rrid, t.request)
 
     def brute(self, rrid):
         """
@@ -466,7 +467,12 @@ class ConnectionThread(threading.Thread):
             """get actual full_uri"""
             if self.connect_method:
                 self.full_uri = self.server.uri.clone()
-                self.full_uri.path = self.request.path.decode()
+                try:
+                    self.full_uri.path = self.request.path.decode()
+                except UnicodeDecodeError:
+                    log.err('Request with invalid bytes:')
+                    log.tprint(self.request.path)
+                    break
             else:
                 self.full_uri = URI(self.request.path) # TODO try for non-proxy requests?
                 
@@ -535,24 +541,7 @@ class ConnectionThread(threading.Thread):
             """run pre_tamper operations"""        
             self.request.pre_tamper()
             """tamper/forward request"""
-            if (self.tamper_controller.ask_for_request_tamper() 
-                    or self.force_tamper_request): 
-                log.debug_tampering('Request is tampered.')
-                self.times['request_tampered'] = datetime.now()
-                self.waiting_for_request_forward = True
-                """tampering; print overview if appropriate"""
-                if (not self.force_tamper_request and positive(
-                    weber.config['interaction.realtime_overview'].value)):
-                    log.tprint(' '.join(weber.rrdb.overview(
-                        [str(self.rrid)],
-                        header=False)))
-            else:
-                log.debug_tampering('Forwarding request without tampering.')
-                self.continue_forwarding()
-            """
-            following parts are in continue_forwarding method,
-            as those can happen much later
-            """
+            self.try_forward_tamper()
             """terminate loop - no keepalive"""  # TODO is that normal?
             first_run = False
             """end of main loop"""
@@ -576,6 +565,30 @@ class ConnectionThread(threading.Thread):
             self.stopper = None
         log.debug_flow('ConnectionThread terminated.')
         """end of ConnectionThread run() method"""
+            
+    def try_forward_tamper(self):
+        """
+        Because in some cases (`rqrm`) request is forcefully tampered,
+        but after changes, we also want to respect tamper settings.
+        """
+        if (self.tamper_controller.ask_for_request_tamper() 
+                or self.force_tamper_request): 
+            log.debug_tampering('Request is tampered.')
+            self.times['request_tampered'] = datetime.now()
+            self.waiting_for_request_forward = True
+            """tampering; print overview if appropriate"""
+            if (not self.force_tamper_request and positive(
+                weber.config['interaction.realtime_overview'].value)):
+                log.tprint(' '.join(weber.rrdb.overview(
+                    [str(self.rrid)],
+                    header=False)))
+        else:
+            log.debug_tampering('Forwarding request without tampering.')
+            self.continue_forwarding()
+        """
+        following parts are in continue_forwarding method,
+        as those can happen much later.
+        """
 
     def continue_forwarding(self):
         """
