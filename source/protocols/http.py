@@ -145,8 +145,10 @@ class HTTPRequest():
 
     def parse(self):
         """
-        parse given bytes
+        parse bytes in self.original
         """
+        log.debug_parsing('Parsing Request:')
+        log.debug_parsing(self.original)
         self.headers = OrderedDict()
         lines = self.original.splitlines()
         """parse first line, spoof request regexs"""
@@ -163,17 +165,20 @@ class HTTPRequest():
             return 
         #fd_add_comment(self.forward_stopper, 'Request (%s %s) forward stopper' % (self.method, self.path))
         """spoof request regex in headers"""
-        for line in lines[1:-1]:
+        line_counter = 1
+        for line in lines[1:]:
+            line_counter += 1
             if not line:
-                continue
+                break
             line = ProxyLib.spoof_regex(line, 
                                         weber.spoof_request_regexs.items())
             k, _, v = line.partition(b':')
             # TODO duplicit keys? warn
             self.headers[k.title()] = v.strip()
         """spoof request regex in data"""   
-        if len(lines[-1]) > 0:
-            self.data = ProxyLib.spoof_regex(lines[-1], 
+        data_join = b'\r\n'.join(lines[line_counter:])
+        if data_join:
+            self.data = ProxyLib.spoof_regex(data_join, 
                                             weber.spoof_request_regexs.items())
         """parse method (for parameters)"""
         self.parse_method()
@@ -386,8 +391,11 @@ class HTTPResponse():
     '''
     def parse(self):
         """
-        parse given bytes
+        parse bytes in self.original
         """
+        # TODO how about multipart?
+        log.debug_parsing('Parsing Response:')
+        log.debug_parsing(self.original)
         lines = self.original.split(b'\r\n')
         """parse first line, spoof response regexs"""
         line0 = ProxyLib.spoof_regex(lines[0], 

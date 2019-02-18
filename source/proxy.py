@@ -35,9 +35,10 @@ class ProxyLib():
         begin = time.time()
         timeout = weber.config['proxy.socket_timeout'].value
         log.debug_socket('Trying to receive data from %s...' % (comment))
-        wait_value = 10 if comment == 'upstream' else 2
+        """ wait longer for expected response"""
+        wait_value = 10 if comment == 'upstream' else 1
         while True:
-            if chunks and time.time()-begin > timeout:
+            if chunks and time.time()-begin > 0.5 * timeout:
                 break
             elif time.time()-begin > wait_value * timeout:
                 break
