@@ -147,6 +147,13 @@ class HTTPRequest():
         """
         parse bytes in self.original
         """
+        self.method = b''
+        self.path = b''
+        self.version = b''
+        self.headers = OrderedDict()
+        self.data = b''
+        self.parameters = {}
+        
         log.debug_parsing('Parsing Request:')
         log.debug_parsing(self.original)
         self.headers = OrderedDict()
@@ -393,6 +400,13 @@ class HTTPResponse():
         """
         parse bytes in self.original
         """
+        self.status = b''
+        self.statuscode = 0
+        self.version = b''
+        self.headers = OrderedDict()
+        self.data = b''
+        self.encodings = [] # TODO also in requests?
+        
         # TODO how about multipart?
         log.debug_parsing('Parsing Response:')
         log.debug_parsing(self.original)
