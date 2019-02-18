@@ -487,17 +487,8 @@ class ConnectionThread(threading.Thread):
                         'Server is a troublemaker, ignoring the request.')
                     self.send_response(b'HTTP/1.1 418 I\'m a teapot\r\n\r\n') #TODO all right?
                     break
-                """create socket to server if None"""
-                if not self.upstream_socket:
-                    log.debug_socket('Creating upstream socket.')
-                    self.upstream_socket = socket.socket(socket.AF_INET, 
-                                                         socket.SOCK_STREAM)
-                    try:
-                        self.upstream_socket.connect((self.server.uri.domain,
-                                                      self.server.uri.port))
-                    except Exception as e:
-                        log.err('Upstream connect error for %s: %s' 
-                                % (self.full_uri.tostring(), str(e)))
+#                """create socket to server if None"""
+#                self.connect_upstream()
 
                 """was it CONNECT?"""
                 if self.request.method == b'CONNECT':
@@ -505,26 +496,27 @@ class ConnectionThread(threading.Thread):
                     self.connect_method = True
                     log.debug_flow('Accepting CONNECTion.')
                     self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
-                    """upgrade to SSL if necessary (probably always)"""
-                    if self.server.ssl:
-                        try:
-                            self.ssl_wrap()
-                        except Exception as e:
-                            log.err('Upgrading to SSL failed: %s' % str(e))
+#                """upgrade to SSL if necessary (probably always)"""
+#                    if self.server.ssl:
+#                        try:
+#                            self.ssl_wrap()
+#                        except Exception as e:
+#                            log.err('Upgrading to SSL failed: %s' % str(e))
                     """and continue accepting requests"""
                     continue
                 
-                """
-                Upgrade both sockets if SSL
-                CONNECT traffic is solved, this is only for first run 
-                of resend and brute
-                """
-                if self.server.ssl and first_run:
-                    try:
-                        self.ssl_wrap()
-                    except Exception as e:
-                        log.err('Upgrading to SSL failed: %s' % str(e))
-                        continue
+#                """
+#                Upgrade both sockets if SSL
+#                CONNECT traffic is solved, this is only for first run 
+#                of resend and brute
+#                """
+#                if self.server.ssl and first_run:
+#                    try:
+#                        self.ssl_wrap()
+#                    except Exception as e:
+#                        log.err('Upgrading to SSL failed: %s' % str(e))
+#                        continue
+#                """create socket to server if None"""
                     
             if not self.connect_method:
                 """ not connect -> remove server from req path"""
@@ -678,7 +670,14 @@ class ConnectionThread(threading.Thread):
 
 
     def forward(self, data):
-        if self.upstream_socket:
+        """
+
+        """
+        try:
+            if not self.upstream_socket:
+                self.connect_upstream()
+                if self.server.ssl:
+                    self.ssl_wrap()
             log.debug_flow('Forwarding request to server.')
             log.debug_socket('Forwarding request... (%d B)' 
                              % (len(data)))
@@ -691,8 +690,9 @@ class ConnectionThread(threading.Thread):
             #else:
             #    weber.forward_fail_uris.append(str(self.localuri))
             #    return b''
-        else:
+        except:
             log.err('No upstream socket - cannot forward.')
+            traceback.print_exc()
             return b''
 
 
@@ -721,7 +721,22 @@ class ConnectionThread(threading.Thread):
                         % self.full_uri)
         else:
             log.debug_parsing('Response is weird.')
-       
+    
+    def connect_upstream(self):
+        """
+
+        """
+        if not self.upstream_socket:
+            log.debug_socket('Creating upstream socket.')
+            self.upstream_socket = socket.socket(socket.AF_INET, 
+                                                 socket.SOCK_STREAM)
+            try:
+                self.upstream_socket.connect((self.server.uri.domain,
+                                              self.server.uri.port))
+            except Exception as e:
+                log.err('Upstream connect error for %s: %s' 
+                        % (self.full_uri.tostring(), str(e)))
+
     def ssl_wrap(self):
         """
 
