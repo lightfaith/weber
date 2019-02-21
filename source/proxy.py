@@ -573,8 +573,8 @@ class ConnectionThread(threading.Thread):
         Because in some cases (`rqrm`) request is forcefully tampered,
         but after changes, we also want to respect tamper settings.
         """
-        if (self.tamper_controller.ask_for_request_tamper() 
-                or self.force_tamper_request): 
+        if (self.force_tamper_request 
+                or self.tamper_controller.ask_for_request_tamper()): 
             log.debug_tampering('Request is tampered.')
             self.times['request_tampered'] = datetime.now()
             self.waiting_for_request_forward = True
