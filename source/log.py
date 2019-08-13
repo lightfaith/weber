@@ -75,77 +75,77 @@ def newline(stdout=True):
 """
 OK, INFO, WARN, ERR, QUESTION
 """
-def show_marked(c, color='', string='', new_line=True, stdout=True):
+def show_marked(c, color='', *args, new_line=True, stdout=True):
     lines = []
     #lines.append('%s%s%s%s%s%s' % (color, COLOR_BOLD, c, COLOR_NONE, str(string),('\n' if newline else '')))
-    lines.append('%s%s%s%s%s' % (color, COLOR_BOLD, c, COLOR_NONE, str(string)))
+    lines.append('%s%s%s%s%s' % (color, COLOR_BOLD, c, COLOR_NONE, ' '.join(str(arg) for arg in args)))
     if stdout:
         with loglock:
             for line in lines:
                 print(line, end=('\n' if new_line else ''))
     return lines
 
-def ok(string='', new_line=True, stdout=True):
-    return show_marked('[+] ', COLOR_GREEN, string, new_line, stdout)
+def ok(*args, new_line=True, stdout=True):
+    return show_marked('[+] ', COLOR_GREEN, *args, new_line=newline, stdout=stdout)
+
+def info(*args, new_line=True, stdout=True):
+    return show_marked('[.] ', COLOR_BLUE, *args, new_line=newline, stdout=stdout)
     
-def info(string='', new_line=True, stdout=True):
-    return show_marked('[.] ', COLOR_BLUE, string, new_line, stdout)
+def warn(*args, new_line=True, stdout=True):
+    return show_marked('[!] ', COLOR_YELLOW, *args, new_line=newline, stdout=stdout)
     
-def warn(string='', new_line=True, stdout=True):
-    return show_marked('[!] ', COLOR_YELLOW, string, new_line, stdout)
-    
-def err(string='', new_line=True, stdout=True):
-    return show_marked('[-] ', COLOR_RED, string, new_line, stdout)
+def err(*args, new_line=True, stdout=True):
+    return show_marked('[-] ', COLOR_RED, *args, new_line=newline, stdout=stdout)
  
-def question(string='', new_line=True, stdout=True):
-    return show_marked('[?] ', COLOR_CYAN, string, new_line, stdout)
+def question(*args, new_line=True, stdout=True):
+    return show_marked('[?] ', COLOR_CYAN, *args, new_line=newline, stdout=stdout)
 
 
 """
 Debug functions
 """
-def debug_command(string=''):
+def debug_command(*args):
     if positive(config['debug.command'].value):
-        show_marked('cmd.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+        show_marked('cmd.', COLOR_DARK_GREY, COLOR_DARK_GREY+' '.join(str(arg) for arg in args)+COLOR_NONE)
 
-def debug_config(string=''):
+def debug_config(*args):
     if positive(config['debug.config'].value):
-        show_marked('cnf.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+        show_marked('cnf.', COLOR_DARK_GREY, COLOR_DARK_GREY+' '.join(str(arg) for arg in args)+COLOR_NONE)
 
-def debug_mapping(string=''):
+def debug_mapping(*args):
     if positive(config['debug.mapping'].value):
-        show_marked('map.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+        show_marked('map.', COLOR_DARK_GREY, COLOR_DARK_GREY+' '.join(str(arg) for arg in args)+COLOR_NONE)
 
-def debug_parsing(string=''):
+def debug_parsing(*args):
     if positive(config['debug.parsing'].value):
-        show_marked('prs.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+        show_marked('prs.', COLOR_DARK_GREY, COLOR_DARK_GREY+' '.join(str(arg) for arg in args)+COLOR_NONE)
 
-def debug_server(string=''):
+def debug_server(*args):
     if positive(config['debug.server'].value):
-        show_marked('srv.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+        show_marked('srv.', COLOR_DARK_GREY, COLOR_DARK_GREY+' '.join(str(arg) for arg in args)+COLOR_NONE)
 
-def debug_socket(string=''):
+def debug_socket(*args):
     if positive(config['debug.socket'].value):
-        show_marked('sck.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+        show_marked('sck.', COLOR_DARK_GREY, COLOR_DARK_GREY+' '.join(str(arg) for arg in args)+COLOR_NONE)
 
-def debug_chunks(string=''):
+def debug_chunks(*args):
     if positive(config['debug.chunks'].value):
-        show_marked('cnk.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+        show_marked('cnk.', COLOR_DARK_GREY, COLOR_DARK_GREY+' '.join(str(arg) for arg in args)+COLOR_NONE)
 
-def debug_tampering(string=''):
+def debug_tampering(*args):
     if positive(config['debug.tampering'].value):
-        show_marked('tpr.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+        show_marked('tpr.', COLOR_DARK_GREY, COLOR_DARK_GREY+' '.join(str(arg) for arg in args)+COLOR_NONE)
 
-def debug_analysis(string=''):
+def debug_analysis(*args):
     if positive(config['debug.analysis'].value):
-        show_marked('anl.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+        show_marked('anl.', COLOR_DARK_GREY, COLOR_DARK_GREY+' '.join(str(arg) for arg in args)+COLOR_NONE)
 
-def debug_protocol(string=''):
+def debug_protocol(*args):
     if positive(config['debug.protocol'].value):
-        show_marked('prt.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+        show_marked('prt.', COLOR_DARK_GREY, COLOR_DARK_GREY+' '.join(str(arg) for arg in args)+COLOR_NONE)
 
-def debug_flow(string=''):
+def debug_flow(*args):
     if positive(config['debug.flow'].value):
-        show_marked('flw.', COLOR_DARK_GREY, COLOR_DARK_GREY+str(string)+COLOR_NONE)
+        show_marked('flw.', COLOR_DARK_GREY, COLOR_DARK_GREY+' '.join(str(arg) for arg in args)+COLOR_NONE)
 
 

@@ -191,6 +191,7 @@ class Proxy(threading.Thread):
                     t = ConnectionThread(conn, self.tamper_controller)
                     t.start()
                     """add thread to array OR wait for it"""
+                    # TODO cannot Ctrl+C, solve differently (maybe no accept until threads are running?)
                     if positive(weber.config['proxy.threaded'].value):
                         self.threads.append(t)
                     else:
@@ -198,8 +199,7 @@ class Proxy(threading.Thread):
                 except socket.timeout:
                     pass
                 except:
-                    log.err('Proxy error.')
-                    traceback.print_exc()
+                    exception('Proxy error (accept failed).', self.request)
             """clean terminated threads"""
             self.clean_threads()
             """terminate and all threads joined?"""
@@ -502,7 +502,9 @@ class ConnectionThread(threading.Thread):
                     self.connect_method = True
                     log.debug_flow('Accepting CONNECTion.')
                     self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
-                    self.ssl_wrap('downstream')
+                    if not self.ssl_wrap('downstream'): # SSL failed
+                        print('Here')
+                        break
 #                """upgrade to SSL if necessary (probably always)"""
 #                    if self.server.ssl:
 #                        try:
@@ -518,7 +520,8 @@ class ConnectionThread(threading.Thread):
 #                of resend and brute
 #                """
                 if self.server.ssl and first_run:
-                    self.ssl_wrap('downstream')
+                    if not self.ssl_wrap('downstream'): # SSL failed
+                        break
 #                    try:
 #                        self.ssl_wrap()
 #                    except Exception as e:
@@ -573,8 +576,8 @@ class ConnectionThread(threading.Thread):
         Because in some cases (`rqrm`) request is forcefully tampered,
         but after changes, we also want to respect tamper settings.
         """
-        if (self.tamper_controller.ask_for_request_tamper() 
-                or self.force_tamper_request): 
+        if (self.force_tamper_request 
+                or self.tamper_controller.ask_for_request_tamper()): 
             log.debug_tampering('Request is tampered.')
             self.times['request_tampered'] = datetime.now()
             self.waiting_for_request_forward = True
@@ -690,9 +693,11 @@ class ConnectionThread(threading.Thread):
         """
         try:
             if not self.upstream_socket:
-                self.connect_upstream()
+                if not self.connect_upstream(): # upstream unreachable
+                    return b''
                 if self.server.ssl:
-                    self.ssl_wrap('upstream')
+                    if not self.ssl_wrap('upstream'): # SSL failed
+                        return b''
             log.debug_flow('Forwarding request to server.')
             log.debug_socket('Forwarding request... (%d B)' 
                              % (len(data)))
@@ -734,6 +739,8 @@ class ConnectionThread(threading.Thread):
             except BrokenPipeError:
                 log.err('Socket to client for %s has been closed.'
                         % self.full_uri)
+            except:
+                exception('Response forward failed.', self.downstream_socket, self.full_uri)
         else:
             log.debug_parsing('Response is weird.')
     
@@ -751,6 +758,8 @@ class ConnectionThread(threading.Thread):
             except Exception as e:
                 log.err('Upstream connect error for %s: %s' 
                         % (self.full_uri.tostring(), str(e)))
+                return False
+        return True
 
     def ssl_wrap(self, direction):
         """
@@ -758,16 +767,30 @@ class ConnectionThread(threading.Thread):
 
         Run this in try-catch.
         """
-        if direction == 'downstream' and self.downstream_socket:
-            log.debug_socket('Upgrading downstream socket to SSL.')
-            self.downstream_socket.setblocking(True) # TODO fails when `rqm` ssl stuff...
-            self.downstream_socket = ssl.wrap_socket(
-                self.downstream_socket, 
-                certfile=self.server.certificate_path,
-                keyfile=self.server.certificate_key_path,
-                #do_handshake_on_connect=True,
-                server_side=True)
-        if direction == 'upstream' and self.upstream_socket:
-            log.debug_socket('Upgrading upstream socket to SSL.')
-            self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
+        try:
+            if direction == 'downstream' and self.downstream_socket:
+                log.debug_socket('Upgrading downstream socket to SSL.')
+                log.debug_socket('Server: ', self.server)
+                log.debug_socket('Server certificate path: ', self.server.certificate_path)
+                log.debug_socket('Server key path: ', self.server.certificate_key_path)
+                self.downstream_socket.setblocking(True) # TODO fails when `rqm` ssl stuff...
+                try:
+                    self.downstream_socket = ssl.wrap_socket(
+                        self.downstream_socket, 
+                        certfile=self.server.certificate_path,
+                        keyfile=self.server.certificate_key_path,
+                        #do_handshake_on_connect=True,
+                        server_side=True)
+                except ssl.SSLError as e:
+                    if 'alert unknown ca' in str(e):
+                        log.err('Weber CA is not added to trusted authorities.')
+                        return False
+                    raise e
+            if direction == 'upstream' and self.upstream_socket:
+                log.debug_socket('Upgrading upstream socket to SSL.')
+                self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
+            return True
+        except:
+            exception('Failed to initialize %s SSL.' % direction, self.server, self.request)
+            return False
 

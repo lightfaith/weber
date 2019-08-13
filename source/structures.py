@@ -120,21 +120,25 @@ class Server():
 
             """generate fake one (real one is NOT needed for that)"""
             domain = self.uri.domain
-            self.certificate_path = ('ssl/pki/issued/%s.crt' % domain)
-            self.certificate_key_path = ('ssl/pki/private/%s.key' % domain)
+            self.certificate_path = ('files/ssl/pki/issued/%s.crt' % domain)
+            self.certificate_key_path = ('files/ssl/pki/private/%s.key' % domain)
             """already exists?"""
             try:
                 with open(self.certificate_path, 'r') as f:
+                    log.debug_server('Using existing certificate.')
                     pass
-            except:
+            except FileNotFoundError:
+                log.debug_server('Non-existent local certificate, creating one...')
                 log.debug_flow('Generating fake certfificate for \'%s\'' % 
                                domain)
-                returncode, o, e = run_command('./create_certificate.sh %s' % 
+                returncode, o, e = run_command('./files/ssl/create_certificate.sh %s' % 
                                                domain)
                 if returncode != 0:
                     log.err('Certificate creation failed:')
                     print(o)
                     print(e)
+            except:
+                traceback.print_exc()
 
     
     def setup_lock(self):

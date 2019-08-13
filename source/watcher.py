@@ -2,7 +2,7 @@
 import traceback
 
 class Watcher(object):
-    def __init__(self, obj=None, attr=None, log_file='log.txt', enabled=False):
+    def __init__(self, obj=None, attr=None, log_file='files/log.txt', enabled=False):
         """
             Debugger that watches for changes in object attributes
             obj - object to be watched
