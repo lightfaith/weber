@@ -114,3 +114,4 @@ nogit/
 files/log.txt
 files/write/
 files/ssl/pki/
+files/ssl/easy-rsa/safessl-easyrsa.cnf
