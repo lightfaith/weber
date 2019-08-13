@@ -109,5 +109,9 @@ ENV/
 # Private stuff
 nogit/
 
-# generated SSL stuff
-ssl/pki/
+
+# user files
+files/log.txt
+files/dict/
+files/write/
+files/ssl/pki/
