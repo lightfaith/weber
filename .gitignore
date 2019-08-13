@@ -112,6 +112,5 @@ nogit/
 
 # user files
 files/log.txt
-files/dict/
 files/write/
 files/ssl/pki/
