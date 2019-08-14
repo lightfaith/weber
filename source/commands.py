@@ -1417,7 +1417,8 @@ add_command(Command('rss',
 """wt - print alive threads"""
 def wt_function(*_):
     weber.proxy.clean_threads()
-    return ['    %s' % (t.full_uri or '?') for t in weber.proxy.threads]
+    #return ['    %s' % (t.full_uri or '?') for t in weber.proxy.threads]
+    return ['    %s' % str(t) for t in weber.proxy.threads]
 add_command(Command('wt', 
                     'print alive threads', 
                     'wt', 
@@ -1760,7 +1761,12 @@ def trsf_function(_, rr, *__, **___):
 add_command(Command('trsf [<rrid>[:<rrid>]]', 'forward tampered response', 'trsf', lambda *args: foreach_rrs(trsf_function, *args)))
 '''
 
-
+"""
+SERVER COMMANDS
+"""
+def s_function(*args):
+    return [str(s)+'\n' for s in weber.servers]
+add_command(Command('s', 'show known servers', 's', s_function))
 
 
 """

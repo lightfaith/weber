@@ -140,6 +140,25 @@ class Server():
             except:
                 traceback.print_exc()
 
+    def __str__(self):
+        infos = ['URI:         %s' % self.uri,
+                 'Protocol:    %s' % (self.protocol.ssl_scheme 
+                                   if self.ssl 
+                                   else self.protocol.scheme),
+                ]
+        if self.problem:
+            infos.append('Status:      %stroublemaker%s' % (log.COLOR_RED, log.COLOR_NONE))
+
+        cookies_list = list(self.cookies.items())
+        if cookies_list:
+            infos.append('Cookies:     %s' % '='.join(cookies_list[0]))
+            for cookie in cookies_list[1:]:
+                infos.append('          %s' % '='.join(cookie))
+            
+        if self.ssl:
+            infos.append('Certificate: %s' % self.real_certificate)
+        # TODO corresponding rrids
+        return '\n'.join(infos)
     
     def setup_lock(self):
         self.lock = threading.Lock()
