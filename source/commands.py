@@ -1708,64 +1708,6 @@ add_command(Command('rst- [<N>]',
                                                 stop=True,
                                                 requests=False)))
     
-'''
-# trq
-def trq_function(*args):
-    try:
-        count = int(args[0])
-    except:
-        count = 1
-    weber.proxy.tamper_request_counter = count
-    log.info('Next %d requests will be tampered.' % (count))
-    return []
-add_command(Command('trq [<n>]', 'tamper next [n] request(s)', 'trq', trq_function))
-
-# trqa
-def trqa_function(*_):
-    trq = not(positive(weber.config['tamper.requests'][0]))
-    weber.config['tamper.requests'] = (trq, weber.config['tamper.requests'][1])
-    weber.proxy.tamper_request_counter = 0
-    return []
-add_command(Command('trqa', 'toggle default request tamper behavior', 'trqa', trqa_function))
-
-# trs
-def trs_function(*args):
-    try:
-        count = int(args[0])
-    except:
-        count = 1
-    weber.proxy.tamper_response_counter = count
-    log.info('Next %d responses will be tampered.' % (count))
-    return []
-add_command(Command('trs [<n>]', 'tamper next [n] response(s)', 'trs', trs_function))
-
-# trsa
-def trsa_function(*_):
-    trs = not(positive(weber.config['tamper.responses'][0]))
-    weber.config['tamper.responses'] = (trs, weber.config['tamper.responses'][1])
-    weber.proxy.tamper_response_counter = 0
-    log.info('Responses will be %s by default.' % ('TAMPERED' if trs else 'FORWARDED'))
-    return []
-add_command(Command('trsa', 'toggle default response tamper behavior', 'trsa', trsa_function))
-# trqf
-def trqf_function(_, rr, *__, **___):
-    try:
-        rr.request_upstream.forward()
-    except:
-        log.err('No request is available.')
-    return []
-add_command(Command('trqf [<rrid>[:<rrid>]]', 'forward tampered request', 'trqf', lambda *args: foreach_rrs(trqf_function, *args)))
-
-# trsf
-def trsf_function(_, rr, *__, **___):
-    try:
-        rr.response_upstream.forward()
-    except: # no response
-        log.info('No response is available.')
-    return []
-add_command(Command('trsf [<rrid>[:<rrid>]]', 'forward tampered response', 'trsf', lambda *args: foreach_rrs(trsf_function, *args)))
-'''
-
 """
 SERVER COMMANDS
 """
