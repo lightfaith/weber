@@ -548,10 +548,13 @@ class HTTPResponse():
             self.compute_content_length()
             parts.append(b'%s %d %s' % 
                          (self.version, self.statuscode, self.status))
-            parts += [b'%s: %s' % (k, ((v or '') 
-                                       if k != b'Content-Length' 
-                                       else b'%d' % len(data_encoded)))
-                      for k, v in self.headers.items()]
+            try:
+                parts += [b'%s: %s' % (k, ((v or b'') 
+                                           if k != b'Content-Length' 
+                                           else b'%d' % len(data_encoded)))
+                          for k, v in self.headers.items()]
+            except:
+                exception('response lines() - failed to add headers', self.headers)
             """add header-data newline"""
             if data:
                 parts.append(b'')

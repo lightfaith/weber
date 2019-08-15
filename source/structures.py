@@ -57,7 +57,7 @@ class Server():
             if not matching:
                 """new; create one"""
                 log.debug_server('Creating new server instance.')
-                new_server = Server(uri, protocol)
+                new_server = Server(len(weber.servers) + 1, uri, protocol)
                 weber.servers.append(new_server)
                 matching = [new_server]
             else:
@@ -65,7 +65,7 @@ class Server():
             """return index"""
             return weber.servers.index(matching[0])
 
-    def __init__(self, uri, protocol):
+    def __init__(self, sid, uri, protocol):
         """Creates instance of the Server.
         Args:
             cookies ():
@@ -75,6 +75,7 @@ class Server():
         """
         self.lock = None
         self.uri = URI(uri)
+        self.sid = sid
         self.uri.path = ''
         self.protocol = protocol
         self.cookies =  OrderedDict()
@@ -120,22 +121,49 @@ class Server():
 
             """generate fake one (real one is NOT needed for that)"""
             domain = self.uri.domain
-            self.certificate_path = ('ssl/pki/issued/%s.crt' % domain)
-            self.certificate_key_path = ('ssl/pki/private/%s.key' % domain)
+            self.certificate_path = ('files/ssl/pki/issued/%s.crt' % domain)
+            self.certificate_key_path = ('files/ssl/pki/private/%s.key' % domain)
             """already exists?"""
             try:
                 with open(self.certificate_path, 'r') as f:
+                    log.debug_server('Using existing certificate.')
                     pass
-            except:
+            except FileNotFoundError:
+                log.debug_server('Non-existent local certificate, creating one...')
                 log.debug_flow('Generating fake certfificate for \'%s\'' % 
                                domain)
-                returncode, o, e = run_command('./create_certificate.sh %s' % 
+                returncode, o, e = run_command('./files/ssl/create_certificate.sh %s' % 
                                                domain)
                 if returncode != 0:
                     log.err('Certificate creation failed:')
                     print(o)
                     print(e)
+            except:
+                traceback.print_exc()
 
+    def overview(self):
+        return '%5d  %-40s' % (self.sid, self.uri.tostring())
+
+    def __str__(self):
+        infos = ['Server ID:   %d' % self.sid,
+                 'URI:         %s' % self.uri.tostring(),
+                 'Protocol:    %s' % (self.protocol.ssl_scheme 
+                                   if self.ssl 
+                                   else self.protocol.scheme),
+                ]
+        if self.problem:
+            infos.append('Status:      %stroublemaker%s' % (log.COLOR_RED, log.COLOR_NONE))
+
+        cookies_list = list(self.cookies.items())
+        if cookies_list:
+            infos.append('Cookies:     %s' % '='.join(cookies_list[0]))
+            for cookie in cookies_list[1:]:
+                infos.append('          %s' % '='.join(cookie))
+            
+        if self.ssl:
+            infos.append('Certificate: %s' % self.real_certificate)
+        # TODO corresponding rrids
+        return '\n'.join(infos)
     
     def setup_lock(self):
         self.lock = threading.Lock()
@@ -432,7 +460,7 @@ class RRDB():
         return rrid
 
     def get_desired_rrs(self, arg, showlast=False, 
-                        onlytampered=False, withanalysis=False):
+                        onlytampered=False, withanalysis=False, fails=None):
         """
         this method parses rrid specifier (e.g. 1,2,3-5,10)
         returns OrderedDict of (rrid, RR sorted by rrid) and flag 
@@ -441,11 +469,12 @@ class RRDB():
         """rrs empty? don't even try"""
         if not self.rrs.keys():
             return {}
-        indices = []
-        minimum = 1
-        maximum = max(self.rrs.keys())
-        noproblem = True
+        #indices = []
+        #minimum = 1
+        #maximum = max(self.rrs.keys())
+        #noproblem = True
         #pdb.set_trace()
+        '''
         if arg is not None:
             """argument specified, deal with it"""
             for desired in arg.split(','):
@@ -475,6 +504,10 @@ class RRDB():
             """no RRID specified - use everything"""
             indices = list(range(minimum, maximum+1))[(-10 if showlast else 0):]
         """"""
+        '''
+        indices = get_desired_indices(arg, 1, max(self.rrs.keys()), fails)
+        indices = indices[(-10 if showlast else 0):]
+
         keys = [x for x in self.rrs.keys() 
                 if (not onlytampered 
                     and (not withanalysis or self.rrs[x].analysis_notes)) 
@@ -483,9 +516,11 @@ class RRDB():
                     and self.rrs[x].response.tampering)]
         #print('keys:', keys)
         """return resulting dict and flag"""
-        return (OrderedDict([(i, self.rrs[i]) 
-                    for i in sorted(indices) if i in keys]), 
-                noproblem)
+        #return (OrderedDict([(i, self.rrs[i]) 
+        #            for i in sorted(indices) if i in keys]), 
+        #        noproblem)
+        return OrderedDict([(i, self.rrs[i]) 
+                    for i in sorted(indices) if i in keys]) 
 
     
     def overview(self, args, header=True, show_event=False, show_size=False, 
@@ -513,8 +548,8 @@ class RRDB():
                                        withanalysis=only_with_analysis)
         if not desired:
             return []
-        """forget the noproblem flag"""
-        desired = desired[0] 
+        #"""forget the noproblem flag"""
+        #desired = desired[0] 
 
         """create big table with everything desired"""
         table = []

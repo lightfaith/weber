@@ -275,12 +275,17 @@ def foreach_rrs(function, *args, **kwargs):
     result = []
     try:
         """get rrs to show"""
-        desired_rrs, noproblem = weber.rrdb.get_desired_rrs(None 
-                                                            if len(args)<1 
-                                                            else args[-1])
-        desired_rrs = desired_rrs.items()
+        #desired_rrs, noproblem = weber.rrdb.get_desired_rrs(None 
+        #                                                    if len(args)<1 
+        #                                                    else args[-1])
+        #desired_rrs = desired_rrs.items()
+        fails = []
+        desired_rrs = weber.rrdb.get_desired_rrs((args[-1] 
+                                                  if args 
+                                                  else None),
+                                                 fails=fails).items()
         """remember not to send rrids to called function"""
-        arg_interval = -1 if noproblem else len(args)
+        arg_interval = -1 if fails else len(args)
     except ValueError: 
         """no match"""
         return result
@@ -845,14 +850,16 @@ def ea_function(*args):
     # add new EID
     if eid not in weber.events.keys():
         weber.events[eid] = Event(eid)
-    for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1])[0].items():
+    #for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1])[0].items():
+    for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1]).items():
         rr.eid = eid
         weber.events[eid].rrids.add(rrid)
     return []
 add_command(Command('ea eid <rrid>[:<rrid>]', 'adds requests/responses into event', 'ea', ea_function))
 
 def ed_function(*args):
-    for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1])[0].items():
+    #for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1])[0].items():
+    for rrid, rr in weber.rrdb.get_desired_rrs(None if len(args)<1 else args[-1]).items():
         for e in weber.events.values():
             if rrid in e.rrids:
                 e.rrids.remove(rrid)
@@ -1417,7 +1424,8 @@ add_command(Command('rss',
 """wt - print alive threads"""
 def wt_function(*_):
     weber.proxy.clean_threads()
-    return ['    %s' % (t.full_uri or '?') for t in weber.proxy.threads]
+    #return ['    %s' % (t.full_uri or '?') for t in weber.proxy.threads]
+    return ['    %s' % str(t) for t in weber.proxy.threads]
 add_command(Command('wt', 
                     'print alive threads', 
                     'wt', 
@@ -1567,9 +1575,7 @@ TAMPER COMMANDS
 def rXf_function(*args, requests=True, responses=True):
     # TODO rqf to also duplicate and resend - or use rqr?
     """find all rrids to forward"""
-    desired_rrs, noproblem = weber.rrdb.get_desired_rrs(None 
-                                                        if len(args)<1 
-                                                        else args[0])
+    desired_rrs = weber.rrdb.get_desired_rrs(None if len(args)<1 else args[0])
     rrids = desired_rrs.keys()
     """duplicate all not tampered"""
     # TODO
@@ -1760,7 +1766,23 @@ def trsf_function(_, rr, *__, **___):
 add_command(Command('trsf [<rrid>[:<rrid>]]', 'forward tampered response', 'trsf', lambda *args: foreach_rrs(trsf_function, *args)))
 '''
 
-
+"""
+SERVER COMMANDS
+"""
+def s_function(*args):
+    return [s.overview() 
+            for s in weber.servers
+            if s.sid in get_desired_indices(args[0] if args else None, 
+                                            1, 
+                                            len(weber.servers))]
+add_command(Command('s', 'show server overview', 's', s_function))
+def sa_function(*args):
+    return [str(s)+'\n' 
+            for s in weber.servers
+            if s.sid in get_desired_indices(args[0] if args else None, 
+                                            1, 
+                                            len(weber.servers))]
+add_command(Command('sa', 'show known servers', 'sa', sa_function))
 
 
 """

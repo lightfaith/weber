@@ -191,6 +191,7 @@ class Proxy(threading.Thread):
                     t = ConnectionThread(conn, self.tamper_controller)
                     t.start()
                     """add thread to array OR wait for it"""
+                    # TODO cannot Ctrl+C, solve differently (maybe no accept until threads are running?)
                     if positive(weber.config['proxy.threaded'].value):
                         self.threads.append(t)
                     else:
@@ -198,8 +199,7 @@ class Proxy(threading.Thread):
                 except socket.timeout:
                     pass
                 except:
-                    log.err('Proxy error.')
-                    traceback.print_exc()
+                    exception('Proxy error (accept failed).', self.request)
             """clean terminated threads"""
             self.clean_threads()
             """terminate and all threads joined?"""
@@ -350,9 +350,27 @@ class ConnectionThread(threading.Thread):
         self.times = {} # for one loop run only, but accessed from functions
         self.waiting_for_request_forward = False # for `rqf`
         self.waiting_for_response_forward = False # for `rsf`
+        self.state = 'init'
         self.brute_sets = brute_sets
         #self.watcher = Watcher(self.request, 'path', '/tmp/log.txt') # TODO for debugging
         #sys.settrace(self.watcher.trace_command)
+    
+    def __str__(self):
+        infos = [self.state]
+        if self.rrid:
+            infos.append('rrid:%d' % self.rrid)
+        if self.from_weber:
+            infos.append('manual')
+        if self.connect_method:
+            infos.append('CONNECT')
+        if self.terminate:
+            infos.append('terminating')
+        if self.waiting_for_request_forward:
+            infos.append('request tampered')
+        if self.waiting_for_response_forward:
+            infos.append('response tampered')
+        return '{uri} ({infos})'.format(uri=(self.full_uri or '?'), infos=', '.join(infos))
+        return str(self.full_uri or '?')
     
     def send_continuation_signal(self):
         if self.stopper:
@@ -391,6 +409,7 @@ class ConnectionThread(threading.Thread):
         """
 
         """
+        self.state = 'started'
         thread_started = datetime.now()
         first_run = True
         #keepalive = False if self.from_weber else True
@@ -419,10 +438,13 @@ class ConnectionThread(threading.Thread):
                                                comment='downstream')
                 #print(request_raw)
                 if not request_raw:
-                    break # TODO OK?
+                    #log.warn('Empty raw request...')
+                    self.terminate = True
+                    break
                 self.times['request_received'] = datetime.now()
                 log.debug_socket('Request received.')
             
+            self.state = 'raw request'
             if self.terminate: break
             if request_raw:
                 """convert to protocol-specific object if needed"""
@@ -432,7 +454,11 @@ class ConnectionThread(threading.Thread):
                     log.debug_protocol('Received request is invalid.')
                     self.send_response(b'HTTP/1.1 400 Bad Request\r\n\r\n!') #TODO all right?
                     #continue
+                    self.state = 'invalid request'
                     break # OK cause 1 ConnectionThread deals with only 1 request
+                self.state = 'parsed request'
+            else:
+                log.warn('No request_raw') # when this happens?
 
             """fill brute values if necessary"""
             if self.brute_sets:
@@ -462,6 +488,7 @@ class ConnectionThread(threading.Thread):
             if self.request and self.request.path == b'/weber':
                 self.send_response(b'HTTP/1.1 200 OK\r\n\r\nWeber page WORKS!')
                 # TODO return CA and stuff
+                self.terminate = True
                 break
 
             """get actual full_uri"""
@@ -472,6 +499,7 @@ class ConnectionThread(threading.Thread):
                 except UnicodeDecodeError:
                     log.err('Request with invalid bytes:')
                     log.tprint(self.request.path)
+                    self.terminate = True
                     break
             else:
                 self.full_uri = URI(self.request.path) # TODO try for non-proxy requests?
@@ -487,11 +515,14 @@ class ConnectionThread(threading.Thread):
                 self.server = weber.servers[
                                   Server.create_server(server_uri_str, 
                                                        self.protocol)]
+                self.state = 'server created'
                 """stop this Connection if Server had problems"""
                 if self.server.problem:
                     log.debug_server(
                         'Server is a troublemaker, ignoring the request.')
                     self.send_response(b'HTTP/1.1 418 I\'m a teapot\r\n\r\n') #TODO all right?
+                    self.state = 'troublemaker server'
+                    self.terminate = True
                     break
 #                """create socket to server if None"""
 #                self.connect_upstream()
@@ -502,7 +533,9 @@ class ConnectionThread(threading.Thread):
                     self.connect_method = True
                     log.debug_flow('Accepting CONNECTion.')
                     self.send_response(b'HTTP/1.1 200 OK\r\n\r\n')
-                    self.ssl_wrap('downstream')
+                    if not self.ssl_wrap('downstream'): # SSL failed
+                        self.terminate = True
+                        break
 #                """upgrade to SSL if necessary (probably always)"""
 #                    if self.server.ssl:
 #                        try:
@@ -518,14 +551,17 @@ class ConnectionThread(threading.Thread):
 #                of resend and brute
 #                """
                 if self.server.ssl and first_run:
-                    self.ssl_wrap('downstream')
+                    if not self.ssl_wrap('downstream'): # SSL failed
+                        self.terminate = True
+                        break
 #                    try:
 #                        self.ssl_wrap()
 #                    except Exception as e:
 #                        log.err('Upgrading to SSL failed: %s' % str(e))
 #                        continue
 #                """create socket to server if None"""
-                    
+                    self.state = 'ssl-wrapped downstream'
+
             if not self.connect_method:
                 """ not connect -> remove server from req path"""
                 self.request.path = self.request.path[
@@ -539,8 +575,9 @@ class ConnectionThread(threading.Thread):
                                    self.request, 
                                    self.server, 
                                    self.times)
+            self.state = 'RRID assigned'
             if self.terminate: break
-            """run pre_tamper operations"""        
+            """run pre_tamper operations"""
             self.request.pre_tamper()
             """tamper/forward request"""
             self.try_forward_tamper()
@@ -556,6 +593,7 @@ class ConnectionThread(threading.Thread):
             self.wait_for_continuation_signal()
 
         """cleanup"""
+        self.state = 'cleanup'
         log.debug_flow('Closing sockets and stopper for ConnectionThread.')
         if self.upstream_socket:
             self.upstream_socket.close()
@@ -566,6 +604,7 @@ class ConnectionThread(threading.Thread):
                 os.close(self.stopper[fd])
             self.stopper = None
         log.debug_flow('ConnectionThread terminated.')
+        self.state = 'stopped'
         """end of ConnectionThread run() method"""
             
     def try_forward_tamper(self):
@@ -573,8 +612,8 @@ class ConnectionThread(threading.Thread):
         Because in some cases (`rqrm`) request is forcefully tampered,
         but after changes, we also want to respect tamper settings.
         """
-        if (self.tamper_controller.ask_for_request_tamper() 
-                or self.force_tamper_request): 
+        if (self.force_tamper_request 
+                or self.tamper_controller.ask_for_request_tamper()): 
             log.debug_tampering('Request is tampered.')
             self.times['request_tampered'] = datetime.now()
             self.waiting_for_request_forward = True
@@ -601,7 +640,9 @@ class ConnectionThread(threading.Thread):
             log.err('Tried to forward non-existent request.')
             return
         self.request.post_tamper()
+        self.state = 'waiting for RPS approval'
         self.server.get_rps_approval() # sleep for RPS limiting
+        self.state = 'RPS approved'
         if self.terminate: return
         self.times['request_forwarded'] = datetime.now()
         response_raw = self.forward(self.request.bytes())
@@ -612,6 +653,7 @@ class ConnectionThread(threading.Thread):
         self.times['response_received'] = datetime.now()
         if self.terminate: return
         self.response = self.protocol.create_response(response_raw)
+        self.state = 'parsed response'
         weber.rrdb.add_response(self.rrid, self.response)
         self.response.pre_tamper()
         
@@ -646,6 +688,7 @@ class ConnectionThread(threading.Thread):
         """tamper/forward response"""
         if self.tamper_controller.ask_for_response_tamper():
             log.debug_tampering('Response is tampered.')
+            self.state = 'response tampered'
             self.times['response_tampered'] = datetime.now()
             self.waiting_for_response_forward = True
             """tampering; print overview if appropriate"""
@@ -666,6 +709,7 @@ class ConnectionThread(threading.Thread):
         """
 
         """
+        self.state = 'sending response'
         self.waiting_for_response_forward = False
         if not self.response:
             log.err('Tried to forward non-existent response.')
@@ -679,6 +723,7 @@ class ConnectionThread(threading.Thread):
                                [str(self.rrid)],
                                header=False)))
         self.send_response(self.response.bytes(encode=True))
+        self.state = 'response sent'
         self.times['response_forwarded'] = datetime.now()
         """allow new request"""
         self.send_continuation_signal()
@@ -690,15 +735,20 @@ class ConnectionThread(threading.Thread):
         """
         try:
             if not self.upstream_socket:
-                self.connect_upstream()
+                if not self.connect_upstream(): # upstream unreachable
+                    return b''
                 if self.server.ssl:
-                    self.ssl_wrap('upstream')
+                    if not self.ssl_wrap('upstream'): # SSL failed
+                        return b''
+            self.state = 'forwarding request'
             log.debug_flow('Forwarding request to server.')
             log.debug_socket('Forwarding request... (%d B)' 
                              % (len(data)))
             self.upstream_socket.send(data)
+            self.state = 'request forwarded'
             result = ProxyLib.recvall(self.upstream_socket, 
                                       comment='upstream')
+            self.state = 'raw response'
             if result:
                 log.debug_flow('Response received from server.')
                 return result
@@ -734,6 +784,8 @@ class ConnectionThread(threading.Thread):
             except BrokenPipeError:
                 log.err('Socket to client for %s has been closed.'
                         % self.full_uri)
+            except:
+                exception('Response forward failed.', self.downstream_socket, self.full_uri)
         else:
             log.debug_parsing('Response is weird.')
     
@@ -751,6 +803,8 @@ class ConnectionThread(threading.Thread):
             except Exception as e:
                 log.err('Upstream connect error for %s: %s' 
                         % (self.full_uri.tostring(), str(e)))
+                return False
+        return True
 
     def ssl_wrap(self, direction):
         """
@@ -758,16 +812,30 @@ class ConnectionThread(threading.Thread):
 
         Run this in try-catch.
         """
-        if direction == 'downstream' and self.downstream_socket:
-            log.debug_socket('Upgrading downstream socket to SSL.')
-            self.downstream_socket.setblocking(True) # TODO fails when `rqm` ssl stuff...
-            self.downstream_socket = ssl.wrap_socket(
-                self.downstream_socket, 
-                certfile=self.server.certificate_path,
-                keyfile=self.server.certificate_key_path,
-                #do_handshake_on_connect=True,
-                server_side=True)
-        if direction == 'upstream' and self.upstream_socket:
-            log.debug_socket('Upgrading upstream socket to SSL.')
-            self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
+        try:
+            if direction == 'downstream' and self.downstream_socket:
+                log.debug_socket('Upgrading downstream socket to SSL.')
+                log.debug_socket('Server: ', self.server)
+                log.debug_socket('Server certificate path: ', self.server.certificate_path)
+                log.debug_socket('Server key path: ', self.server.certificate_key_path)
+                self.downstream_socket.setblocking(True) # TODO fails when `rqm` ssl stuff...
+                try:
+                    self.downstream_socket = ssl.wrap_socket(
+                        self.downstream_socket, 
+                        certfile=self.server.certificate_path,
+                        keyfile=self.server.certificate_key_path,
+                        #do_handshake_on_connect=True,
+                        server_side=True)
+                except ssl.SSLError as e:
+                    if 'alert unknown ca' in str(e):
+                        log.err('Weber CA is not added to trusted authorities.')
+                        return False
+                    raise e
+            if direction == 'upstream' and self.upstream_socket:
+                log.debug_socket('Upgrading upstream socket to SSL.')
+                self.upstream_socket = ssl.wrap_socket(self.upstream_socket)
+            return True
+        except:
+            exception('Failed to initialize %s SSL.' % direction, self.server, self.request)
+            return False
 

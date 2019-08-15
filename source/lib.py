@@ -68,6 +68,14 @@ def exit_program(signal, frame):
 # run exit program on SIGINT
 signal.signal(signal.SIGINT, exit_program)
 
+def exception(message, *args):
+    log.err('Exception occured!')
+    log.err('Cause:', message)
+    traceback.print_exc()
+    for arg in args:
+        print(arg)
+    log.err('-- END OF EXCEPTION --')
+
 def reload_config():
     """
     
@@ -75,7 +83,7 @@ def reload_config():
     from source import weber
     """read lines from conf file"""
     log.info('Loading config file...')
-    with open(os.path.join(os.path.dirname(sys.argv[0]), 'weber.conf'), 
+    with open(os.path.join(os.path.dirname(sys.argv[0]), 'files/weber.conf'), 
               'r') as f:
         for line in f.readlines():
             line = line.strip()
@@ -282,6 +290,48 @@ def split_escaped(string, delimiter):
     yield string[i:j].replace('\\', '')
 
 chunks = lambda data,size: [data[x:x+size] for x in range(0, len(data), size)]
+
+
+def get_desired_indices(desired_str, minimum, maximum, fails=None):
+    # 'fails' is None or list to be filled with bad 'desired' values
+    indices = []
+    #noproblem = True
+    if not desired_str:
+        # use all
+        return list(range(minimum, maximum + 1))
+    # parse
+    for desired in desired_str.split(','):
+        start = minimum
+        end = maximum
+        if '-' in desired:
+            # interval
+            _start, _, _end = desired.partition('-')
+            if _start.isdigit():
+                start = min([max([start, int(_start)]), end])
+            elif not _start:
+                pass
+            else:
+                #noproblem = False
+                if fails:
+                    fails.append(desired)
+            if _end.isdigit():
+                end = max([min([end, int(_end)]), start])
+            elif not _end:
+                pass
+            else:
+                #noproblem = False
+                if fails:
+                    fails.append(desired)
+            if start > end:
+                tmp = start
+                start = end
+                end =  tmp
+            indices.extend(range(start, end+1))
+        else:
+            # single value
+            if desired.isdigit():
+                indices.append(int(desired))
+    return indices
 
 def get_colored_printable(b):
     """
