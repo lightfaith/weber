@@ -40,4 +40,4 @@ class Watcher(object):
         return self.trace_command
 import sys
 watcher = Watcher()
-sys.settrace(watcher.trace_command)
+#sys.settrace(watcher.trace_command)

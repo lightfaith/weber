@@ -432,6 +432,7 @@ class ConnectionThread(threading.Thread):
             if self.from_weber:
                 """either duplicate or brute-force; store time"""
                 self.times['request_received'] = datetime.now()
+                request_raw = self.request.bytes()
             else:
                 """read request from socket if needed"""
                 request_raw = ProxyLib.recvall(self.downstream_socket, 
@@ -647,8 +648,9 @@ class ConnectionThread(threading.Thread):
         self.times['request_forwarded'] = datetime.now()
         response_raw = self.forward(self.request.bytes())
         if not response_raw:
-            log.err('Response is empty! You can try to increase '
-                    'proxy.socket_timeout value.')
+            if weber.config['interaction.timeout_warnings'].value:
+                log.err('Response is empty! You can try to increase '
+                        'proxy.socket_timeout value.')
             return # TODO what to do exactly?
         self.times['response_received'] = datetime.now()
         if self.terminate: return
