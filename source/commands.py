@@ -147,7 +147,7 @@ def run_command(fullcommand):
     """
     result_lines = []
     nocolor = lambda line: re.sub('\033\\[[0-9]+m', '', str(line))
-    
+    grep_colored = '\033[91m%s\033[0m'
     """go through all command parts (greps etc.) and modify lines"""
     for part in parts[1:]:
         tmp_lines = []
@@ -173,11 +173,12 @@ def run_command(fullcommand):
                     if (str(line).startswith('{grepignore}') 
                             or part in nocolor(line)):
                         """str ignoring grep OR wanted value inside"""
-                        tmp_lines.append(line)
+                        tmp_lines.append(line.replace(part, grep_colored % part))
                 elif type(line) == list:
                     """pick groups if at least one line if
                        ignores grep or matches grep"""
-                    sublines = [l for l in line 
+                    sublines = [l.replace(part, grep_colored % part)
+                                for l in line
                                 if str(l).startswith('{grepignore}') 
                                 or part in nocolor(l)]
                     if [x for x in sublines 
@@ -194,7 +195,8 @@ def run_command(fullcommand):
                     if (str(line).startswith('{grepignore}') 
                             or re.search(part, nocolor(line.strip()))):
                         """str ignoring grep OR wanted value inside"""
-                        tmp_lines.append(line)
+                        tmp_lines.append(
+                            re.sub(part, grep_colored % r'\g<0>', line))
                 elif type(line) == list:
                     """pick groups if at least one line if
                        ignores grep or matches grep"""
@@ -205,7 +207,9 @@ def run_command(fullcommand):
                             if not str(x).startswith('{grepignore}') 
                             and x.strip()]:
                         """found something; use matching lines"""
-                        tmp_lines.append(sublines)
+                        tmp_lines.append([
+                            re.sub(part, grep_colored % r'\g<0>', line)
+                            for line in sublines])
         elif phase[modifier]:
             """modifier: less etc.""" # TODO line intervals and more features
             log.debug_command('  modification \'%s\'' % part)
