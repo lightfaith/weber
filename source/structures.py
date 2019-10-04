@@ -12,7 +12,7 @@ from collections import OrderedDict
 from source import weber
 from source import log
 from source.lib import *
-from source.protocols import protocols
+#from source.protocols import protocols
 from source.analysis import analysis
 from source.fd_debug import *
 

@@ -19,7 +19,7 @@ from source import log
 from source.structures import Server, URI, RR
 from source.lib import *
 from source.fd_debug import *
-from source.protocols import protocols
+#from source.protocols import protocols
 
 from source.watcher import Watcher # TODO for debugging
 
@@ -418,10 +418,12 @@ class ConnectionThread(threading.Thread):
         #self.send_continuation_signal()
         
         request_raw = None
-        if self.brute_sets:
-            """set up raw request with placeholders"""
-            request_raw = self.request.bytes()
+        #if self.brute_sets:
+        #    """set up raw request with placeholders"""
+        #    request_raw = self.request.bytes()
 
+            
+        
         while keepalive or first_run or self.brute_sets:
             """wait for signal - cause previous request can be tampered"""
             #self.wait_for_continuation_signal()
@@ -432,7 +434,8 @@ class ConnectionThread(threading.Thread):
             if self.from_weber:
                 """either duplicate or brute-force; store time"""
                 self.times['request_received'] = datetime.now()
-                request_raw = self.request.bytes()
+                if first_run:
+                    request_raw = self.request.bytes()
             else:
                 """read request from socket if needed"""
                 request_raw = ProxyLib.recvall(self.downstream_socket, 
@@ -474,7 +477,7 @@ class ConnectionThread(threading.Thread):
                 for i, value in enumerate(self.brute_sets[0]):
                     #print('replacing', value)
                     #print('before:', self.request.original[:50])
-                    self.request.original = self.request.original.replace(
+                    self.request.original = request_raw.replace(
                         b'%s%d%s' % (placeholder, i, placeholder),
                         value)
                     #print('after:', self.request.original[:50])

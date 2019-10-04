@@ -10,7 +10,7 @@ from datetime import datetime
 
 from source import weber
 from source import log
-from source.proxy import ProxyLib, ConnectionThread
+from source.proxy import ConnectionThread
 from source.structures import URI
 from source.lib import *
 from source.fd_debug import *

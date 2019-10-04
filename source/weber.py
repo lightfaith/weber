@@ -2,18 +2,20 @@
 """
 Global structures are defined here.
 """
-from source import log
+
 from collections import OrderedDict
-from source.lib import positive
+from source.baselib import *
 """
 Default configuration options
 """
 config = OrderedDict()
 
+
 class Option():
     """
 
     """
+
     def __init__(self, default_value, data_type, immutable=False):
         self.__data_type = data_type
         self.value = default_value
@@ -31,79 +33,109 @@ class Option():
             try:
                 self.__value = self.__data_type(v)
             except:
-                log.err('Option error - cannot cast \'%s\' to %s' % 
+                from source import log
+                log.err('Option error - cannot cast \'%s\' to %s' %
                         (v, self.__data_type))
-    
+
     def get_text_value(self):
         """
         Returns value suitable for printing.
         """
-        result = (str(self.value) if self.__data_type != str 
-                                 else '\'%s\'' % self.value)
+        result = (str(self.value) if self.__data_type != str
+                  else '\'%s\'' % self.value)
         for old, new in [
-                ('\n', '\\n'),
-                ('\r', '\\r'),
-            ]:
+            ('\n', '\\n'),
+            ('\r', '\\r'),
+        ]:
             result = result.replace(old, new)
         return result
 
+
 # analysis settings
-config['analysis.immediate'] = Option(True, bool) # should analysis be done immediately?
-config['analysis.ignored_tests'] = Option('', str) # list of analysis test name to NOT perform; space-separated
+# should analysis be done immediately?
+config['analysis.immediate'] = Option(True, bool)
+# list of analysis test name to NOT perform; space-separated
+config['analysis.ignored_tests'] = Option('', str)
 
 # brute settings
-config['brute.placeholder'] = Option('###', str) # placeholder start and end, e.g. ###0###
-config['brute.value_separator'] =   Option(';', str)   # separator between values
-config['brute.rps'] =   Option(20, int)   # maximum requests per second
-config['brute.set_separator'] =   Option('\n', str)   # separator between value sets
+# placeholder start and end, e.g. ###0###
+config['brute.placeholder'] = Option('###', str)
+config['brute.value_separator'] = Option(';', str)   # separator between values
+config['brute.rps'] = Option(20, int)   # maximum requests per second
+config['brute.set_separator'] = Option(
+    '\n', str)   # separator between value sets
 
 # crawl settings
-config['crawl.save_path'] = Option('', str) # where to store received files
+config['crawl.save_path'] = Option('', str)  # where to store received files
 
 # debug settings
-config['debug.analysis'] =   Option(False, bool)   # stuff relevant to analysis
-config['debug.chunks'] =     Option(False, bool)   # stuff relevant to Transfer-Encoding: chunked parsing
-config['debug.command'] =    Option(False, bool)   # stuff relevant to user commands
-config['debug.config'] =     Option(False, bool)   # stuff relevant to configuration
-config['debug.flow'] =       Option(False, bool)   # stuff relevant to program flow
-config['debug.mapping'] =    Option(False, bool)   # stuff relevant to local-remote URL mapping
-config['debug.parsing'] =    Option(False, bool)   # stuff relevant to request/response parsing
-config['debug.protocol'] =   Option(False, bool)   # stuff relevant to protocol decisioning
-config['debug.server'] =     Option(False, bool)   # stuff relevant to server management
-config['debug.socket'] =     Option(False, bool)   # stuff relevant to socket communication
-config['debug.tampering'] =  Option(False, bool)   # stuff relevant to tampering
+config['debug.analysis'] = Option(False, bool)   # stuff relevant to analysis
+# stuff relevant to Transfer-Encoding: chunked parsing
+config['debug.chunks'] = Option(False, bool)
+# stuff relevant to user commands
+config['debug.command'] = Option(False, bool)
+# stuff relevant to configuration
+config['debug.config'] = Option(False, bool)
+config['debug.flow'] = Option(False, bool)   # stuff relevant to program flow
+# stuff relevant to local-remote URL mapping
+config['debug.mapping'] = Option(False, bool)
+# stuff relevant to request/response parsing
+config['debug.parsing'] = Option(False, bool)
+# stuff relevant to protocol decisioning
+config['debug.protocol'] = Option(False, bool)
+# stuff relevant to server management
+config['debug.server'] = Option(False, bool)
+# stuff relevant to socket communication
+config['debug.socket'] = Option(False, bool)
+config['debug.tampering'] = Option(False, bool)   # stuff relevant to tampering
 
 # edit settings
 config['edit.command'] = Option('vim %s', str)
 
 
-config['http.no_cache'] = Option(False, bool) # should caching be forcefully disabled?
-config['http.drop_request_headers'] = Option('', str) # which headers (separated by spaces) should be dropped?
-config['http.drop_response_headers'] = Option('Content-Security-Policy Expect-CT', str) # which headers (separated by spaces) should be dropped?
-config['http.recompute_request_length'] = Option(True, bool) # whether request Content-Length should be recomputed before sending to server
-config['http.replay_methods'] = Option('GET POST', str) # what methods should be used with `rqrm` ?
+# should caching be forcefully disabled?
+config['http.no_cache'] = Option(False, bool)
+# which headers (separated by spaces) should be dropped?
+config['http.drop_request_headers'] = Option('', str)
+# which headers (separated by spaces) should be dropped?
+config['http.drop_response_headers'] = Option(
+    'Content-Security-Policy Expect-CT', str)
+# whether request Content-Length should be recomputed before sending to server
+config['http.recompute_request_length'] = Option(True, bool)
+# what methods should be used with `rqrm` ?
+config['http.replay_methods'] = Option('GET POST', str)
 
-config['interaction.timeout_warnings'] = Option(True, bool)  # show socket_timeout warnings on the fly
-config['interaction.realtime_overview'] = Option(True, bool)  # show request/response communication on the fly
-config['interaction.command_modifier'] = Option('$', str) # which character would start special sequences (line intervals, less)
+config['interaction.timeout_warnings'] = Option(
+    True, bool)  # show socket_timeout warnings on the fly
+# show request/response communication on the fly
+config['interaction.realtime_overview'] = Option(True, bool)
+# which character would start special sequences (line intervals, less)
+config['interaction.command_modifier'] = Option('$', str)
 
 # overview settings
-config['overview.short_request'] = Option(False, bool) # reduce size of too long URLs
-config['overview.show_event'] =    Option(False, bool) # show event ID in overview
-config['overview.show_size'] =     Option(True, bool)  # show response size in overview
-config['overview.show_time'] =     Option(False, bool) # show forwarded time in overview # TODO also relative?
-config['overview.show_uri'] =      Option(True, bool)  # show uri in overview
+config['overview.short_request'] = Option(
+    False, bool)  # reduce size of too long URLs
+config['overview.show_event'] = Option(
+    False, bool)  # show event ID in overview
+config['overview.show_size'] = Option(
+    True, bool)  # show response size in overview
+# show forwarded time in overview # TODO also relative?
+config['overview.show_time'] = Option(False, bool)
+config['overview.show_uri'] = Option(True, bool)  # show uri in overview
 
-config['proxy.host'] =     Option('127.0.0.1', str, immutable=True)
-config['proxy.port'] =     Option(8080, int, immutable=True)
+config['proxy.host'] = Option('127.0.0.1', str, immutable=True)
+config['proxy.port'] = Option(8080, int, immutable=True)
 config['proxy.socket_timeout'] = Option(0.8, float)
 config['proxy.threaded'] = Option(True, bool)
 
-config['spoof.arguments'] = Option(False, bool) # should arguments be taken into consideration for spoofing?
+# should arguments be taken into consideration for spoofing?
+config['spoof.arguments'] = Option(False, bool)
 
 # tamper
-config['tamper.requests'] =  Option(False, bool) # should all requests be tampered by default?
-config['tamper.responses'] = Option(False, bool) # should all responses be tampered by default?
+# should all requests be tampered by default?
+config['tamper.requests'] = Option(False, bool)
+# should all responses be tampered by default?
+config['tamper.responses'] = Option(False, bool)
 
 '''
 
@@ -160,7 +192,7 @@ events = {}
 """
 Local-remote URI mapping (initialized in structures.py)
 """
-mapping = None 
+mapping = None
 
 """
 Spoof dictionaries (URI in str format  ->  path to file)
@@ -224,4 +256,3 @@ motd = [
     "Weber tip of the day: Use 'r' to print overview of all received requests.",
     "Weber tip of the day: Consider using 'rsdwa' to autosave all downloaded data.",
 ]
-
