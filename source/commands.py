@@ -1841,22 +1841,25 @@ def ww_function(*args):
     import pickle
     # TODO with dump_lock?
     
-    if [rr for db in [weber.rrdb, weber.tdb] for _,rr in db.rrs.items() if rr.request_upstream.tampering or rr.response_upstream.tampering]:
+    if [rr for _,rr in weber.rrdb.rrs.items() if rr.request.tampering or rr.response.tampering]:
         log.err('Cannot dump session if tampering is in progress.')
         return []
     
     log.info('Dumping session into \'%s\'...' % dump_file)
     weber.rrdb.lock = None
-    weber.tdb.lock = None
-    weber.mapping.lock = None
+    #weber.tdb.lock = None
+    #weber.mapping.lock = None
+    for s in weber.servers:
+        s.lock = None
+    # TODO check and add everything necessary
     data = (
-        weber.proxy.init_target, 
+        #weber.proxy.init_target, 
         weber.config,
         #weber.protocols,
         #weber.commands,
         weber.rrdb,
-        weber.tdb,
-        weber.mapping,
+        #weber.tdb,
+        #weber.mapping,
         weber.events,
         weber.spoof_files,
         weber.spoof_request_regexs,
@@ -1870,8 +1873,10 @@ def ww_function(*args):
         pickle.dump(data, f)
         
     weber.rrdb.setup_lock()
-    weber.tdb.setup_lock()
-    weber.mapping.setup_lock()
+    #weber.tdb.setup_lock()
+    #weber.mapping.setup_lock()
+    for s in weber.servers:
+        s.setup_lock()
     return []
 add_command(Command('ww <file>', 'dump Weber session into file', 'ww', ww_function))
 

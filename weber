@@ -3,6 +3,11 @@
 Weber
 """
 
+
+from source.proxy import *
+from source import commands
+from source import weber
+from source.lib import exit_program
 import random
 import re
 import readline
@@ -11,11 +16,6 @@ from source import log
 from source import lib
 
 lib.reload_config()
-
-from source import weber
-from source import commands
-from source.proxy import *
-from source.lib import exit_program
 
 
 '''
@@ -38,11 +38,12 @@ arguments = {
     'listen_port': 8080,
     'restore_file': None,
 
-} # TODO also from config
+}  # TODO also from config
 try:
     arg_start = 1
     while arg_start < len(sys.argv):
         actual_arg = sys.argv[arg_start]
+        # TODO help
         if actual_arg == '-h':
             """Different listen host"""
             arguments['listen_host'] = sys.argv[arg_start + 1]
@@ -62,7 +63,7 @@ try:
             arg_start += 1
 except:
     log.err('\n'.join([
-        'Usage: {0} [-h <LISTENHOST>] [-p <LISTENPORT>]', 
+        'Usage: {0} [-h <LISTENHOST>] [-p <LISTENPORT>]',
         '       {0} --restore dump.web',
     ]).format(sys.argv[0]))
 
@@ -77,18 +78,23 @@ if arguments['restore_file']:
     import pickle
     with open(arguments['restore_file'], 'rb') as f:
         loaded_data = pickle.load(f)
-        init_target = loaded_data[0]
-        weber.proxy = Proxy(arguments['listen_port'])
-        
-        #weber.config, weber.rrdb, weber.tdb, weber.mapping, weber.events, weber.spoof_files, weber.spoof_request_regexs, weber.spoof_response_regexs, weber.brute, weber.forward_fail_uris, weber.servers = loaded_data[1:]
-        
-        ##weber.protocols,
-        ##weber.commands,
-        ##weber.analysis,
-        #weber.rrdb.setup_lock()
-        #weber.tdb.setup_lock()
-        #weber.mapping.setup_lock()
-else: 
+        #init_target = loaded_data[0]
+        weber.proxy = Proxy(arguments['listen_host'], arguments['listen_port'])
+
+        (weber.config, weber.rrdb, weber.events,
+         weber.spoof_files, weber.spoof_request_regexs,
+         weber.spoof_response_regexs, weber.brute,
+         weber.forward_fail_uris, weber.servers) = loaded_data
+
+        # weber.protocols,
+        # weber.commands,
+        # weber.analysis,
+        weber.rrdb.setup_lock()
+        # weber.tdb.setup_lock()
+        # weber.mapping.setup_lock()
+        for s in weber.servers:
+            s.setup_lock()
+else:
     """run new proxy"""
     weber.proxy = Proxy(arguments['listen_host'], arguments['listen_port'])
 weber.proxy.start()
@@ -97,7 +103,7 @@ while True:
     # get command
     try:
         cmd = input(log.prompt).strip()
-    except EOFError: # Ctrl+D -> quit
+    except EOFError:  # Ctrl+D -> quit
         log.newline()
         lib.exit_program(None, None)
     if len(cmd) == 0:
@@ -110,4 +116,3 @@ while True:
     # do command
     else:
         commands.run_command(cmd)
-
