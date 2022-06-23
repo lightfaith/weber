@@ -213,7 +213,7 @@ class Proxy(threading.Thread):
         """
         Clean all terminated threads.
         """
-        threads_todel = [t for t in self.threads if not t.isAlive()]
+        threads_todel = [t for t in self.threads if not t.is_alive()]
         for t in threads_todel:
             try:
                 t.join()
